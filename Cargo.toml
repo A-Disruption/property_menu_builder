@@ -1,0 +1,9 @@
+[package]
+name = "property_menu_builder"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+iced = { version = "0.13.1", features = ["advanced"] }
+rust_decimal = "1.36"
+strsim = "0.11.1"
