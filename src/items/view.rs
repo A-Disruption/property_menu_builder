@@ -13,12 +13,14 @@ pub enum Message {
     ExportToCsv,
 }
 
-pub fn view(item: &Item, context: &ViewContext) -> Element<Message> {
+pub fn view<'a>(
+    item: &'a Item,
+    context: &'a ViewContext<'a>,
+) -> Element<'a, Message> {
     let header = row![
         button("←").width(40).on_press(Message::Back),
         text(&item.name).size(16),
         horizontal_space(),
-        button("Export CSV").on_press(Message::ExportToCsv),
         button("Edit").on_press(Message::Edit)
     ]
     .spacing(10)

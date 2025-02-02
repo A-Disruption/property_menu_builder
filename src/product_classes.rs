@@ -40,6 +40,12 @@ pub enum ValidationError {
     MissingRevenueCategory(String),
 }
 
+pub struct UpdateContext<'a> {
+    pub other_classes: &'a [&'a ProductClass],
+    pub available_item_groups: &'a [&'a ItemGroup],
+    pub available_revenue_categories: &'a [&'a RevenueCategory],
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProductClass {
     pub id: EntityId,
@@ -109,36 +115,58 @@ impl ProductClass {
 pub fn update(
     class: &mut ProductClass,
     message: Message,
-    other_classes: &[&ProductClass],
-    available_item_groups: &[&ItemGroup],
-    available_revenue_categories: &[&RevenueCategory],
+    state: &mut edit::EditState,
+    context: &UpdateContext,
 ) -> Action<Operation, Message> {
     match message {
         Message::Edit(msg) => match msg {
+            edit::Message::UpdateName(name) => {
+                state.name = name;
+                state.validation_error = None;
+                Action::none()
+            }
+            edit::Message::UpdateId(id) => {
+                state.id = id;
+                state.validation_error = None;
+                Action::none()
+            }
+            edit::Message::SelectItemGroup(group_id) => {
+                state.item_group_id = group_id;
+                state.validation_error = None;
+                Action::none()
+            }
+            edit::Message::SelectRevenueCategory(category_id) => {
+                state.revenue_category_id = category_id;
+                state.validation_error = None;
+                Action::none()
+            }
             edit::Message::Save => {
-                match class.validate(other_classes, available_item_groups, available_revenue_categories) {
+                match state.validate(context) {
                     Ok(_) => Action::operation(Operation::Save(class.clone())),
-                    Err(e) => Action::none(), // Error will be shown in UI
+                    Err(e) => {
+                        state.validation_error = Some(e.to_string());
+                        Action::none()
+                    }
                 }
-            },
+            }
             edit::Message::Cancel => Action::operation(Operation::Cancel),
-            // Other edit messages handled by edit::update
         },
         Message::View(msg) => match msg {
             view::Message::Edit => Action::operation(Operation::StartEdit(class.id)),
             view::Message::Back => Action::operation(Operation::Back),
-        }
+        },
     }
 }
 
-pub fn view(
-    class: &ProductClass,
+pub fn view<'a>(
+    class: &'a ProductClass,
     mode: Mode,
-    available_item_groups: &[&ItemGroup],
-    available_revenue_categories: &[&RevenueCategory],
-) -> Element<Message> {
+    state: &'a edit::EditState,
+    available_item_groups: &'a [&'a ItemGroup],
+    available_revenue_categories: &'a [&'a RevenueCategory],
+) -> Element<'a, Message> {
     match mode {
         Mode::View => view::view(class, available_item_groups, available_revenue_categories).map(Message::View),
-        Mode::Edit => edit::view(class, available_item_groups, available_revenue_categories).map(Message::Edit),
+        Mode::Edit => edit::view(state, available_item_groups, available_revenue_categories).map(Message::Edit),
     }
 }

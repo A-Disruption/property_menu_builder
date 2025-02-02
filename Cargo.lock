@@ -2463,6 +2463,7 @@ name = "property_menu_builder"
 version = "0.1.0"
 dependencies = [
  "iced",
+ "rangemap",
  "rust_decimal",
  "strsim",
 ]

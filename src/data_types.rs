@@ -14,8 +14,10 @@ pub enum ValidationError {
     DuplicateId(String),
     EmptyName(String),
     InvalidRange(String),
+    RangeOverlap(String),  // Added this variant
     InvalidValue(String),
     InvalidReference(String),
+    InvalidRate(String),
 }
 
 // Common export error type

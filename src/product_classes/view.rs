@@ -16,11 +16,11 @@ pub enum Message {
     Back,
 }
 
-pub fn view(
-    class: &ProductClass,
-    available_item_groups: &[&ItemGroup],
-    available_revenue_categories: &[&RevenueCategory],
-) -> Element<Message> {
+pub fn view<'a>(
+    class: &'a ProductClass,
+    available_item_groups: &'a [&'a ItemGroup],
+    available_revenue_categories: &'a [&'a RevenueCategory],
+) -> Element<'a, Message> {
     let header = row![
         button("←").width(40).on_press(Message::Back),
         text(&class.name).size(16),

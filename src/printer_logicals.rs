@@ -30,13 +30,6 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Debug, Clone)]
-pub enum ValidationError {
-    InvalidId(String),
-    DuplicateId(String),
-    EmptyName(String),
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrinterLogical {
     pub id: EntityId,
@@ -81,29 +74,46 @@ impl PrinterLogical {
 pub fn update(
     printer: &mut PrinterLogical,
     message: Message,
+    state: &mut edit::EditState,
     other_printers: &[&PrinterLogical],
 ) -> Action<Operation, Message> {
     match message {
         Message::Edit(msg) => match msg {
+            edit::Message::UpdateName(name) => {
+                state.name = name;
+                state.validation_error = None;
+                Action::none()
+            }
+            edit::Message::UpdateId(id) => {
+                state.id = id;
+                state.validation_error = None;
+                Action::none()
+            }
             edit::Message::Save => {
-                match printer.validate(other_printers) {
+                match state.validate(other_printers) {
                     Ok(_) => Action::operation(Operation::Save(printer.clone())),
-                    Err(e) => Action::none(), // Error will be shown in UI
+                    Err(e) => {
+                        state.validation_error = Some(e.to_string());
+                        Action::none()
+                    }
                 }
-            },
+            }
             edit::Message::Cancel => Action::operation(Operation::Cancel),
-            // Other edit messages handled by edit::update
         },
         Message::View(msg) => match msg {
             view::Message::Edit => Action::operation(Operation::StartEdit(printer.id)),
             view::Message::Back => Action::operation(Operation::Back),
-        }
+        },
     }
 }
 
-pub fn view(printer: &PrinterLogical, mode: Mode) -> Element<Message> {
+pub fn view<'a>(
+    printer: &'a PrinterLogical,
+    mode: Mode,
+    state: &'a edit::EditState,
+    ) -> Element<'a, Message> {
     match mode {
         Mode::View => view::view(printer).map(Message::View),
-        Mode::Edit => edit::view(printer).map(Message::Edit),
+        Mode::Edit => edit::view(state).map(Message::Edit),
     }
 }

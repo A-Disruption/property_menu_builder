@@ -16,9 +16,9 @@ pub enum Message {
 }
 
 pub struct EditState {
-    name: String,
-    id: String,
-    validation_error: Option<String>,
+    pub name: String,
+    pub id: String,
+    pub validation_error: Option<String>,
 }
 
 impl EditState {
@@ -28,6 +28,36 @@ impl EditState {
             id: level.id.to_string(),
             validation_error: None,
         }
+    }
+}
+
+impl EditState {
+    pub fn validate(&self, other_levels: &[&SecurityLevel]) -> Result<(), ValidationError> {
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Security level name cannot be empty".to_string()
+            ));
+        }
+
+        let id: EntityId = self.id.parse().map_err(|_| {
+            ValidationError::InvalidId("Invalid ID format".to_string())
+        })?;
+
+        if !(0..=9).contains(&id) {
+            return Err(ValidationError::InvalidId(
+                "Security Level ID must be between 0 and 9".to_string()
+            ));
+        }
+
+        for other in other_levels {
+            if id == other.id {
+                return Err(ValidationError::DuplicateId(
+                    format!("Security Level with ID {} already exists", id)
+                ));
+            }
+        }
+
+        Ok(())
     }
 }
 

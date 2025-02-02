@@ -7,7 +7,7 @@ use iced::{Alignment, Element, Length, Color};
 use crate::HotKey;
 use crate::item_groups::ItemGroup;
 use crate::revenue_categories::RevenueCategory;
-use super::ProductClass;
+use super::{ProductClass, UpdateContext};
 use crate::data_types::{EntityId, ValidationError};
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -20,11 +20,11 @@ pub enum Message {
 }
 
 pub struct EditState {
-    name: String,
-    id: String,
-    item_group_id: Option<EntityId>,
-    revenue_category_id: Option<EntityId>,
-    validation_error: Option<String>,
+    pub name: String,
+    pub id: String,
+    pub item_group_id: Option<EntityId>,
+    pub revenue_category_id: Option<EntityId>,
+    pub validation_error: Option<String>,
 }
 
 impl EditState {
@@ -39,11 +39,70 @@ impl EditState {
     }
 }
 
-pub fn view(
-    state: &EditState,
-    available_item_groups: &[&ItemGroup],
-    available_revenue_categories: &[&RevenueCategory],
-) -> Element<Message> {
+impl EditState {
+    pub fn validate(&self, context: &UpdateContext) -> Result<(), ValidationError> {
+        // Validate name is not empty
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Product class name cannot be empty".to_string()
+            ));
+        }
+
+        // Validate ID range (1-999 based on screenshot)
+        let id: EntityId = self.id.parse().map_err(|_| {
+            ValidationError::InvalidId("Invalid ID format".to_string())
+        })?;
+
+        if !(1..=999).contains(&id) {
+            return Err(ValidationError::InvalidId(
+                "Product Class ID must be between 1 and 999".to_string()
+            ));
+        }
+
+        // Check for duplicate IDs
+        for other in context.other_classes {
+            if id == other.id {
+                return Err(ValidationError::DuplicateId(
+                    format!("Product Class with ID {} already exists", id)
+                ));
+            }
+        }
+
+        // Validate item group reference
+        if let Some(group_id) = self.item_group_id {
+            if !context.available_item_groups.iter().any(|g| g.id == group_id) {
+                return Err(ValidationError::InvalidReference(
+                    format!("Referenced Item Group {} does not exist", group_id)
+                ));
+            }
+        } else {
+            return Err(ValidationError::InvalidReference(
+                "Item Group is required".to_string()
+            ));
+        }
+
+        // Validate revenue category reference
+        if let Some(category_id) = self.revenue_category_id {
+            if !context.available_revenue_categories.iter().any(|c| c.id == category_id) {
+                return Err(ValidationError::InvalidReference(
+                    format!("Referenced Revenue Category {} does not exist", category_id)
+                ));
+            }
+        } else {
+            return Err(ValidationError::InvalidReference(
+                "Revenue Category is required".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+pub fn view<'a>(
+    state: &'a EditState,
+    available_item_groups: &'a [&'a ItemGroup],
+    available_revenue_categories: &'a [&'a RevenueCategory],
+) -> Element<'a, Message> {
     let content = container(
         column![
             row![

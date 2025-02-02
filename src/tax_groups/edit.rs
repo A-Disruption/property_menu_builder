@@ -4,9 +4,9 @@ use iced::widget::{
 };
 use iced::{Alignment, Element, Length, Color};
 use rust_decimal::Decimal;
-use crate::data_types::EntityId;
+use crate::data_types::{EntityId, ValidationError};
 use crate::HotKey;
-use super::{TaxGroup, ValidationError};
+use super::TaxGroup;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -18,10 +18,10 @@ pub enum Message {
 }
 
 pub struct EditState {
-    name: String,
-    id: String,
-    rate: String,
-    validation_error: Option<String>,
+    pub name: String,
+    pub id: String,
+    pub rate: String,
+    pub validation_error: Option<String>,
 }
 
 impl EditState {
@@ -32,6 +32,46 @@ impl EditState {
             rate: tax_group.rate_percentage().to_string(),
             validation_error: None,
         }
+    }
+}
+
+impl EditState {
+    pub fn validate(&self, other_groups: &[&TaxGroup]) -> Result<(), ValidationError> {
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Tax group name cannot be empty".to_string()
+            ));
+        }
+
+        let id: EntityId = self.id.parse().map_err(|_| {
+            ValidationError::InvalidId("Invalid ID format".to_string())
+        })?;
+
+        if !(1..=99).contains(&id) {
+            return Err(ValidationError::InvalidId(
+                "Tax Group ID must be between 1 and 99".to_string()
+            ));
+        }
+
+        let rate: f64 = self.rate.parse().map_err(|_| {
+            ValidationError::InvalidValue("Invalid tax rate format".to_string())
+        })?;
+
+        if !(0.0..=100.0).contains(&rate) {
+            return Err(ValidationError::InvalidValue(
+                "Tax rate must be between 0 and 100%".to_string()
+            ));
+        }
+
+        for other in other_groups {
+            if id == other.id {
+                return Err(ValidationError::DuplicateId(
+                    format!("Tax Group with ID {} already exists", id)
+                ));
+            }
+        }
+
+        Ok(())
     }
 }
 

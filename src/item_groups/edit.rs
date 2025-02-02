@@ -3,16 +3,18 @@ use iced::widget::{
     horizontal_space,
 };
 use iced::{Element, Length};
+use crate::data_types::{EntityId, ValidationError};
+use rangemap::RangeInclusiveSet;
 use std::iter::empty;
 use crate::HotKey;
 use super::ItemGroup;
 
 #[derive(Debug, Clone)]
 pub struct EditState {
-    name: String,
-    range_start: String,
-    range_end: String,
-    validation_error: Option<String>,
+    pub name: String,
+    pub range_start: String,
+    pub range_end: String,
+    pub validation_error: Option<String>,
 }
 
 impl EditState {
@@ -26,6 +28,45 @@ impl EditState {
     }
 }
 
+impl EditState {
+    pub fn validate(&self, other_groups: &[&ItemGroup]) -> Result<(), ValidationError> {
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Item group name cannot be empty".to_string()
+            ));
+        }
+
+        let start: EntityId = self.range_start.parse().map_err(|_| {
+            ValidationError::InvalidId("Invalid range start value".to_string())
+        })?;
+
+        let end: EntityId = self.range_end.parse().map_err(|_| {
+            ValidationError::InvalidId("Invalid range end value".to_string())
+        })?;
+
+        if start >= end {
+            return Err(ValidationError::InvalidRange(
+                "Start ID must be less than end ID".to_string()
+            ));
+        }
+
+        // Check for range overlap with other groups
+        for other in other_groups {
+            if ranges_overlap(&(start..=end), &(other.id_range.start..=other.id_range.end)) {
+                return Err(ValidationError::RangeOverlap(
+                    format!("Range overlaps with group '{}'", other.name)
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn ranges_overlap<T: Ord>(range1: &std::ops::RangeInclusive<T>, range2: &std::ops::RangeInclusive<T>) -> bool {
+    range1.start() <= range2.end() && range2.start() <= range1.end()
+}
+
 #[derive(Debug, Clone)]
 pub enum Message {
     UpdateName(String),
@@ -36,7 +77,11 @@ pub enum Message {
     Cancel,
 }
 
-pub fn view(item_group: &ItemGroup, state: &EditState, other_groups: &[&ItemGroup]) -> Element<Message> {
+pub fn view<'a>(
+    item_group: &'a ItemGroup,
+    state: &'a EditState,
+    other_groups: &'a [&'a ItemGroup]
+) -> Element<'a, Message> {
     let content = container(
         column![
             // Name input
@@ -69,9 +114,12 @@ pub fn view(item_group: &ItemGroup, state: &EditState, other_groups: &[&ItemGrou
                         .style(iced::widget::text::danger)
                 )
                 .padding(10)
-                .into()
             } else {
-                empty().into()
+                container(
+                    text("")
+                        .style(iced::widget::text::danger)
+                )
+                .padding(10)
             }
         ]
         .spacing(10)

@@ -242,21 +242,29 @@ impl Validatable for Item {
 }
 
 pub struct ViewContext<'a> {
-    pub items: &'a HashMap<EntityId, Item>,
-    pub item_groups: &'a HashMap<EntityId, ItemGroup>,
-    pub tax_groups: &'a HashMap<EntityId, TaxGroup>,
-    pub security_levels: &'a HashMap<EntityId, SecurityLevel>,
-    pub revenue_categories: &'a HashMap<EntityId, RevenueCategory>,
-    pub report_categories: &'a HashMap<EntityId, ReportCategory>,
-    pub product_classes: &'a HashMap<EntityId, ProductClass>,
-    pub choice_groups: &'a HashMap<EntityId, ChoiceGroup>,
-    pub printer_logicals: &'a HashMap<EntityId, PrinterLogical>,
-    pub price_levels: &'a HashMap<EntityId, PriceLevel>,
+    pub available_item_groups: &'a HashMap<EntityId, ItemGroup>,
+    pub available_tax_groups: &'a HashMap<EntityId, TaxGroup>,
+    pub available_security_levels: &'a HashMap<EntityId, SecurityLevel>,
+    pub available_revenue_categories: &'a HashMap<EntityId, RevenueCategory>,
+    pub available_report_categories: &'a HashMap<EntityId, ReportCategory>,
+    pub available_product_classes: &'a HashMap<EntityId, ProductClass>,
+    pub available_choice_groups: &'a HashMap<EntityId, ChoiceGroup>,
+    pub available_printer_logicals: &'a HashMap<EntityId, PrinterLogical>,
+    pub available_price_levels: &'a HashMap<EntityId, PriceLevel>,
 }
 
-pub fn update(item: &mut Item, message: Message, context: &ViewContext) -> Action<Operation, Message> {
+pub fn update<'a>(
+    item: &'a mut Item, 
+    message: Message, 
+    context: &'a ViewContext<'a>,
+    state: &'a mut edit::EditState,
+) -> Action<Operation, Message> {
     match message {
-        Message::Edit(msg) => edit::update(item, msg, context),
+        Message::Edit(msg) => {
+            // Map the edit::Message to Message
+            edit::update(item, msg, state)
+                .map(Message::Edit)  // Map the edit Message type to our Message enum
+        }
         Message::View(msg) => match msg {
             view::Message::Edit => Action::operation(Operation::StartEdit(item.id)),
             view::Message::Back => Action::operation(Operation::Back),
@@ -265,9 +273,16 @@ pub fn update(item: &mut Item, message: Message, context: &ViewContext) -> Actio
     }
 }
 
-pub fn view(item: &Item, mode: Mode, context: &ViewContext) -> Element<Message> {
+pub fn view<'a>(
+    item: &'a Item,
+    mode: Mode,
+    context: &'a ViewContext<'a>,
+    state: &'a edit::EditState,
+) -> Element<'a, Message> {
     match mode {
         Mode::View => view::view(item, context).map(Message::View),
-        Mode::Edit => edit::view(item, context).map(Message::Edit),
+        Mode::Edit => {
+            edit::view(item, state, context).map(Message::Edit)
+        }
     }
 }

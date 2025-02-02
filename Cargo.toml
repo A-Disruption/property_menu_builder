@@ -7,3 +7,4 @@ edition = "2021"
 iced = { version = "0.13.1", features = ["advanced"] }
 rust_decimal = "1.36"
 strsim = "0.11.1"
+rangemap = "1.5"

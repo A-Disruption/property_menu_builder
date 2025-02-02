@@ -33,13 +33,6 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Debug, Clone)]
-pub enum ValidationError {
-    InvalidId(String),
-    DuplicateId(String),
-    InvalidRate(String),
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct TaxGroup {
     pub id: EntityId,
@@ -87,28 +80,55 @@ impl TaxGroup {
     }
 }
 
-pub fn update(tax_group: &mut TaxGroup, message: Message, other_groups: &[&TaxGroup]) -> Action<Operation, Message> {
+pub fn update(
+    tax_group: &mut TaxGroup,
+    message: Message,
+    state: &mut edit::EditState,
+    other_groups: &[&TaxGroup],
+) -> Action<Operation, Message> {
     match message {
         Message::Edit(msg) => match msg {
+            edit::Message::UpdateName(name) => {
+                state.name = name;
+                state.validation_error = None;
+                Action::none()
+            }
+            edit::Message::UpdateId(id) => {
+                state.id = id;
+                state.validation_error = None;
+                Action::none()
+            }
+            edit::Message::UpdateRate(rate) => {
+                state.rate = rate;
+                state.validation_error = None;
+                Action::none()
+            }
             edit::Message::Save => {
-                match tax_group.validate(other_groups) {
+                match state.validate(other_groups) {
                     Ok(_) => Action::operation(Operation::Save(tax_group.clone())),
-                    Err(e) => Action::none(), // Error will be shown in UI
+                    Err(e) => {
+                        state.validation_error = Some(e.to_string());
+                        Action::none()
+                    }
                 }
-            },
+            }
             edit::Message::Cancel => Action::operation(Operation::Cancel),
-            // Other edit messages will be handled by edit::update
         },
         Message::View(msg) => match msg {
             view::Message::Edit => Action::operation(Operation::StartEdit(tax_group.id)),
             view::Message::Back => Action::operation(Operation::Back),
-        }
+        },
     }
 }
 
-pub fn view(tax_group: &TaxGroup, mode: Mode) -> Element<Message> {
+
+pub fn view<'a>(
+    tax_group: &'a TaxGroup, 
+    mode: Mode,
+    state: &'a edit::EditState,
+) -> Element<'a, Message> {
     match mode {
         Mode::View => view::view(tax_group).map(Message::View),
-        Mode::Edit => edit::view(tax_group).map(Message::Edit),
+        Mode::Edit => edit::view(state).map(Message::Edit),
     }
 }

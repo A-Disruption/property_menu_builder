@@ -38,7 +38,7 @@ pub enum ValidationError {
     InvalidPrice(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PriceLevel {
     pub id: EntityId,
     pub name: String,
@@ -102,28 +102,63 @@ impl PriceLevel {
     }
 }
 
-pub fn update(price_level: &mut PriceLevel, message: Message, other_levels: &[&PriceLevel]) -> Action<Operation, Message> {
+pub fn update(
+    price_level: &mut PriceLevel,
+    message: Message,
+    state: &mut edit::EditState,
+    other_levels: &[&PriceLevel],
+) -> Action<Operation, Message> {
     match message {
         Message::Edit(msg) => match msg {
-            edit::Message::Save => {
-                match price_level.validate(other_levels) {
-                    Ok(_) => Action::operation(Operation::Save(price_level.clone())),
-                    Err(e) => Action::none(), // Handle error in UI
+            edit::Message::UpdateName(name) => {
+                state.name = name;
+                state.validation_error = None;
+                Action::none()
+            }
+            edit::Message::UpdateId(id) => {
+                state.id = id;
+                state.validation_error = None;
+                Action::none()
+            }
+            edit::Message::UpdatePrice(price) => {
+                if let Ok(price_val) = price.parse::<Currency>() {
+                    state.price = price;
+                    state.validation_error = None;
+                } else {
+                    state.validation_error = Some("Invalid price value".to_string());
                 }
-            },
+                Action::none()
+            }
+            edit::Message::UpdateType(level_type) => {
+                state.level_type = level_type;
+                state.validation_error = None;
+                Action::none()
+            }
+            edit::Message::Save => {
+                match state.validate(other_levels) {
+                    Ok(_) => Action::operation(Operation::Save(price_level.clone())),
+                    Err(e) => {
+                        state.validation_error = Some(e.to_string());
+                        Action::none()
+                    }
+                }
+            }
             edit::Message::Cancel => Action::operation(Operation::Cancel),
-            // Other edit messages will be handled by edit::update
         },
         Message::View(msg) => match msg {
             view::Message::Edit => Action::operation(Operation::StartEdit(price_level.id)),
             view::Message::Back => Action::operation(Operation::Back),
-        }
+        },
     }
 }
 
-pub fn view(price_level: &PriceLevel, mode: Mode) -> Element<Message> {
+pub fn view<'a>(
+    price_level: &'a PriceLevel,
+    mode: Mode,
+    state: &'a edit::EditState,
+) -> Element<'a, Message> {
     match mode {
         Mode::View => view::view(price_level).map(Message::View),
-        Mode::Edit => edit::view(price_level).map(Message::Edit),
+        Mode::Edit => edit::view(state).map(Message::Edit),
     }
 }

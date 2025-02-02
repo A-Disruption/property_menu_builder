@@ -3,6 +3,7 @@ use iced::widget::{
     horizontal_space,
 };
 use iced::{Element, Length, Color};
+use crate::data_types::{EntityId, ValidationError};
 use std::iter::empty;
 use crate::HotKey;
 use super::ChoiceGroup;
@@ -16,9 +17,9 @@ pub enum Message {
 }
 
 pub struct EditState {
-    name: String,
-    id: String,
-    validation_error: Option<String>,
+    pub name: String,
+    pub id: String,
+    pub validation_error: Option<String>,
 }
 
 impl EditState {
@@ -30,6 +31,37 @@ impl EditState {
         }
     }
 }
+
+impl EditState {
+    pub fn validate(&self, other_groups: &[&ChoiceGroup]) -> Result<(), ValidationError> {
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Choice group name cannot be empty".to_string()
+            ));
+        }
+
+        let id: EntityId = self.id.parse().map_err(|_| {
+            ValidationError::InvalidId("Invalid ID format".to_string())
+        })?;
+
+        if !(1..=9999).contains(&id) {
+            return Err(ValidationError::InvalidId(
+                "Choice Group ID must be between 1 and 9999".to_string()
+            ));
+        }
+
+        for other in other_groups {
+            if id == other.id {
+                return Err(ValidationError::DuplicateId(
+                    format!("Choice Group with ID {} already exists", id)
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
 
 pub fn view(state: &EditState) -> Element<Message> {
     let content = container(
@@ -52,9 +84,12 @@ pub fn view(state: &EditState) -> Element<Message> {
                         .style(iced::widget::text::danger)
                 )
                 .padding(10)
-                .into()
             } else {
-                empty().into()
+                container(
+                    text("")
+                        .style(iced::widget::text::danger)
+                )
+                .padding(10)
             }
         ]
         .spacing(10)

@@ -2,12 +2,11 @@ use iced::widget::{
     button, column, container, row, text, text_input, pick_list,
     horizontal_space,
 };
-use iced::{Element, Length, Color};
-use std::iter::empty;
+use iced::{Element, Length};
 use rust_decimal::Decimal;
-use crate::data_types::{EntityId};
+use crate::data_types::{EntityId, ValidationError, Currency};
 use crate::HotKey;
-use super::{PriceLevel, PriceLevelType, ValidationError};
+use super::{PriceLevel, PriceLevelType};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -20,11 +19,11 @@ pub enum Message {
 }
 
 pub struct EditState {
-    name: String,
-    id: String,
-    price: String,
-    level_type: PriceLevelType,
-    validation_error: Option<String>,
+    pub name: String,
+    pub id: String,
+    pub price: String,
+    pub level_type: PriceLevelType,
+    pub validation_error: Option<String>,
 }
 
 impl EditState {
@@ -36,6 +35,55 @@ impl EditState {
             level_type: price_level.level_type.clone(),
             validation_error: None,
         }
+    }
+}
+
+impl EditState {
+    pub fn validate(&self, other_levels: &[&PriceLevel]) -> Result<(), ValidationError> {
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Price level name cannot be empty".to_string()
+            ));
+        }
+
+        let id: EntityId = self.id.parse().map_err(|_| {
+            ValidationError::InvalidId("Invalid ID format".to_string())
+        })?;
+
+        // Validate ID range based on level type
+        match self.level_type {
+            PriceLevelType::Item if !(1..=999).contains(&id) => {
+                return Err(ValidationError::InvalidId(
+                    "Item Price Level ID must be between 1 and 999".to_string()
+                ))
+            }
+            PriceLevelType::Store if !(1..=99999).contains(&id) => {
+                return Err(ValidationError::InvalidId(
+                    "Store Price Level ID must be between 1 and 99999".to_string()
+                ))
+            }
+            _ => {}
+        }
+
+        let price: Currency = self.price.parse().map_err(|_| {
+            ValidationError::InvalidValue("Invalid price format".to_string())
+        })?;
+
+        if price < Currency::ZERO {
+            return Err(ValidationError::InvalidValue(
+                "Price cannot be negative".to_string()
+            ));
+        }
+
+        for other in other_levels {
+            if id == other.id && self.level_type == other.level_type {
+                return Err(ValidationError::DuplicateId(
+                    format!("Price Level with ID {} already exists for this type", id)
+                ));
+            }
+        }
+
+        Ok(())
     }
 }
 
