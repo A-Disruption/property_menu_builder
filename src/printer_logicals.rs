@@ -108,12 +108,18 @@ pub fn update(
 }
 
 pub fn view<'a>(
-    printer: &'a PrinterLogical,
-    mode: Mode,
-    state: &'a edit::EditState,
-    ) -> Element<'a, Message> {
+    printer: &'a PrinterLogical, 
+    mode: &'a Mode,
+    other_printers: &'a [&'a PrinterLogical]
+) -> Element<'a, Message> {
     match mode {
         Mode::View => view::view(printer).map(Message::View),
-        Mode::Edit => edit::view(state).map(Message::Edit),
+        Mode::Edit => {
+            edit::view(
+                printer,
+                edit::EditState::new(printer),
+                other_printers
+            ).map(Message::Edit)
+        }
     }
 }

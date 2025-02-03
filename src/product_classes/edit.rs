@@ -99,21 +99,29 @@ impl EditState {
 }
 
 pub fn view<'a>(
-    state: &'a EditState,
+    class: &'a ProductClass,
+    state: EditState,
     available_item_groups: &'a [&'a ItemGroup],
     available_revenue_categories: &'a [&'a RevenueCategory],
 ) -> Element<'a, Message> {
+    // Clone all state data upfront
+    let name = state.name.clone();
+    let id = state.id.clone();
+    let item_group_id = state.item_group_id;
+    let revenue_category_id = state.revenue_category_id;
+    let error_message = state.validation_error.clone();
+
     let content = container(
         column![
             row![
                 text("Name").width(Length::Fixed(150.0)),
-                text_input("Product Class Name", &state.name)
+                text_input("Product Class Name", &name)
                     .on_input(Message::UpdateName)
                     .padding(5)
             ],
             row![
                 text("ID").width(Length::Fixed(150.0)),
-                text_input("ID (1-999)", &state.id)
+                text_input("ID (1-999)", &id)
                     .on_input(Message::UpdateId)
                     .padding(5)
             ],
@@ -121,31 +129,18 @@ pub fn view<'a>(
                 text("Item Group").width(Length::Fixed(150.0)),
                 pick_list(
                     &available_item_groups[..],
-                    state.item_group_id.and_then(|id| available_item_groups.iter().find(|g| g.id == id).copied()),
-                    |group| Message::SelectItemGroup(Some(group.id))
+                    item_group_id.and_then(|id| available_item_groups.iter().find(|g| g.id == id)),
+                    |group: &ItemGroup| Message::SelectItemGroup(Some(group.id))
                 )
             ],
             row![
                 text("Revenue Category").width(Length::Fixed(150.0)),
                 pick_list(
                     &available_revenue_categories[..],
-                    state.revenue_category_id.and_then(|id| available_revenue_categories.iter().find(|c| c.id == id).copied()),
-                    |category| Message::SelectRevenueCategory(Some(category.id))
+                    revenue_category_id.and_then(|id| available_revenue_categories.iter().find(|c| c.id == id)),
+                    |category: &RevenueCategory| Message::SelectRevenueCategory(Some(category.id))
                 )
             ],
-            if let Some(error) = &state.validation_error {
-                container(
-                    text(error)
-                        .style(iced::widget::text::danger)
-                )
-                .padding(10)
-            } else {
-                container(
-                    text("")
-                        .style(iced::widget::text::danger)
-                )
-                .padding(10)
-            }
         ]
         .spacing(10)
     )
@@ -164,15 +159,21 @@ pub fn view<'a>(
     .spacing(10)
     .padding(20);
 
-    container(
-        column![
-            content,
-            controls,
-        ]
-        .spacing(20)
-    )
-    .padding(20)
-    .into()
+    let mut col = column![content, controls].spacing(20);
+
+    if let Some(error) = error_message {
+        col = col.push(
+            container(
+                text(error)
+                    .style(text::danger)
+            )
+            .padding(10)
+        );
+    }
+
+    container(col)
+        .padding(20)
+        .into()
 }
 
 pub fn handle_hotkey(hotkey: HotKey) -> crate::Action<super::Operation, Message> {

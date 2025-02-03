@@ -5,10 +5,12 @@ use iced::widget::{
     focus_next, focus_previous,
     button, checkbox, column, container, pick_list,
     row, scrollable, text, text_input, vertical_space,
+    Container
 };
 use iced::{Element, Length, Size, Subscription, Task};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::any::Any;
 
 mod action;
 mod items;
@@ -23,6 +25,7 @@ mod choice_groups;
 mod printer_logicals;
 mod data_types;
 
+use crate::product_classes::UpdateContext;
 use data_types::{Currency, EntityId, ValidationError, ExportError};
 pub use action::Action;
 
@@ -50,7 +53,7 @@ pub enum Screen {
     PrinterLogicals(printer_logicals::Mode),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Message {
     Items(items::Message),
     ItemGroups(item_groups::Message),
@@ -82,6 +85,7 @@ pub enum Operation {
 
 pub struct MenuBuilder {
     screen: Screen,
+    // HashMaps for storing all entities
     items: HashMap<EntityId, items::Item>,
     item_groups: HashMap<EntityId, item_groups::ItemGroup>,
     price_levels: HashMap<EntityId, price_levels::PriceLevel>,
@@ -92,6 +96,25 @@ pub struct MenuBuilder {
     report_categories: HashMap<EntityId, report_categories::ReportCategory>,
     choice_groups: HashMap<EntityId, choice_groups::ChoiceGroup>,
     printer_logicals: HashMap<EntityId, printer_logicals::PrinterLogical>,
+
+    // Draft items for editing (Option<EntityId> for new vs existing items)
+    draft_item: Option<(Option<EntityId>, items::Item)>,
+    draft_item_group: Option<(Option<EntityId>, item_groups::ItemGroup)>,
+    draft_price_level: Option<(Option<EntityId>, price_levels::PriceLevel)>,
+    draft_product_class: Option<(Option<EntityId>, product_classes::ProductClass)>,
+    draft_tax_group: Option<(Option<EntityId>, tax_groups::TaxGroup)>,
+    draft_security_level: Option<(Option<EntityId>, security_levels::SecurityLevel)>,
+    draft_revenue_category: Option<(Option<EntityId>, revenue_categories::RevenueCategory)>,
+    draft_report_category: Option<(Option<EntityId>, report_categories::ReportCategory)>,
+    draft_choice_group: Option<(Option<EntityId>, choice_groups::ChoiceGroup)>,
+    draft_printer_logical: Option<(Option<EntityId>, printer_logicals::PrinterLogical)>,
+
+    // View state
+    current_edit_state: Option<Box<dyn Any>>,
+    current_context: Option<items::ViewContext<'static>>,
+    current_other_groups: Option<Vec<item_groups::ItemGroup>>,
+    current_available_groups: Option<Vec<item_groups::ItemGroup>>,
+    current_available_categories: Option<Vec<revenue_categories::RevenueCategory>>,
 }
 
 impl MenuBuilder {
@@ -108,6 +131,7 @@ impl MenuBuilder {
         (
             Self {
                 screen: Screen::Items(items::Mode::View),
+                // Initialize empty HashMaps
                 items: HashMap::new(),
                 item_groups: HashMap::new(),
                 price_levels: HashMap::new(),
@@ -118,6 +142,25 @@ impl MenuBuilder {
                 report_categories: HashMap::new(),
                 choice_groups: HashMap::new(),
                 printer_logicals: HashMap::new(),
+
+                // Initialize all drafts as None
+                draft_item: None,
+                draft_item_group: None,
+                draft_price_level: None,
+                draft_product_class: None,
+                draft_tax_group: None,
+                draft_security_level: None,
+                draft_revenue_category: None,
+                draft_report_category: None,
+                draft_choice_group: None,
+                draft_printer_logical: None,
+
+                //initialize state
+                current_edit_state: None,
+                current_context: None,
+                current_other_groups: None,
+                current_available_groups: None,
+                current_available_categories: None,
             },
             Task::none(),
         )
@@ -129,186 +172,257 @@ impl MenuBuilder {
                 self.screen = screen;
                 Task::none()
             }
-
+    
             Message::Items(msg) => {
                 match &mut self.screen {
                     Screen::Items(mode) => {
-                        // Get references to all required data for context
-                        let context = UpdateContext {
-                            available_item_groups: &self.item_groups.values().collect::<Vec<_>>(),
-                            available_tax_groups: &self.tax_groups.values().collect::<Vec<_>>(),
-                            available_security_levels: &self.security_levels.values().collect::<Vec<_>>(),
-                            available_revenue_categories: &self.revenue_categories.values().collect::<Vec<_>>(),
-                            available_report_categories: &self.report_categories.values().collect::<Vec<_>>(),
-                            available_product_classes: &self.product_classes.values().collect::<Vec<_>>(),
-                            available_choice_groups: &self.choice_groups.values().collect::<Vec<_>>(),
-                            available_printer_logicals: &self.printer_logicals.values().collect::<Vec<_>>(),
+                        let context = items::ViewContext {
+                            available_item_groups: &self.item_groups,
+                            available_tax_groups: &self.tax_groups,
+                            available_security_levels: &self.security_levels,
+                            available_revenue_categories: &self.revenue_categories,
+                            available_report_categories: &self.report_categories,
+                            available_product_classes: &self.product_classes,
+                            available_choice_groups: &self.choice_groups,
+                            available_printer_logicals: &self.printer_logicals,
+                            available_price_levels: &self.price_levels,
                         };
-
-                        // Handle the message
-                        let action = items::update(msg, *mode, context)
-                            .map_operation(Operation::Items)
-                            .map(Message::Items);
-
-                        if let Some(operation) = action.operation {
-                            self.perform(operation)
+    
+                        if let Some((id, item)) = &mut self.draft_item {
+                            let mut edit_state = items::edit::EditState::new(item);
+                            let action = items::update(item, msg, &context, &mut edit_state)
+                                .map_operation(|o| Operation::Items(o))
+                                .map(Message::Items);
+    
+                            if let Some(operation) = action.operation {
+                                self.perform(operation)
+                            } else {
+                                action.task
+                            }
+                        } else if let Screen::Items(items::Mode::View) = self.screen {
+                            // Create a new draft item when in view mode and no draft exists
+                            let new_item = items::Item::new(0, String::new()); // You'll need to implement this
+                            self.draft_item = Some((None, new_item));
+                            Task::none()
                         } else {
-                            action.task
+                            Task::none()
                         }
                     }
                     _ => Task::none(),
                 }
             }
-
+    
             Message::ItemGroups(msg) => {
                 match &mut self.screen {
                     Screen::ItemGroups(mode) => {
-                        let other_groups = self.item_groups.values().collect::<Vec<_>>();
-                        let action = item_groups::update(msg, *mode, &other_groups)
-                            .map_operation(Operation::ItemGroups)
-                            .map(Message::ItemGroups);
-
-                        if let Some(operation) = action.operation {
-                            self.perform(operation)
+                        if let Some((id, group)) = &mut self.draft_item_group {
+                            let mut edit_state = item_groups::edit::EditState::new(group);
+                            let other_groups = self.item_groups.values().collect::<Vec<_>>();
+                            let action = item_groups::update(group, msg, &mut edit_state, &other_groups)
+                                .map_operation(|o| Operation::ItemGroups(o))
+                                .map(Message::ItemGroups);
+    
+                            if let Some(operation) = action.operation {
+                                self.perform(operation)
+                            } else {
+                                action.task
+                            }
                         } else {
-                            action.task
+                            Task::none()
                         }
                     }
                     _ => Task::none(),
                 }
             }
-
+    
             Message::TaxGroups(msg) => {
                 match &mut self.screen {
                     Screen::TaxGroups(mode) => {
-                        let other_groups = self.tax_groups.values().collect::<Vec<_>>();
-                        let action = tax_groups::update(msg, *mode, &other_groups)
-                            .map_operation(Operation::TaxGroups)
-                            .map(Message::TaxGroups);
-
-                        if let Some(operation) = action.operation {
-                            self.perform(operation)
+                        if let Some((id, group)) = &mut self.draft_tax_group {
+                            let mut edit_state = tax_groups::edit::EditState::new(group);
+                            let other_groups = self.tax_groups.values().collect::<Vec<_>>();
+                            let action = tax_groups::update(group, msg, &mut edit_state, &other_groups)
+                                .map_operation(|o| Operation::TaxGroups(o))
+                                .map(Message::TaxGroups);
+    
+                            if let Some(operation) = action.operation {
+                                self.perform(operation)
+                            } else {
+                                action.task
+                            }
                         } else {
-                            action.task
+                            Task::none()
                         }
                     }
                     _ => Task::none(),
                 }
             }
-
+    
             Message::SecurityLevels(msg) => {
                 match &mut self.screen {
                     Screen::SecurityLevels(mode) => {
-                        let other_levels = self.security_levels.values().collect::<Vec<_>>();
-                        let action = security_levels::update(msg, *mode, &other_levels)
-                            .map_operation(Operation::SecurityLevels)
-                            .map(Message::SecurityLevels);
-
-                        if let Some(operation) = action.operation {
-                            self.perform(operation)
+                        if let Some((id, level)) = &mut self.draft_security_level {
+                            let mut edit_state = security_levels::edit::EditState::new(level);
+                            let other_levels = self.security_levels.values().collect::<Vec<_>>();
+                            let action = security_levels::update(level, msg, &mut edit_state, &other_levels)
+                                .map_operation(|o| Operation::SecurityLevels(o))
+                                .map(Message::SecurityLevels);
+    
+                            if let Some(operation) = action.operation {
+                                self.perform(operation)
+                            } else {
+                                action.task
+                            }
                         } else {
-                            action.task
+                            Task::none()
                         }
                     }
                     _ => Task::none(),
                 }
             }
-
+    
             Message::RevenueCategories(msg) => {
                 match &mut self.screen {
                     Screen::RevenueCategories(mode) => {
-                        let other_categories = self.revenue_categories.values().collect::<Vec<_>>();
-                        let action = revenue_categories::update(msg, *mode, &other_categories)
-                            .map_operation(Operation::RevenueCategories)
-                            .map(Message::RevenueCategories);
-
-                        if let Some(operation) = action.operation {
-                            self.perform(operation)
+                        if let Some((id, category)) = &mut self.draft_revenue_category {
+                            let mut edit_state = revenue_categories::edit::EditState::new(category);
+                            let other_categories = self.revenue_categories.values().collect::<Vec<_>>();
+                            let action = revenue_categories::update(category, msg, &mut edit_state, &other_categories)
+                                .map_operation(|o| Operation::RevenueCategories(o))
+                                .map(Message::RevenueCategories);
+    
+                            if let Some(operation) = action.operation {
+                                self.perform(operation)
+                            } else {
+                                action.task
+                            }
                         } else {
-                            action.task
+                            Task::none()
                         }
                     }
                     _ => Task::none(),
                 }
             }
-
+    
             Message::ReportCategories(msg) => {
                 match &mut self.screen {
                     Screen::ReportCategories(mode) => {
-                        let other_categories = self.report_categories.values().collect::<Vec<_>>();
-                        let action = report_categories::update(msg, *mode, &other_categories)
-                            .map_operation(Operation::ReportCategories)
-                            .map(Message::ReportCategories);
-
-                        if let Some(operation) = action.operation {
-                            self.perform(operation)
+                        if let Some((id, category)) = &mut self.draft_report_category {
+                            let mut edit_state = report_categories::edit::EditState::new(category);
+                            let other_categories = self.report_categories.values().collect::<Vec<_>>();
+                            let action = report_categories::update(category, msg, &mut edit_state, &other_categories)
+                                .map_operation(|o| Operation::ReportCategories(o))
+                                .map(Message::ReportCategories);
+    
+                            if let Some(operation) = action.operation {
+                                self.perform(operation)
+                            } else {
+                                action.task
+                            }
                         } else {
-                            action.task
+                            Task::none()
                         }
                     }
                     _ => Task::none(),
                 }
             }
-
+    
             Message::ProductClasses(msg) => {
                 match &mut self.screen {
                     Screen::ProductClasses(mode) => {
-                        let context = product_classes::UpdateContext {
-                            other_classes: &self.product_classes.values().collect::<Vec<_>>(),
-                            available_item_groups: &self.item_groups.values().collect::<Vec<_>>(),
-                            available_revenue_categories: &self.revenue_categories.values().collect::<Vec<_>>(),
-                        };
-
-                        let action = product_classes::update(msg, *mode, &context)
-                            .map_operation(Operation::ProductClasses)
-                            .map(Message::ProductClasses);
-
-                        if let Some(operation) = action.operation {
-                            self.perform(operation)
+                        if let Some((id, class)) = &mut self.draft_product_class {
+                            let mut edit_state = product_classes::edit::EditState::new(class);
+                            let context = UpdateContext {
+                                other_classes: &self.product_classes.values().collect::<Vec<_>>(),
+                                available_item_groups: &self.item_groups.values().collect::<Vec<_>>(),
+                                available_revenue_categories: &self.revenue_categories.values().collect::<Vec<_>>(),
+                            };
+                            let action = product_classes::update(class, msg, &mut edit_state, &context)
+                                .map_operation(|o| Operation::ProductClasses(o))
+                                .map(Message::ProductClasses);
+    
+                            if let Some(operation) = action.operation {
+                                self.perform(operation)
+                            } else {
+                                action.task
+                            }
                         } else {
-                            action.task
+                            Task::none()
                         }
                     }
                     _ => Task::none(),
                 }
             }
-
+    
             Message::ChoiceGroups(msg) => {
                 match &mut self.screen {
                     Screen::ChoiceGroups(mode) => {
-                        let other_groups = self.choice_groups.values().collect::<Vec<_>>();
-                        let action = choice_groups::update(msg, *mode, &other_groups)
-                            .map_operation(Operation::ChoiceGroups)
-                            .map(Message::ChoiceGroups);
-
-                        if let Some(operation) = action.operation {
-                            self.perform(operation)
+                        if let Some((id, group)) = &mut self.draft_choice_group {
+                            let mut edit_state = choice_groups::edit::EditState::new(group);
+                            let other_groups = self.choice_groups.values().collect::<Vec<_>>();
+                            let action = choice_groups::update(group, msg, &mut edit_state, &other_groups)
+                                .map_operation(|o| Operation::ChoiceGroups(o))
+                                .map(Message::ChoiceGroups);
+    
+                            if let Some(operation) = action.operation {
+                                self.perform(operation)
+                            } else {
+                                action.task
+                            }
                         } else {
-                            action.task
+                            Task::none()
                         }
                     }
                     _ => Task::none(),
                 }
             }
-
+    
             Message::PrinterLogicals(msg) => {
                 match &mut self.screen {
                     Screen::PrinterLogicals(mode) => {
-                        let other_printers = self.printer_logicals.values().collect::<Vec<_>>();
-                        let action = printer_logicals::update(msg, *mode, &other_printers)
-                            .map_operation(Operation::PrinterLogicals)
-                            .map(Message::PrinterLogicals);
-
-                        if let Some(operation) = action.operation {
-                            self.perform(operation)
+                        if let Some((id, printer)) = &mut self.draft_printer_logical {
+                            let mut edit_state = printer_logicals::edit::EditState::new(printer);
+                            let other_printers = self.printer_logicals.values().collect::<Vec<_>>();
+                            let action = printer_logicals::update(printer, msg, &mut edit_state, &other_printers)
+                                .map_operation(|o| Operation::PrinterLogicals(o))
+                                .map(Message::PrinterLogicals);
+    
+                            if let Some(operation) = action.operation {
+                                self.perform(operation)
+                            } else {
+                                action.task
+                            }
                         } else {
-                            action.task
+                            Task::none()
                         }
                     }
                     _ => Task::none(),
                 }
             }
-
+    
+            Message::PriceLevels(msg) => {
+                match &mut self.screen {
+                    Screen::PriceLevels(mode) => {
+                        if let Some((id, level)) = &mut self.draft_price_level {
+                            let mut edit_state = price_levels::edit::EditState::new(level);
+                            let other_levels = self.price_levels.values().collect::<Vec<_>>();
+                            let action = price_levels::update(level, msg, &mut edit_state, &other_levels)
+                                .map_operation(|o| Operation::PriceLevels(o))
+                                .map(Message::PriceLevels);
+    
+                            if let Some(operation) = action.operation {
+                                self.perform(operation)
+                            } else {
+                                action.task
+                            }
+                        } else {
+                            Task::none()
+                        }
+                    }
+                    _ => Task::none(),
+                }
+            }
+    
             Message::HotKey(hotkey) => {
                 match hotkey {
                     HotKey::Tab(modifiers) => {
@@ -318,17 +432,7 @@ impl MenuBuilder {
                             focus_next()
                         }
                     }
-                    HotKey::Escape => {
-                        // Handle escape key based on current screen
-                        match self.screen {
-                            Screen::Items(mode) => {
-                                // Handle escape in items screen
-                                Task::none()
-                            }
-                            // Handle other screens...
-                            _ => Task::none(),
-                        }
-                    }
+                    HotKey::Escape => Task::none(),
                 }
             }
         }
@@ -337,22 +441,112 @@ impl MenuBuilder {
     fn view(&self) -> Element<Message> {
         let content = match &self.screen {
             Screen::Items(mode) => {
-                // Render items view
-                text("Items View").into()
+                if let Some((_, item)) = &self.draft_item {
+                    let context = items::ViewContext {
+                        available_item_groups: &self.item_groups,
+                        available_tax_groups: &self.tax_groups,
+                        available_security_levels: &self.security_levels,
+                        available_revenue_categories: &self.revenue_categories,
+                        available_report_categories: &self.report_categories,
+                        available_product_classes: &self.product_classes,
+                        available_choice_groups: &self.choice_groups,
+                        available_printer_logicals: &self.printer_logicals,
+                        available_price_levels: &self.price_levels,
+                    };
+                    items::view(item, mode, &context).map(Message::Items)
+                } else {
+                    container(text("No item selected")).into()
+                }
             }
-            // ... render other screens
+            Screen::ItemGroups(mode) => {
+                if let Some((_, group)) = &self.draft_item_group {
+                    let other_groups: Vec<&item_groups::ItemGroup> = self.item_groups.values().collect();
+                    item_groups::view(group, mode, &other_groups).map(Message::ItemGroups)
+                } else {
+                    container(text("No item group selected")).into()
+                }
+            }
+            Screen::TaxGroups(mode) => {
+                if let Some((_, group)) = &self.draft_tax_group {
+                    let other_groups: Vec<&tax_groups::TaxGroup> = self.tax_groups.values().collect();
+                    tax_groups::view(group, mode, &other_groups).map(Message::TaxGroups)
+                } else {
+                    container(text("No tax group selected")).into()
+                }
+            }
+            Screen::SecurityLevels(mode) => {
+                if let Some((_, level)) = &self.draft_security_level {
+                    let other_levels: Vec<&security_levels::SecurityLevel> = self.security_levels.values().collect();
+                    security_levels::view(level, mode, &other_levels).map(Message::SecurityLevels)
+                } else {
+                    container(text("No security level selected")).into()
+                }
+            }
+            Screen::RevenueCategories(mode) => {
+                if let Some((_, category)) = &self.draft_revenue_category {
+                    let other_categories: Vec<&revenue_categories::RevenueCategory> = self.revenue_categories.values().collect();
+                    revenue_categories::view(category, mode, &other_categories).map(Message::RevenueCategories)
+                } else {
+                    container(text("No revenue category selected")).into()
+                }
+            }
+            Screen::ReportCategories(mode) => {
+                if let Some((_, category)) = &self.draft_report_category {
+                    let other_categories: Vec<&report_categories::ReportCategory> = self.report_categories.values().collect();
+                    report_categories::view(category, mode, &other_categories).map(Message::ReportCategories)
+                } else {
+                    container(text("No report category selected")).into()
+                }
+            }
+            Screen::ProductClasses(mode) => {
+                if let Some((_, class)) = &self.draft_product_class {
+                    let available_item_groups: Vec<&item_groups::ItemGroup> = self.item_groups.values().collect();
+                    let available_revenue_categories: Vec<&revenue_categories::RevenueCategory> = self.revenue_categories.values().collect();
+                    product_classes::view(
+                        class, 
+                        mode,
+                        &available_item_groups,
+                        &available_revenue_categories
+                    ).map(Message::ProductClasses)
+                } else {
+                    container(text("No product class selected")).into()
+                }
+            }
+            Screen::ChoiceGroups(mode) => {
+                if let Some((_, group)) = &self.draft_choice_group {
+                    let other_groups: Vec<&choice_groups::ChoiceGroup> = self.choice_groups.values().collect();
+                    choice_groups::view(group, mode, &other_groups).map(Message::ChoiceGroups)
+                } else {
+                    container(text("No choice group selected")).into()
+                }
+            }
+            Screen::PrinterLogicals(mode) => {
+                if let Some((_, printer)) = &self.draft_printer_logical {
+                    let other_printers: Vec<&printer_logicals::PrinterLogical> = self.printer_logicals.values().collect();
+                    printer_logicals::view(printer, mode, &other_printers).map(Message::PrinterLogicals)
+                } else {
+                    container(text("No printer logical selected")).into()
+                }
+            }
+            Screen::PriceLevels(mode) => {
+                if let Some((_, level)) = &self.draft_price_level {
+                    let other_levels: Vec<&price_levels::PriceLevel> = self.price_levels.values().collect();
+                    price_levels::view(level, mode, &other_levels).map(Message::PriceLevels)
+                } else {
+                    container(text("No price level selected")).into()
+                }
+            }
         };
 
-        container(
-            row![
-                self.view_sidebar(),
-                container(content)
-                    .width(Length::Fill)
-                    .padding(20)
-            ]
-        )
+        row![
+            self.view_sidebar(),
+            container(content)
+                .width(Length::Fill)
+                .padding(20)
+        ]
         .into()
     }
+
 
     fn perform(&mut self, operation: Operation) -> Task<Message> {
         match operation {
@@ -373,6 +567,10 @@ impl MenuBuilder {
                     }
                     items::Operation::Back => {
                         self.screen = Screen::Items(items::Mode::View);
+                        Task::none()
+                    }
+                    items::Operation::ExportToCsv => {
+                        todo!();
                         Task::none()
                     }
                 }
@@ -553,26 +751,59 @@ impl MenuBuilder {
                     }
                 }
             }
+
+            Operation::PriceLevels(op) => match op {
+                price_levels::Operation::Save(level) => {
+                    self.price_levels.insert(level.id, level);
+                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    Task::none()
+                }
+                price_levels::Operation::StartEdit(id) => {
+                    self.screen = Screen::PriceLevels(price_levels::Mode::Edit);
+                    Task::none()
+                }
+                price_levels::Operation::Cancel => {
+                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    Task::none()
+                }
+                price_levels::Operation::Back => {
+                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    Task::none()
+                }
+            },
+
         }
     }
 
-    fn view_sidebar(&self) -> Element<Message> {
-        let nav_button = |label: &str, screen: Screen| {
-            button(text(label))
+    fn view_sidebar<'a>(&'a self) -> Element<'a, Message> {
+        let nav_button = |label: &'a str| {
+            move |screen: Screen| {
+                button(
+                    text(label.to_string())
+                        .width(Length::Fill)
+                )
                 .width(Length::Fill)
                 .on_press(Message::Navigate(screen))
+            }
         };
 
         container(
             column![
-                nav_button("Items", Screen::Items(items::Mode::View)),
-                nav_button("Item Groups", Screen::ItemGroups(item_groups::Mode::View)),
-                // ... add other navigation buttons
+                nav_button("Items")(Screen::Items(items::Mode::View)),
+                nav_button("Item Groups")(Screen::ItemGroups(item_groups::Mode::View)),
+                nav_button("Price Levels")(Screen::PriceLevels(price_levels::Mode::View)),
+                nav_button("Product Classes")(Screen::ProductClasses(product_classes::Mode::View)),
+                nav_button("Tax Groups")(Screen::TaxGroups(tax_groups::Mode::View)),
+                nav_button("Security Levels")(Screen::SecurityLevels(security_levels::Mode::View)),
+                nav_button("Revenue Categories")(Screen::RevenueCategories(revenue_categories::Mode::View)),
+                nav_button("Report Categories")(Screen::ReportCategories(report_categories::Mode::View)),
+                nav_button("Choice Groups")(Screen::ChoiceGroups(choice_groups::Mode::View)),
+                nav_button("Printer Logicals")(Screen::PrinterLogicals(printer_logicals::Mode::View))
             ]
             .spacing(5)
             .width(Length::Fixed(200.0))
         )
-        .style(theme::Container::Box)
+        .style(iced::widget::container::bordered_box)
         .into()
     }
 
@@ -581,7 +812,7 @@ impl MenuBuilder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum HotKey {
     Escape,
     Tab(Modifiers),

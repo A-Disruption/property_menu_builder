@@ -85,6 +85,7 @@ pub enum Message {
     Cancel,
 }
 
+#[derive(Default, Clone)]
 pub struct EditState {
     pub name: String,
     pub button1: String,
@@ -504,9 +505,12 @@ pub fn update(
 
 pub fn view<'a>(
     item: &'a Item,
-    state: &'a EditState,
+    state: EditState,
     context: &'a ViewContext<'a>,
 ) -> Element<'a, Message> {
+
+    let error_message = state.validation_error.clone();
+
     let content = container(
         column![
             //basic info
@@ -757,7 +761,7 @@ pub fn view<'a>(
             .padding(20),
 
             // Show validation error if any
-            if let Some(error) = &state.validation_error {
+            if let Some(error) = error_message {
                 container(
                     text(error)
                         .style(iced::widget::text::danger)

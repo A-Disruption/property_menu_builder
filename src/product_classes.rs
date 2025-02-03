@@ -160,13 +160,19 @@ pub fn update(
 
 pub fn view<'a>(
     class: &'a ProductClass,
-    mode: Mode,
-    state: &'a edit::EditState,
+    mode: &'a Mode,
     available_item_groups: &'a [&'a ItemGroup],
-    available_revenue_categories: &'a [&'a RevenueCategory],
+    available_revenue_categories: &'a [&'a RevenueCategory]
 ) -> Element<'a, Message> {
     match mode {
         Mode::View => view::view(class, available_item_groups, available_revenue_categories).map(Message::View),
-        Mode::Edit => edit::view(state, available_item_groups, available_revenue_categories).map(Message::Edit),
+        Mode::Edit => {
+            edit::view(
+                class, 
+                edit::EditState::new(class),
+                available_item_groups, 
+                available_revenue_categories
+            ).map(Message::Edit)
+        }
     }
 }

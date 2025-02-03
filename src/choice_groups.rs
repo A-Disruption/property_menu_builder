@@ -115,11 +115,17 @@ pub fn update(
 
 pub fn view<'a>(
     group: &'a ChoiceGroup, 
-    mode: Mode,
-    state: &'a edit::EditState,
+    mode: &'a Mode,
+    other_groups: &'a [&'a ChoiceGroup]
 ) -> Element<'a, Message> {
     match mode {
         Mode::View => view::view(group).map(Message::View),
-        Mode::Edit => edit::view(state).map(Message::Edit),
+        Mode::Edit => {
+            edit::view(
+                group,
+                edit::EditState::new(group),
+                other_groups
+            ).map(Message::Edit)
+        }
     }
 }

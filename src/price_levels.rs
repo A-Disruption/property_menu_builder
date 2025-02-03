@@ -153,12 +153,18 @@ pub fn update(
 }
 
 pub fn view<'a>(
-    price_level: &'a PriceLevel,
-    mode: Mode,
-    state: &'a edit::EditState,
+    level: &'a PriceLevel, 
+    mode: &'a Mode,
+    other_levels: &'a [&'a PriceLevel]
 ) -> Element<'a, Message> {
     match mode {
-        Mode::View => view::view(price_level).map(Message::View),
-        Mode::Edit => edit::view(state).map(Message::Edit),
+        Mode::View => view::view(level).map(Message::View),
+        Mode::Edit => {
+            edit::view(
+                level,
+                edit::EditState::new(level),
+                other_levels
+            ).map(Message::Edit)
+        }
     }
 }

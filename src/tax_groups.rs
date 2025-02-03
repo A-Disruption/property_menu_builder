@@ -123,12 +123,18 @@ pub fn update(
 
 
 pub fn view<'a>(
-    tax_group: &'a TaxGroup, 
-    mode: Mode,
-    state: &'a edit::EditState,
+    taxgroup: &'a TaxGroup, 
+    mode: &'a Mode,
+    other_groups: &'a [&'a TaxGroup]
 ) -> Element<'a, Message> {
     match mode {
-        Mode::View => view::view(tax_group).map(Message::View),
-        Mode::Edit => edit::view(state).map(Message::Edit),
+        Mode::View => view::view(taxgroup).map(Message::View),
+        Mode::Edit => {
+            edit::view(
+                taxgroup,
+                edit::EditState::new(taxgroup),
+                other_groups
+            ).map(Message::Edit)
+        }
     }
 }

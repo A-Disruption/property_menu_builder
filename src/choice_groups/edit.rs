@@ -63,34 +63,30 @@ impl EditState {
 }
 
 
-pub fn view(state: &EditState) -> Element<Message> {
+pub fn view<'a>(
+    group: &'a ChoiceGroup,
+    state: EditState,
+    other_groups: &'a [&'a ChoiceGroup],
+) -> Element<'a, Message> {
+
+    let name = state.name.clone();
+    let id = state.id.clone();
+    let error_message = state.validation_error.clone();
+
     let content = container(
         column![
             row![
                 text("Name").width(Length::Fixed(150.0)),
-                text_input("Choice Group Name", &state.name)
+                text_input("Choice Group Name", &name)
                     .on_input(Message::UpdateName)
                     .padding(5)
             ],
             row![
                 text("ID").width(Length::Fixed(150.0)),
-                text_input("ID (1-9999)", &state.id)
+                text_input("ID (1-9999)", &id)
                     .on_input(Message::UpdateId)
                     .padding(5)
             ],
-            if let Some(error) = &state.validation_error {
-                container(
-                    text(error)
-                        .style(iced::widget::text::danger)
-                )
-                .padding(10)
-            } else {
-                container(
-                    text("")
-                        .style(iced::widget::text::danger)
-                )
-                .padding(10)
-            }
         ]
         .spacing(10)
     )
@@ -109,15 +105,21 @@ pub fn view(state: &EditState) -> Element<Message> {
     .spacing(10)
     .padding(20);
 
-    container(
-        column![
-            content,
-            controls,
-        ]
-        .spacing(20)
-    )
-    .padding(20)
-    .into()
+    let mut col = column![content, controls].spacing(20);
+
+    if let Some(error) = error_message {
+        col = col.push(
+            container(
+                text(error)
+                    .style(text::danger)
+            )
+            .padding(10)
+        );
+    }
+
+    container(col)
+        .padding(20)
+        .into()
 }
 
 pub fn handle_hotkey(hotkey: HotKey) -> crate::Action<super::Operation, Message> {

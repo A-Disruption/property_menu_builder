@@ -87,24 +87,35 @@ impl EditState {
     }
 }
 
-pub fn view(state: &EditState) -> Element<Message> {
+pub fn view<'a>(
+    level: &'a PriceLevel,
+    state: EditState,
+    other_levels: &'a [&'a PriceLevel],
+) -> Element<'a, Message> {
+    
+    let name = state.name.clone();
+    let id = state.id.clone();
+    let price = state.price.clone();
+    let level_type = state.level_type.clone();
+    let error_message = state.validation_error.clone();
+
     let content = container(
         column![
             row![
                 text("Name").width(Length::Fixed(150.0)),
-                text_input("Price Level Name", &state.name)
+                text_input("Price Level Name", &name)
                     .on_input(Message::UpdateName)
                     .padding(5)
             ],
             row![
                 text("ID").width(Length::Fixed(150.0)),
-                text_input("ID", &state.id)
+                text_input("ID", &id)
                     .on_input(Message::UpdateId)
                     .padding(5)
             ],
             row![
                 text("Price").width(Length::Fixed(150.0)),
-                text_input("Price", &state.price)
+                text_input("Price", &price)
                     .on_input(Message::UpdatePrice)
                     .padding(5)
             ],
@@ -112,23 +123,10 @@ pub fn view(state: &EditState) -> Element<Message> {
                 text("Type").width(Length::Fixed(150.0)),
                 pick_list(
                     &[PriceLevelType::Item, PriceLevelType::Store][..],
-                    Some(state.level_type.clone()),
+                    Some(level_type),
                     Message::UpdateType
                 )
             ],
-            if let Some(error) = &state.validation_error {
-                container(
-                    text(error)
-                        .style(iced::widget::text::danger)
-                )
-                .padding(10)
-            } else {
-                container(
-                    text("")
-                        .style(iced::widget::text::danger)
-                )
-                .padding(10)
-            }
         ]
         .spacing(10)
     )
@@ -147,13 +145,19 @@ pub fn view(state: &EditState) -> Element<Message> {
     .spacing(10)
     .padding(20);
 
-    container(
-        column![
-            content,
-            controls,
-        ]
-        .spacing(20)
-    )
-    .padding(20)
-    .into()
+    let mut col = column![content, controls].spacing(20);
+
+    if let Some(error) = error_message {
+        col = col.push(
+            container(
+                text(error)
+                    .style(text::danger)
+            )
+            .padding(10)
+        );
+    }
+
+    container(col)
+        .padding(20)
+        .into()
 }

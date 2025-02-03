@@ -78,49 +78,37 @@ pub enum Message {
 }
 
 pub fn view<'a>(
-    item_group: &'a ItemGroup,
-    state: &'a EditState,
+    group: &'a ItemGroup,
+    state: EditState,
     other_groups: &'a [&'a ItemGroup]
 ) -> Element<'a, Message> {
+    // Collect all data from state upfront
+    let name = state.name.clone();
+    let range_start = state.range_start.clone();
+    let range_end = state.range_end.clone();
+    let error_message = state.validation_error.clone();
+
+    // Build UI with cloned data
     let content = container(
         column![
-            // Name input
             row![
                 text("Name").width(Length::Fixed(150.0)),
-                text_input("Group Name", &state.name)
+                text_input("Group Name", &name)
                     .on_input(Message::UpdateName)
-                    .on_submit(Message::ValidateRange)
                     .padding(5)
             ],
-            // Range inputs
             row![
                 text("ID Range Start").width(Length::Fixed(150.0)),
-                text_input("Start ID", &state.range_start)
+                text_input("Start ID", &range_start)
                     .on_input(Message::UpdateRangeStart)
-                    .on_submit(Message::ValidateRange)
                     .padding(5)
             ],
             row![
                 text("ID Range End").width(Length::Fixed(150.0)),
-                text_input("End ID", &state.range_end)
+                text_input("End ID", &range_end)
                     .on_input(Message::UpdateRangeEnd)
-                    .on_submit(Message::ValidateRange)
                     .padding(5)
             ],
-            // Validation error message (if any)
-            if let Some(error) = &state.validation_error {
-                container(
-                    text(error)
-                        .style(iced::widget::text::danger)
-                )
-                .padding(10)
-            } else {
-                container(
-                    text("")
-                        .style(iced::widget::text::danger)
-                )
-                .padding(10)
-            }
         ]
         .spacing(10)
     )
@@ -139,15 +127,21 @@ pub fn view<'a>(
     .spacing(10)
     .padding(20);
 
-    container(
-        column![
-            content,
-            controls,
-        ]
-        .spacing(20)
-    )
-    .padding(20)
-    .into()
+    let mut col = column![content, controls].spacing(20);
+
+    if let Some(error) = error_message {
+        col = col.push(
+            container(
+                text(error)
+                    .style(text::danger)
+            )
+            .padding(10)
+        );
+    }
+
+    container(col)
+        .padding(20)
+        .into()
 }
 
 pub fn handle_hotkey(hotkey: HotKey) -> crate::Action<super::Operation, Message> {

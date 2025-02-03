@@ -109,11 +109,17 @@ pub fn update(
 
 pub fn view<'a>(
     level: &'a SecurityLevel, 
-    mode: Mode,
-    state: &'a edit::EditState
+    mode: &'a Mode,
+    other_levels: &'a [&'a SecurityLevel]
 ) -> Element<'a, Message> {
     match mode {
         Mode::View => view::view(level).map(Message::View),
-        Mode::Edit => edit::view(state).map(Message::Edit),
+        Mode::Edit => {
+            edit::view(
+                level,
+                edit::EditState::new(level),
+                other_levels
+            ).map(Message::Edit)
+        }
     }
 }

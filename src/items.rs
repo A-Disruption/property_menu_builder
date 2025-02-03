@@ -274,15 +274,18 @@ pub fn update<'a>(
 }
 
 pub fn view<'a>(
-    item: &'a Item,
-    mode: Mode,
-    context: &'a ViewContext<'a>,
-    state: &'a edit::EditState,
+    item: &'a Item, 
+    mode: &'a Mode, 
+    context: &'a ViewContext<'a>
 ) -> Element<'a, Message> {
     match mode {
         Mode::View => view::view(item, context).map(Message::View),
         Mode::Edit => {
-            edit::view(item, state, context).map(Message::Edit)
+            edit::view(
+                item,
+                edit::EditState::new(item),
+                context
+            ).map(Message::Edit)
         }
     }
 }

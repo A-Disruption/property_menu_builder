@@ -115,11 +115,17 @@ pub fn update(
 
 pub fn view<'a>(
     category: &'a RevenueCategory, 
-    mode: Mode,
-    state: &'a edit::EditState,
+    mode: &'a Mode,
+    other_categories: &'a [&'a RevenueCategory]
 ) -> Element<'a, Message> {
     match mode {
         Mode::View => view::view(category).map(Message::View),
-        Mode::Edit => edit::view(state).map(Message::Edit),
+        Mode::Edit => {
+            edit::view(
+                category,
+                edit::EditState::new(category),
+                other_categories
+            ).map(Message::Edit)
+        }
     }
 }

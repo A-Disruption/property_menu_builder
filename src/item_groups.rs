@@ -153,14 +153,15 @@ pub fn update(
 }
 
 pub fn view<'a>(
-    item_group: &'a ItemGroup,
-    mode: Mode,  // Added mode parameter
-    state: &'a edit::EditState,
+    group: &'a ItemGroup, 
+    mode: &'a Mode, 
     other_groups: &'a [&'a ItemGroup]
 ) -> Element<'a, Message> {
     match mode {
-        Mode::View => view::view(item_group).map(Message::View),
-        Mode::Edit => edit::view(item_group, state, other_groups).map(Message::Edit),
+        Mode::View => view::view(group).map(Message::View),
+        Mode::Edit => {
+            edit::view(group, edit::EditState::new(group), other_groups).map(Message::Edit)
+        }
     }
 }
 
