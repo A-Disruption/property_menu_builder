@@ -13,6 +13,8 @@ use std::collections::HashMap;
 pub enum Message {
     Edit(edit::Message),
     View(view::Message),
+    CreateNew,
+    Select,
 }
 
 #[derive(Debug, Clone)]
@@ -21,6 +23,8 @@ pub enum Operation {
     StartEdit(EntityId),
     Cancel,
     Back,
+    CreateNew(ChoiceGroup),
+    Select(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -97,6 +101,15 @@ impl Default for ChoiceGroup {
 }
 
 impl ChoiceGroup {
+
+    pub fn new_draft() -> Self {
+        Self {
+            id: -1,  // Temporary UI-only ID
+            name: String::new(),
+            ..ChoiceGroup::default()
+        } 
+    }
+
     fn validate(&self, other_groups: &[&ChoiceGroup]) -> Result<(), ValidationError> {
         if !(1..=999).contains(&self.id) {
             return Err(ValidationError::InvalidId(
@@ -157,6 +170,13 @@ pub fn update(
             view::Message::Edit => Action::operation(Operation::StartEdit(choice_group.id)),
             view::Message::Back => Action::operation(Operation::Back),
         }
+        Message::CreateNew => {
+            let new_choice_group = ChoiceGroup::default();
+            Action::operation(Operation::CreateNew(new_choice_group))
+        },
+        Message::Select => {
+            Action::operation(Operation::Select(choice_group.id))
+        },
     }
 }
 

@@ -401,12 +401,12 @@ pub fn view<'a>(
 
     let validation_error = &state.validation_error;
 
-    let content = container(
+    let content = scrollable(
         column![
             // Basic Info Section
             container(
                 column![
-                    text("Basic Information").size(16),
+                    text("Basic Information").size(16).style(iced::widget::text::primary),
                     row![
                         text("Name").width(Length::Fixed(150.0)),
                         text_input("Item Name", &item.name)
@@ -440,14 +440,14 @@ pub fn view<'a>(
             // Classifications Section
             container(
                 column![
-                    text("Classifications").size(16),
+                    text("Classifications").size(16).style(iced::widget::text::primary),
                     row![
                         text("Item Group").width(Length::Fixed(150.0)),
                         pick_list(
                             item_groups.values().collect::<Vec<_>>(),
                             item.item_group.and_then(|id| item_groups.get(&id)),
                             |group: &ItemGroup| Message::SelectItemGroup(Some(group.id))
-                        )
+                        ).width(200)
                     ],
                     row![
                         text("Product Class").width(Length::Fixed(150.0)),
@@ -455,7 +455,7 @@ pub fn view<'a>(
                             product_classes.values().collect::<Vec<_>>(),
                             item.product_class.and_then(|id| product_classes.get(&id)),
                             |product_class: &ProductClass| Message::SelectProductClass(Some(product_class.id))
-                        )
+                        ).width(200)
                     ],
                     row![
                         text("Revenue Category").width(Length::Fixed(150.0)),
@@ -463,7 +463,7 @@ pub fn view<'a>(
                             revenue_categories.values().collect::<Vec<_>>(),
                             item.revenue_category.and_then(|id| revenue_categories.get(&id)),
                             |revenue_category: &RevenueCategory| Message::SelectRevenueCategory(Some(revenue_category.id))
-                        )
+                        ).width(200)
                     ],
                     row![
                         text("Tax Group").width(Length::Fixed(150.0)),
@@ -471,7 +471,7 @@ pub fn view<'a>(
                             tax_groups.values().collect::<Vec<_>>(),
                             item.tax_group.and_then(|id| tax_groups.get(&id)),
                             |tax_group: &TaxGroup| Message::SelectTaxGroup(Some(tax_group.id))
-                        )
+                        ).width(200)
                     ],
                     row![
                         text("Security Level").width(Length::Fixed(150.0)),
@@ -479,7 +479,7 @@ pub fn view<'a>(
                             security_levels.values().collect::<Vec<_>>(),
                             item.security_level.and_then(|id| security_levels.get(&id)),
                             |secureity_level| Message::SelectSecurityLevel(Some(secureity_level.id))
-                        )
+                        ).width(200)
                     ],
                     row![
                         text("Report Category").width(Length::Fixed(150.0)),
@@ -487,18 +487,20 @@ pub fn view<'a>(
                             report_categories.values().collect::<Vec<_>>(),
                             item.report_category.and_then(|id| report_categories.get(&id)),
                             |report_category: &ReportCategory| Message::SelectReportCategory(Some(report_category.id))
-                        )
+                        ).width(200)
                     ],
                 ]
+                .width(Length::Fill)
                 .spacing(10)
             )
+            .width(Length::Fill)
             .style(container::rounded_box)
             .padding(20),
 
             // Pricing Section
             container(
                 column![
-                    text("Pricing").size(16),
+                    text("Pricing").size(16).style(iced::widget::text::primary),
                     row![
                         text("Cost Amount").width(Length::Fixed(150.0)),
                         text_input(
@@ -525,7 +527,7 @@ pub fn view<'a>(
             // Weight Section
             container(
                 column![
-                    text("Weight").size(16),
+                    text("Weight").size(16).style(iced::widget::text::primary),
                     checkbox(
                         "Use Weight",
                         item.use_weight
@@ -548,7 +550,7 @@ pub fn view<'a>(
             // Flags Section
             container(
                 column![
-                    text("Flags").size(16),
+                    text("Flags").size(16).style(iced::widget::text::primary),
                     checkbox(
                         "Print on Check",
                         item.print_on_check
@@ -574,15 +576,17 @@ pub fn view<'a>(
                         item.stock_item
                     ).on_toggle(Message::ToggleStockItem),
                 ]
+                .width(Length::Fill)
                 .spacing(10)
             )
             .style(container::rounded_box)
+            .width(Length::Fill)
             .padding(20),
 
             // Kitchen Info Section
             container(
                 column![
-                    text("Kitchen Information").size(16),
+                    text("Kitchen Information").size(16).style(iced::widget::text::primary),
                     row![
                         text("Kitchen Video").width(Length::Fixed(150.0)),
                         text_input("Kitchen Video", &item.kitchen_video)
@@ -616,7 +620,7 @@ pub fn view<'a>(
             // Store Settings Section
             container(
                 column![
-                    text("Store Settings").size(16),
+                    text("Store Settings").size(16).style(iced::widget::text::primary),
                     row![
                         text("Store ID").width(Length::Fixed(150.0)),
                         text_input("Store ID", &item.store_id.to_string())
@@ -654,7 +658,7 @@ pub fn view<'a>(
                 )
                 .padding(10)
             } else {
-                container(vertical_space())
+                container(text("error".to_string()).style(text::danger))
             },
 
             // Action Buttons
@@ -671,7 +675,7 @@ pub fn view<'a>(
             .padding(20),
         ]
         .spacing(20)
-    );
+    ).spacing(10);
 
     container(content).into()
 }

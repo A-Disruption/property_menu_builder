@@ -14,6 +14,8 @@ use std::collections::HashMap;
 pub enum Message {
     Edit(edit::Message),
     View(view::Message),
+    CreateNew,
+    Select,
 }
 
 #[derive(Debug, Clone)]
@@ -22,6 +24,8 @@ pub enum Operation {
     StartEdit(EntityId),
     Cancel,
     Back,
+    CreateNew(RevenueCategory),
+    Select(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +95,15 @@ impl Default for RevenueCategory {
 }
 
 impl RevenueCategory {
+
+    pub fn new_draft() -> Self {
+        Self {
+            id: -1,  // Temporary UI-only ID
+            name: String::new(),
+            ..RevenueCategory::default()
+        } 
+    }
+
     fn validate(&self, other_categories: &[&RevenueCategory]) -> Result<(), ValidationError> {
         if !(1..=999).contains(&self.id) {
             return Err(ValidationError::InvalidId(
@@ -151,6 +164,13 @@ pub fn update(
             view::Message::Edit => Action::operation(Operation::StartEdit(revenue_category.id)),
             view::Message::Back => Action::operation(Operation::Back),
         }
+        Message::CreateNew => {
+            let new_revenue_category = RevenueCategory::default();
+            Action::operation(Operation::CreateNew(new_revenue_category))
+        },
+        Message::Select => {
+            Action::operation(Operation::Select(revenue_category.id))
+        },
     }
 }
 

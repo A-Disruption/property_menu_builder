@@ -14,6 +14,8 @@ use std::collections::HashMap;
 pub enum Message {
     Edit(edit::Message),
     View(view::Message),
+    CreateNew,
+    Select,
 }
 
 #[derive(Debug, Clone)]
@@ -22,6 +24,8 @@ pub enum Operation {
     StartEdit(EntityId),
     Cancel,
     Back,
+    CreateNew(PrinterLogical),
+    Select(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +95,15 @@ impl Default for PrinterLogical {
 }
 
 impl PrinterLogical {
+
+    pub fn new_draft() -> Self {
+        Self {
+            id: -1,  // Temporary UI-only ID
+            name: String::new(),
+            ..PrinterLogical::default()
+        } 
+    }
+
     fn validate(&self, other_printers: &[&PrinterLogical]) -> Result<(), ValidationError> {
         // Validate ID range (0-25 based on your screenshot)
         if !(0..=25).contains(&self.id) {
@@ -154,6 +167,13 @@ pub fn update(
             view::Message::Edit => Action::operation(Operation::StartEdit(printer.id)),
             view::Message::Back => Action::operation(Operation::Back),
         }
+        Message::CreateNew => {
+            let new_printer_logical = PrinterLogical::default();
+            Action::operation(Operation::CreateNew(new_printer_logical))
+        },
+        Message::Select => {
+            Action::operation(Operation::Select(printer.id))
+        },
     }
 }
 

@@ -16,6 +16,8 @@ use rust_decimal::Decimal;
 pub enum Message {
     Edit(edit::Message),
     View(view::Message),
+    CreateNew,
+    Select,
 }
 
 #[derive(Debug, Clone)]
@@ -24,6 +26,8 @@ pub enum Operation {
     StartEdit(EntityId),
     Cancel,
     Back,
+    CreateNew(PriceLevel),
+    Select(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -129,6 +133,15 @@ impl Default for PriceLevel {
 }
 
 impl PriceLevel {
+
+    pub fn new_draft() -> Self {
+        Self {
+            id: -1,  // Temporary UI-only ID
+            name: String::new(),
+            ..PriceLevel::default()
+        } 
+    }
+
     fn validate(&self, other_levels: &[&PriceLevel]) -> Result<(), ValidationError> {
         if !(1..=999).contains(&self.id) {
             return Err(ValidationError::InvalidId(
@@ -211,6 +224,13 @@ pub fn update(
             view::Message::Edit => Action::operation(Operation::StartEdit(price_level.id)),
             view::Message::Back => Action::operation(Operation::Back),
         }
+        Message::CreateNew => {
+            let new_price_level = PriceLevel::default();
+            Action::operation(Operation::CreateNew(new_price_level))
+        },
+        Message::Select => {
+            Action::operation(Operation::Select(price_level.id))
+        },
     }
 }
 

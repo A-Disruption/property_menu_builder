@@ -49,7 +49,7 @@ pub fn view<'a>(
 
     let basic_info = container(
         column![
-            text("Basic Information").size(16),
+            text("Basic Information").size(16).style(iced::widget::text::primary),
             info_row("Button 1:".to_string(), item.button1.clone()),
             info_row(
                 "Button 2:".to_string(), 
@@ -59,11 +59,12 @@ pub fn view<'a>(
         ]
     )
     .style(container::rounded_box)
+    .width(Length::Fill)
     .padding(20);
 
     let classifications = container(
         column![
-            text("Classifications").size(16),
+            text("Classifications").size(16).style(iced::widget::text::primary),
             info_row(
                 "Item Group:".to_string(), 
                 item.item_group
@@ -101,13 +102,16 @@ pub fn view<'a>(
                     .map_or("None".to_string(), |c| c.name.clone())
             ),
         ]
+        .width(Length::Fill)
+        .spacing(10)
     )
+    .width(Length::Fill)
     .style(container::rounded_box)
     .padding(20);
 
     let pricing = container(
         column![
-            text("Pricing").size(16),
+            text("Pricing").size(16).style(iced::widget::text::primary),
             info_row(
                 "Cost Amount:".to_string(), 
                 item.cost_amount.map_or("Not Set".to_string(), |c| format!("${:.2}", c))
@@ -136,11 +140,12 @@ pub fn view<'a>(
         ]
     )
     .style(container::rounded_box)
+    .width(Length::Fill)
     .padding(20);
 
     let weight_info = container(
         column![
-            text("Weight Information").size(16),
+            text("Weight Information").size(16).style(iced::widget::text::primary),
             info_row(
                 "Use Weight:".to_string(), 
                 (if item.use_weight { "Yes" } else { "No" }).to_string()
@@ -152,11 +157,12 @@ pub fn view<'a>(
         ]
     )
     .style(container::rounded_box)
+    .width(Length::Fill)
     .padding(20);
 
     let flags = container(
         column![
-            text("Flags").size(16),
+            text("Flags").size(16).style(iced::widget::text::primary),
             info_row(
                 "Print on Check:".to_string(), 
                 (if item.print_on_check { "Yes" } else { "No" }).to_string()
@@ -184,37 +190,42 @@ pub fn view<'a>(
         ]
     )
     .style(container::rounded_box)
+    .width(Length::Fill)
     .padding(20);
 
     let kitchen_info = container(
         column![
-            text("Kitchen Information").size(16),
+            text("Kitchen Information").size(16).style(iced::widget::text::primary),
             info_row("Kitchen Video:".to_string(), item.kitchen_video.clone()),
             info_row("KDS Category:".to_string(), item.kds_category.clone()),
             info_row("KDS Cook Time:".to_string(), item.kds_cooktime.to_string()),
             info_row("KDS Department:".to_string(), item.kds_dept.to_string()),
-            text("Printer Logicals:").size(14),
             if let Some(ref printers) = item.printer_logicals {
-                column(
-                    printers.iter()
-                        .filter_map(|id| printer_logicals.get(id))
-                        .map(|printer| info_row(
-                            "".to_string(), 
-                            printer.name.clone()
-                        ))
-                        .collect::<Vec<_>>()
-                )
+                column![
+                    text("Printer Logicals:").size(14),
+                    column(
+                        printers.iter()
+                            .filter_map(|id| printer_logicals.get(id))
+                            .map(|printer| info_row(
+                                "".to_string(), 
+                                printer.name.clone()
+                            ))
+                            .collect::<Vec<_>>()
+                    )
+                ]
+
             } else {
-                column![info_row("".to_string(), "None".to_string())]
+                column![info_row("Printer Logicals:".to_string(), "None".to_string())]
             }
         ]
     )
     .style(container::rounded_box)
+    .width(Length::Fill)
     .padding(20);
 
     let store_info = container(
         column![
-            text("Store Information").size(16),
+            text("Store Information").size(16).style(iced::widget::text::primary),
             info_row("Store ID:".to_string(), item.store_id.to_string()),
             info_row("Covers:".to_string(), item.covers.to_string()),
             info_row("Language:".to_string(), item.language_iso_code.clone()),
@@ -237,11 +248,12 @@ pub fn view<'a>(
         ]
     )
     .style(container::rounded_box)
+    .width(Length::Fill)
     .padding(20);
 
     let choice_groups = container(
         column![
-            text("Choice Groups").size(16),
+            text("Choice Groups").size(16).style(iced::widget::text::primary),
             if let Some(ref groups) = item.choice_groups {
                 column(
                     groups.iter()
@@ -258,6 +270,7 @@ pub fn view<'a>(
         ]
     )
     .style(container::rounded_box)
+    .width(Length::Fill)
     .padding(20);
 
     container(
@@ -276,6 +289,8 @@ pub fn view<'a>(
                 ]
                 .spacing(20)
             )
+            .spacing(10)
+            .width(Length::Fill)
             .height(Length::Fill)
         ]
         .spacing(20)

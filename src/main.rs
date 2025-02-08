@@ -245,7 +245,7 @@ pub struct MenuBuilder {
 impl MenuBuilder {
 
     fn theme(&self) -> iced::Theme {
-        iced::Theme::Light
+        iced::Theme::SolarizedDark
     }
 
     fn title(&self) -> String {
@@ -307,10 +307,10 @@ impl MenuBuilder {
                     };
 
                     let other_items: HashMap<EntityId, &Item> = cloned_items
-                .iter()
-                .filter(|(&item_id, _)| item_id != id)
-                .map(|(&k, v)| (k, v))
-                .collect();
+                        .iter()
+                        .filter(|(&item_id, _)| item_id != id)
+                        .map(|(&k, v)| (k, v))
+                        .collect();
 
                 let context = ViewContext {
                     available_items: cloned_items,
@@ -350,93 +350,135 @@ impl MenuBuilder {
             Message::ItemGroups(id, msg) => {
                 let cloned_item_groups = self.item_groups.clone();
 
-                let group = if let Some(draft_id) = self.draft_item_group_id {
-                    if draft_id == id {
-                        &mut self.draft_item_group
+                if id < 0 {  // New item group case
+                    let other_item_groups: Vec<&ItemGroup> = cloned_item_groups
+                    .values()
+                    .filter(|ig| ig.id != id)
+                    .collect();
+    
+                    let action = item_groups::update(
+                        &mut self.draft_item_group, 
+                        msg, 
+                        &mut self.item_group_edit_state,
+                        &other_item_groups
+                    )
+                        .map_operation(move |o| Operation::ItemGroups(id, o))
+                        .map(move |m| Message::ItemGroups(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+
+                } else {
+                    let group = if let Some(draft_id) = self.draft_item_group_id {
+                        if draft_id == id {
+                            &mut self.draft_item_group
+                        } else {
+                            self.item_groups.get_mut(&id).expect("Item Group should exist")
+                        }
                     } else {
                         self.item_groups.get_mut(&id).expect("Item Group should exist")
-                    }
-                } else {
-                    self.item_groups.get_mut(&id).expect("Item Group should exist")
-                };
+                    };
+    
+                    let other_item_groups: Vec<&ItemGroup> = cloned_item_groups
+                    .values()
+                    .filter(|ig| ig.id != id)
+                    .collect();
+    
+                    let action = item_groups::update(
+                        group, 
+                        msg, 
+                        &mut self.item_group_edit_state,
+                        &other_item_groups
+                    )
+                        .map_operation(move |o| Operation::ItemGroups(id, o))
+                        .map(move |m| Message::ItemGroups(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                }
 
-                let other_item_groups: Vec<&ItemGroup> = cloned_item_groups
-                .values()
-                .filter(|ig| ig.id != id)
-                .collect();
-
-                let action = item_groups::update(
-                    group, 
-                    msg, 
-                    &mut self.item_group_edit_state,
-                    &other_item_groups
-                )
-                    .map_operation(move |o| Operation::ItemGroups(id, o))
-                    .map(move |m| Message::ItemGroups(id, m));
-
-                let operation_task = if let Some(operation) = action.operation {
-                    self.perform(operation)
-                } else {
-                    Task::none()
-                };
-
-                operation_task.chain(action.task)
+                
             },
             Message::PriceLevels(id, msg) => {
                 let cloned_price_levels = self.price_levels.clone();
 
-                let price_level = if let Some(draft_id) = self.draft_price_level_id {
-                    if draft_id == id {
-                        &mut self.draft_price_level
+                if id < 0 {  // New price level case
+                    let other_price_levels: Vec<&PriceLevel> = cloned_price_levels
+                        .values()
+                        .filter(|pl| pl.id != id)
+                        .collect();
+    
+                    let action = price_levels::update(
+                        &mut self.draft_price_level, 
+                        msg, 
+                        &mut self.price_level_edit_state,
+                        &other_price_levels
+                    )
+                        .map_operation(move |o| Operation::PriceLevels(id, o))
+                        .map(move |m| Message::PriceLevels(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                } else {
+                    let price_level = if let Some(draft_id) = self.draft_price_level_id {
+                        if draft_id == id {
+                            &mut self.draft_price_level
+                        } else {
+                            self.price_levels.get_mut(&id).expect("Price Level should exist")
+                        }
                     } else {
                         self.price_levels.get_mut(&id).expect("Price Level should exist")
-                    }
-                } else {
-                    self.price_levels.get_mut(&id).expect("Price Level should exist")
-                };
-
-                let other_price_levels: Vec<&PriceLevel> = cloned_price_levels
-                    .values()
-                    .filter(|pl| pl.id != id)
-                    .collect();
-
-                let action = price_levels::update(
-                    price_level, 
-                    msg, 
-                    &mut self.price_level_edit_state,
-                    &other_price_levels
-                )
-                    .map_operation(move |o| Operation::PriceLevels(id, o))
-                    .map(move |m| Message::PriceLevels(id, m));
-
-                let operation_task = if let Some(operation) = action.operation {
-                    self.perform(operation)
-                } else {
-                    Task::none()
-                };
-
-                operation_task.chain(action.task)
+                    };
+    
+                    let other_price_levels: Vec<&PriceLevel> = cloned_price_levels
+                        .values()
+                        .filter(|pl| pl.id != id)
+                        .collect();
+    
+                    let action = price_levels::update(
+                        price_level, 
+                        msg, 
+                        &mut self.price_level_edit_state,
+                        &other_price_levels
+                    )
+                        .map_operation(move |o| Operation::PriceLevels(id, o))
+                        .map(move |m| Message::PriceLevels(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                }
             },
             Message::ProductClasses(id, msg) => {
                 let cloned_product_classes = self.product_classes.clone();
 
-                let product_class = if let Some(draft_id) = self.draft_product_class_id {
-                    if draft_id == id {
-                        &mut self.draft_product_class
-                    } else {
-                        self.product_classes.get_mut(&id).expect("Product Class should exist")
-                    }
-                } else {
-                    self.product_classes.get_mut(&id).expect("Product Class should exist")
-                };
-
-                let other_product_classes: Vec<&ProductClass> = cloned_product_classes
+                if id < 0 {  // New Product Class case
+                    let other_product_classes: Vec<&ProductClass> = cloned_product_classes
                     .values()
                     .filter(|pc| pc.id != id)
                     .collect();
 
                 let action = product_classes::update(
-                    product_class, 
+                    &mut self.draft_product_class, 
                     msg, 
                     &mut self.product_class_edit_state,
                     &other_product_classes
@@ -451,217 +493,399 @@ impl MenuBuilder {
                 };
 
                 operation_task.chain(action.task)
+
+                } else {
+                    let product_class = if let Some(draft_id) = self.draft_product_class_id {
+                        if draft_id == id {
+                            &mut self.draft_product_class
+                        } else {
+                            self.product_classes.get_mut(&id).expect("Product Class should exist")
+                        }
+                    } else {
+                        self.product_classes.get_mut(&id).expect("Product Class should exist")
+                    };
+    
+                    let other_product_classes: Vec<&ProductClass> = cloned_product_classes
+                        .values()
+                        .filter(|pc| pc.id != id)
+                        .collect();
+    
+                    let action = product_classes::update(
+                        product_class, 
+                        msg, 
+                        &mut self.product_class_edit_state,
+                        &other_product_classes
+                    )
+                        .map_operation(move |o| Operation::ProductClasses(id, o))
+                        .map(move |m| Message::ProductClasses(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                }
+
+                
             },
             Message::TaxGroups(id, msg) => {
                 let cloned_tax_groups = self.tax_groups.clone();
 
-                let tax_group = if let Some(draft_id) = self.draft_tax_group_id {
-                    if draft_id == id {
-                        &mut self.draft_tax_group
+                if id < 0 {  // New Tax Group case
+                    let other_tax_groups: Vec<&TaxGroup> = cloned_tax_groups
+                        .values()
+                        .filter(|tg| tg.id != id)
+                        .collect();
+    
+                    let action = tax_groups::update(
+                        &mut self.draft_tax_group, 
+                        msg, 
+                        &mut self.tax_group_edit_state,
+                        &other_tax_groups
+                    )
+                        .map_operation(move |o| Operation::TaxGroups(id, o))
+                        .map(move |m| Message::TaxGroups(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                } else {
+                    let tax_group = if let Some(draft_id) = self.draft_tax_group_id {
+                        if draft_id == id {
+                            &mut self.draft_tax_group
+                        } else {
+                            self.tax_groups.get_mut(&id).expect("Tax Group should exist")
+                        }
                     } else {
                         self.tax_groups.get_mut(&id).expect("Tax Group should exist")
-                    }
-                } else {
-                    self.tax_groups.get_mut(&id).expect("Tax Group should exist")
-                };
-
-                let other_tax_groups: Vec<&TaxGroup> = cloned_tax_groups
-                    .values()
-                    .filter(|tg| tg.id != id)
-                    .collect();
-
-                let action = tax_groups::update(
-                    tax_group, 
-                    msg, 
-                    &mut self.tax_group_edit_state,
-                    &other_tax_groups
-                )
-                    .map_operation(move |o| Operation::TaxGroups(id, o))
-                    .map(move |m| Message::TaxGroups(id, m));
-
-                let operation_task = if let Some(operation) = action.operation {
-                    self.perform(operation)
-                } else {
-                    Task::none()
-                };
-
-                operation_task.chain(action.task)
+                    };
+    
+                    let other_tax_groups: Vec<&TaxGroup> = cloned_tax_groups
+                        .values()
+                        .filter(|tg| tg.id != id)
+                        .collect();
+    
+                    let action = tax_groups::update(
+                        tax_group, 
+                        msg, 
+                        &mut self.tax_group_edit_state,
+                        &other_tax_groups
+                    )
+                        .map_operation(move |o| Operation::TaxGroups(id, o))
+                        .map(move |m| Message::TaxGroups(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                }
             },
             Message::SecurityLevels(id, msg) => {
                 let cloned_security_levels = self.security_levels.clone();
 
-                let security_level = if let Some(draft_id) = self.draft_security_level_id {
-                    if draft_id == id {
-                        &mut self.draft_security_level
+                if id < 0 {  // New Security Level case
+                    let other_security_levels: Vec<&SecurityLevel> = cloned_security_levels
+                        .values()
+                        .filter(|sl| sl.id != id)
+                        .collect();
+    
+                    let action = security_levels::update(
+                        &mut self.draft_security_level, 
+                        msg, 
+                        &mut self.security_level_edit_state,
+                        &other_security_levels,
+                    )
+                        .map_operation(move |o| Operation::SecurityLevels(id, o))
+                        .map(move |m| Message::SecurityLevels(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                } else {
+                    let security_level = if let Some(draft_id) = self.draft_security_level_id {
+                        if draft_id == id {
+                            &mut self.draft_security_level
+                        } else {
+                            self.security_levels.get_mut(&id).expect("Security Level should exist")
+                        }
                     } else {
                         self.security_levels.get_mut(&id).expect("Security Level should exist")
-                    }
-                } else {
-                    self.security_levels.get_mut(&id).expect("Security Level should exist")
-                };
-
-                let other_security_levels: Vec<&SecurityLevel> = cloned_security_levels
-                    .values()
-                    .filter(|sl| sl.id != id)
-                    .collect();
-
-                let action = security_levels::update(
-                    security_level, 
-                    msg, 
-                    &mut self.security_level_edit_state,
-                    &other_security_levels,
-                )
-                    .map_operation(move |o| Operation::SecurityLevels(id, o))
-                    .map(move |m| Message::SecurityLevels(id, m));
-
-                let operation_task = if let Some(operation) = action.operation {
-                    self.perform(operation)
-                } else {
-                    Task::none()
-                };
-
-                operation_task.chain(action.task)
+                    };
+    
+                    let other_security_levels: Vec<&SecurityLevel> = cloned_security_levels
+                        .values()
+                        .filter(|sl| sl.id != id)
+                        .collect();
+    
+                    let action = security_levels::update(
+                        security_level, 
+                        msg, 
+                        &mut self.security_level_edit_state,
+                        &other_security_levels,
+                    )
+                        .map_operation(move |o| Operation::SecurityLevels(id, o))
+                        .map(move |m| Message::SecurityLevels(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                }
             },
             Message::RevenueCategories(id, msg) => {
                 let cloned_revenue_categories = self.revenue_categories.clone();
 
-                let revenue_category = if let Some(draft_id) = self.draft_revenue_category_id {
-                    if draft_id == id {
-                        &mut self.draft_revenue_category
+                if id < 0 {  // New Revenue Category case
+                    let other_revenue_categories: Vec<&RevenueCategory> = cloned_revenue_categories
+                        .values()
+                        .filter(|rc| rc.id != id)
+                        .collect();
+    
+                    let action = revenue_categories::update(
+                        &mut self.draft_revenue_category, 
+                        msg, 
+                        &mut self.revenue_category_edit_state,
+                        &other_revenue_categories
+                    )
+                    .map_operation(move |o| Operation::RevenueCategories(id, o))
+                    .map(move |m| Message::RevenueCategories(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                } else {
+                    let revenue_category = if let Some(draft_id) = self.draft_revenue_category_id {
+                        if draft_id == id {
+                            &mut self.draft_revenue_category
+                        } else {
+                            self.revenue_categories.get_mut(&id).expect("Revenue Category should exist")
+                        }
                     } else {
                         self.revenue_categories.get_mut(&id).expect("Revenue Category should exist")
-                    }
-                } else {
-                    self.revenue_categories.get_mut(&id).expect("Revenue Category should exist")
-                };
-
-                let other_revenue_categories: Vec<&RevenueCategory> = cloned_revenue_categories
-                    .values()
-                    .filter(|rc| rc.id != id)
-                    .collect();
-
-                let action = revenue_categories::update(
-                    revenue_category, 
-                    msg, 
-                    &mut self.revenue_category_edit_state,
-                    &other_revenue_categories
-                )
-                .map_operation(move |o| Operation::RevenueCategories(id, o))
-                .map(move |m| Message::RevenueCategories(id, m));
-
-                let operation_task = if let Some(operation) = action.operation {
-                    self.perform(operation)
-                } else {
-                    Task::none()
-                };
-
-                operation_task.chain(action.task)
+                    };
+    
+                    let other_revenue_categories: Vec<&RevenueCategory> = cloned_revenue_categories
+                        .values()
+                        .filter(|rc| rc.id != id)
+                        .collect();
+    
+                    let action = revenue_categories::update(
+                        revenue_category, 
+                        msg, 
+                        &mut self.revenue_category_edit_state,
+                        &other_revenue_categories
+                    )
+                    .map_operation(move |o| Operation::RevenueCategories(id, o))
+                    .map(move |m| Message::RevenueCategories(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                }
             },
             Message::ReportCategories(id, msg) => {
                 let cloned_report_categories = self.report_categories.clone();
 
-                let report_category = if let Some(draft_id) = self.draft_report_category_id {
-                    if draft_id == id {
-                        &mut self.draft_report_category
+                if id < 0 {  // New Report Category case
+                    let other_report_categories : Vec<&ReportCategory> = cloned_report_categories
+                        .values()
+                        .filter(|rc| rc.id != id)
+                        .collect();
+    
+    
+                    let action = report_categories::update(
+                        &mut self.draft_report_category, 
+                        msg, 
+                        &mut self.report_category_edit_state,
+                        &other_report_categories
+                    )
+                    .map_operation(move |o| Operation::ReportCategories(id, o))
+                    .map(move |m| Message::ReportCategories(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                } else {
+                    let report_category = if let Some(draft_id) = self.draft_report_category_id {
+                        if draft_id == id {
+                            &mut self.draft_report_category
+                        } else {
+                            self.report_categories.get_mut(&id).expect("Report Category should exist")
+                        }
                     } else {
                         self.report_categories.get_mut(&id).expect("Report Category should exist")
-                    }
-                } else {
-                    self.report_categories.get_mut(&id).expect("Report Category should exist")
-                };
-
-                let other_report_categories : Vec<&ReportCategory> = cloned_report_categories
-                    .values()
-                    .filter(|rc| rc.id != id)
-                    .collect();
-
-
-                let action = report_categories::update(
-                    report_category, 
-                    msg, 
-                    &mut self.report_category_edit_state,
-                    &other_report_categories
-                )
-                .map_operation(move |o| Operation::ReportCategories(id, o))
-                .map(move |m| Message::ReportCategories(id, m));
-
-                let operation_task = if let Some(operation) = action.operation {
-                    self.perform(operation)
-                } else {
-                    Task::none()
-                };
-
-                operation_task.chain(action.task)
+                    };
+    
+                    let other_report_categories : Vec<&ReportCategory> = cloned_report_categories
+                        .values()
+                        .filter(|rc| rc.id != id)
+                        .collect();
+    
+    
+                    let action = report_categories::update(
+                        report_category, 
+                        msg, 
+                        &mut self.report_category_edit_state,
+                        &other_report_categories
+                    )
+                    .map_operation(move |o| Operation::ReportCategories(id, o))
+                    .map(move |m| Message::ReportCategories(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                }
             },
             Message::ChoiceGroups(id, msg) => {
                 let cloned_choice_groups = self.choice_groups.clone();
 
-                let choice_group = if let Some(draft_id) = self.draft_choice_group_id {
-                    if draft_id == id {
-                        &mut self.draft_choice_group
-                    } else {
-                        self.choice_groups.get_mut(&id).expect("Choice Group should exist")
-                    }
-                } else {
-                    self.choice_groups.get_mut(&id).expect("Choice Group should exist")
-                };
-
-                let other_choice_groups: Vec<&ChoiceGroup> = cloned_choice_groups
+                if id < 0 {  // New Choice Group case
+                    let other_choice_groups: Vec<&ChoiceGroup> = cloned_choice_groups
                     .values()
                     .filter(|c| c.id != id)
                     .collect();
 
-                let action = choice_groups::update(
-                    choice_group, msg, 
-                    &mut self.choice_group_edit_state, 
-                    &other_choice_groups
-                )
-                .map_operation(move |o| Operation::ChoiceGroups(id, o))
-                .map(move |m| Message::ChoiceGroups(id, m));
+                    let action = choice_groups::update(
+                        &mut self.draft_choice_group, 
+                        msg, 
+                        &mut self.choice_group_edit_state, 
+                        &other_choice_groups
+                    )
+                    .map_operation(move |o| Operation::ChoiceGroups(id, o))
+                    .map(move |m| Message::ChoiceGroups(id, m));
 
-                let operation_task = if let Some(operation) = action.operation {
-                    self.perform(operation)
-                } else {
-                    Task::none()
-                };
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
 
                 operation_task.chain(action.task)
+                } else {
+                    let choice_group = if let Some(draft_id) = self.draft_choice_group_id {
+                        if draft_id == id {
+                            &mut self.draft_choice_group
+                        } else {
+                            self.choice_groups.get_mut(&id).expect("Choice Group should exist")
+                        }
+                    } else {
+                        self.choice_groups.get_mut(&id).expect("Choice Group should exist")
+                    };
+    
+                    let other_choice_groups: Vec<&ChoiceGroup> = cloned_choice_groups
+                        .values()
+                        .filter(|c| c.id != id)
+                        .collect();
+    
+                    let action = choice_groups::update(
+                        choice_group, msg, 
+                        &mut self.choice_group_edit_state, 
+                        &other_choice_groups
+                    )
+                    .map_operation(move |o| Operation::ChoiceGroups(id, o))
+                    .map(move |m| Message::ChoiceGroups(id, m));
+    
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+    
+                    operation_task.chain(action.task)
+                }
             },
             Message::PrinterLogicals(id, msg) => {
                 let cloned_printers = self.printer_logicals.clone();
 
-                let printer = if let Some(draft_id) = self.draft_printer_id {
-                    if draft_id == id {
-                        &mut self.draft_printer
+                if id < 0 {  // New Choice Group case
+                    // Get other printers for validation
+                    let other_printers: Vec<&PrinterLogical> = cloned_printers
+                        .values()
+                        .filter(|p| p.id != id)
+                        .collect();
+                
+                    let action = printer_logicals::update(
+                        &mut self.draft_printer, 
+                        msg, 
+                        &mut self.printer_edit_state,
+                        &other_printers
+                    )
+                    .map_operation(move |o| Operation::PrinterLogicals(id, o))
+                    .map(move |m| Message::PrinterLogicals(id, m));
+                
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+                
+                    operation_task.chain(action.task)
+                } else {
+                    let printer = if let Some(draft_id) = self.draft_printer_id {
+                        if draft_id == id {
+                            &mut self.draft_printer
+                        } else {
+                            self.printer_logicals.get_mut(&id).expect("Printer should exist")
+                        }
                     } else {
                         self.printer_logicals.get_mut(&id).expect("Printer should exist")
-                    }
-                } else {
-                    self.printer_logicals.get_mut(&id).expect("Printer should exist")
-                };
-            
-                // Get other printers for validation
-                let other_printers: Vec<&PrinterLogical> = cloned_printers
-                    .values()
-                    .filter(|p| p.id != id)
-                    .collect();
-            
-                let action = printer_logicals::update(
-                    printer, 
-                    msg, 
-                    &mut self.printer_edit_state,
-                    &other_printers
-                )
-                .map_operation(move |o| Operation::PrinterLogicals(id, o))
-                .map(move |m| Message::PrinterLogicals(id, m));
-            
-                let operation_task = if let Some(operation) = action.operation {
-                    self.perform(operation)
-                } else {
-                    Task::none()
-                };
-            
-                operation_task.chain(action.task)
+                    };
+                
+                    // Get other printers for validation
+                    let other_printers: Vec<&PrinterLogical> = cloned_printers
+                        .values()
+                        .filter(|p| p.id != id)
+                        .collect();
+                
+                    let action = printer_logicals::update(
+                        printer, 
+                        msg, 
+                        &mut self.printer_edit_state,
+                        &other_printers
+                    )
+                    .map_operation(move |o| Operation::PrinterLogicals(id, o))
+                    .map(move |m| Message::PrinterLogicals(id, m));
+                
+                    let operation_task = if let Some(operation) = action.operation {
+                        self.perform(operation)
+                    } else {
+                        Task::none()
+                    };
+                
+                    operation_task.chain(action.task)
+                }
             }
             Message::Navigate(screen) => {
                 self.screen = screen;
@@ -801,17 +1025,17 @@ impl MenuBuilder {
                                                 .collect::<Vec<_>>()
                                         )
                                         .spacing(10)
-                                    )
+                                    ).width(Length::Fill)
                                 ]
                             }
                         ]
                         .spacing(10)
-                        .max_width(500)
+                        //.max_width(500)
                     )
                     .width(Length::Fill)
                     .height(Length::Fill)
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill)
+//                    .center_x(Length::Fill)
+//                    .center_y(Length::Fill)
                     .padding(30)
                     .into()
                 }
@@ -831,7 +1055,55 @@ impl MenuBuilder {
                     item_groups::view(item_group, mode, &self.item_groups)
                         .map(move |msg| Message::ItemGroups(id, msg))
                 } else {
-                    text("No item group selected").into()
+                    container(
+                        column![
+                            text("Item Groups")
+                                .size(24)
+                                .width(Length::Fill),
+                            vertical_space(),
+                            if self.item_groups.is_empty() {
+                                column![
+                                    text("No item groups have been created yet.")
+                                        .width(Length::Fill),
+                                    vertical_space(),
+                                    button("Create New Item Group")
+                                        .on_press(Message::ItemGroups(-1, item_groups::Message::CreateNew))
+                                        .style(button::primary)
+                                ]
+                            } else {
+                                column![
+                                    button("Create New Item Group")
+                                        .on_press(Message::ItemGroups(-1, item_groups::Message::CreateNew))
+                                        .style(button::primary),
+                                    vertical_space(),
+                                    text("Or select an existing item group:"),
+                                    scrollable(
+                                        column(
+                                            self.item_groups
+                                                .values()
+                                                .map(|group| {
+                                                    button(text(&group.name))
+                                                        .on_press(Message::ItemGroups(group.id, item_groups::Message::Select))
+                                                        .width(Length::Fill)
+                                                        .style(button::secondary)
+                                                        .into()
+                                                })
+                                                .collect::<Vec<_>>()
+                                        )
+                                        .spacing(10)
+                                    )
+                                ]
+                            }
+                        ]
+                        .spacing(10)
+                        .max_width(500)
+                    )
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
+                    .padding(30)
+                    .into()
                 }
             }
             Screen::PriceLevels(mode) => {
@@ -849,7 +1121,55 @@ impl MenuBuilder {
                     price_levels::view(price_level, mode, &self.price_levels)
                         .map(move |msg| Message::PriceLevels(id, msg))
                 } else {
-                    text("No price level selected").into()
+                    container(
+                        column![
+                            text("Price Levels")
+                                .size(24)
+                                .width(Length::Fill),
+                            vertical_space(),
+                            if self.price_levels.is_empty() {
+                                column![
+                                    text("No price levels have been created yet.")
+                                        .width(Length::Fill),
+                                    vertical_space(),
+                                    button("Create New Price Level")
+                                        .on_press(Message::PriceLevels(-1, price_levels::Message::CreateNew))
+                                        .style(button::primary)
+                                ]
+                            } else {
+                                column![
+                                    button("Create New Price Level")
+                                        .on_press(Message::PriceLevels(-1, price_levels::Message::CreateNew))
+                                        .style(button::primary),
+                                    vertical_space(),
+                                    text("Or select an existing price level:"),
+                                    scrollable(
+                                        column(
+                                            self.price_levels
+                                                .values()
+                                                .map(|level| {
+                                                    button(text(&level.name))
+                                                        .on_press(Message::PriceLevels(level.id, price_levels::Message::Select))
+                                                        .width(Length::Fill)
+                                                        .style(button::secondary)
+                                                        .into()
+                                                })
+                                                .collect::<Vec<_>>()
+                                        )
+                                        .spacing(10)
+                                    )
+                                ]
+                            }
+                        ]
+                        .spacing(10)
+                        .max_width(500)
+                    )
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
+                    .padding(30)
+                    .into()
                 }
             }
             Screen::ProductClasses(mode) => {
@@ -867,7 +1187,55 @@ impl MenuBuilder {
                     product_classes::view(product_class, mode, &self.product_classes)
                         .map(move |msg| Message::ProductClasses(id, msg))
                 } else {
-                    text("No product class selected").into()
+                    container(
+                        column![
+                            text("Product Classes")
+                                .size(24)
+                                .width(Length::Fill),
+                            vertical_space(),
+                            if self.product_classes.is_empty() {
+                                column![
+                                    text("No product classes have been created yet.")
+                                        .width(Length::Fill),
+                                    vertical_space(),
+                                    button("Create New Product Class")
+                                        .on_press(Message::ProductClasses(-1, product_classes::Message::CreateNew))
+                                        .style(button::primary)
+                                ]
+                            } else {
+                                column![
+                                    button("Create New Product Class")
+                                        .on_press(Message::ProductClasses(-1, product_classes::Message::CreateNew))
+                                        .style(button::primary),
+                                    vertical_space(),
+                                    text("Or select an existing product class:"),
+                                    scrollable(
+                                        column(
+                                            self.product_classes
+                                                .values()
+                                                .map(|class| {
+                                                    button(text(&class.name))
+                                                        .on_press(Message::ProductClasses(class.id, product_classes::Message::Select))
+                                                        .width(Length::Fill)
+                                                        .style(button::secondary)
+                                                        .into()
+                                                })
+                                                .collect::<Vec<_>>()
+                                        )
+                                        .spacing(10)
+                                    )
+                                ]
+                            }
+                        ]
+                        .spacing(10)
+                        .max_width(500)
+                    )
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
+                    .padding(30)
+                    .into()
                 }
             }
             Screen::TaxGroups(mode) => {
@@ -885,7 +1253,55 @@ impl MenuBuilder {
                     tax_groups::view(tax_group, mode, &self.tax_groups)
                         .map(move |msg| Message::TaxGroups(id, msg))
                 } else {
-                    text("No tax group selected").into()
+                    container(
+                        column![
+                            text("Tax Groups")
+                                .size(24)
+                                .width(Length::Fill),
+                            vertical_space(),
+                            if self.tax_groups.is_empty() {
+                                column![
+                                    text("No tax groups have been created yet.")
+                                        .width(Length::Fill),
+                                    vertical_space(),
+                                    button("Create New Tax Group")
+                                        .on_press(Message::TaxGroups(-1, tax_groups::Message::CreateNew))
+                                        .style(button::primary)
+                                ]
+                            } else {
+                                column![
+                                    button("Create New Tax Group")
+                                        .on_press(Message::TaxGroups(-1, tax_groups::Message::CreateNew))
+                                        .style(button::primary),
+                                    vertical_space(),
+                                    text("Or select an existing tax group:"),
+                                    scrollable(
+                                        column(
+                                            self.tax_groups
+                                                .values()
+                                                .map(|group| {
+                                                    button(text(&group.name))
+                                                        .on_press(Message::TaxGroups(group.id, tax_groups::Message::Select))
+                                                        .width(Length::Fill)
+                                                        .style(button::secondary)
+                                                        .into()
+                                                })
+                                                .collect::<Vec<_>>()
+                                        )
+                                        .spacing(10)
+                                    )
+                                ]
+                            }
+                        ]
+                        .spacing(10)
+                        .max_width(500)
+                    )
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
+                    .padding(30)
+                    .into()
                 }
             }
             Screen::SecurityLevels(mode) => {
@@ -903,7 +1319,55 @@ impl MenuBuilder {
                     security_levels::view(security_level, mode, &self.security_levels)
                         .map(move |msg| Message::SecurityLevels(id, msg))
                 } else {
-                    text("No security level selected").into()
+                    container(
+                        column![
+                            text("Security Levels")
+                                .size(24)
+                                .width(Length::Fill),
+                            vertical_space(),
+                            if self.security_levels.is_empty() {
+                                column![
+                                    text("No security levels have been created yet.")
+                                        .width(Length::Fill),
+                                    vertical_space(),
+                                    button("Create New Security Level")
+                                        .on_press(Message::SecurityLevels(-1, security_levels::Message::CreateNew))
+                                        .style(button::primary)
+                                ]
+                            } else {
+                                column![
+                                    button("Create New Security Level")
+                                        .on_press(Message::SecurityLevels(-1, security_levels::Message::CreateNew))
+                                        .style(button::primary),
+                                    vertical_space(),
+                                    text("Or select an existing security level:"),
+                                    scrollable(
+                                        column(
+                                            self.security_levels
+                                                .values()
+                                                .map(|level| {
+                                                    button(text(&level.name))
+                                                        .on_press(Message::SecurityLevels(level.id, security_levels::Message::Select))
+                                                        .width(Length::Fill)
+                                                        .style(button::secondary)
+                                                        .into()
+                                                })
+                                                .collect::<Vec<_>>()
+                                        )
+                                        .spacing(10)
+                                    )
+                                ]
+                            }
+                        ]
+                        .spacing(10)
+                        .max_width(500)
+                    )
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
+                    .padding(30)
+                    .into()
                 }
             }
             Screen::RevenueCategories(mode) => {
@@ -921,7 +1385,55 @@ impl MenuBuilder {
                     revenue_categories::view(revenue_category, mode, &self.revenue_categories)
                         .map(move |msg| Message::RevenueCategories(id, msg))
                 } else {
-                    text("No revenue category selected").into()
+                    container(
+                        column![
+                            text("Revenue Categories")
+                                .size(24)
+                                .width(Length::Fill),
+                            vertical_space(),
+                            if self.revenue_categories.is_empty() {
+                                column![
+                                    text("No revenue categories have been created yet.")
+                                        .width(Length::Fill),
+                                    vertical_space(),
+                                    button("Create New Revenue Category")
+                                        .on_press(Message::RevenueCategories(-1, revenue_categories::Message::CreateNew))
+                                        .style(button::primary)
+                                ]
+                            } else {
+                                column![
+                                    button("Create New Revenue Category")
+                                        .on_press(Message::RevenueCategories(-1, revenue_categories::Message::CreateNew))
+                                        .style(button::primary),
+                                    vertical_space(),
+                                    text("Or select an existing revenue category:"),
+                                    scrollable(
+                                        column(
+                                            self.revenue_categories
+                                                .values()
+                                                .map(|category| {
+                                                    button(text(&category.name))
+                                                        .on_press(Message::RevenueCategories(category.id, revenue_categories::Message::Select))
+                                                        .width(Length::Fill)
+                                                        .style(button::secondary)
+                                                        .into()
+                                                })
+                                                .collect::<Vec<_>>()
+                                        )
+                                        .spacing(10)
+                                    )
+                                ]
+                            }
+                        ]
+                        .spacing(10)
+                        .max_width(500)
+                    )
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
+                    .padding(30)
+                    .into()
                 }
             }
             Screen::ReportCategories(mode) => {
@@ -939,7 +1451,55 @@ impl MenuBuilder {
                     report_categories::view(report_category, mode, &self.report_categories)
                         .map(move |msg| Message::ReportCategories(id, msg))
                 } else {
-                    text("No report category selected").into()
+                    container(
+                        column![
+                            text("Report Categories")
+                                .size(24)
+                                .width(Length::Fill),
+                            vertical_space(),
+                            if self.report_categories.is_empty() {
+                                column![
+                                    text("No report categories have been created yet.")
+                                        .width(Length::Fill),
+                                    vertical_space(),
+                                    button("Create New Report Category")
+                                        .on_press(Message::ReportCategories(-1, report_categories::Message::CreateNew))
+                                        .style(button::primary)
+                                ]
+                            } else {
+                                column![
+                                    button("Create New Report Category")
+                                        .on_press(Message::ReportCategories(-1, report_categories::Message::CreateNew))
+                                        .style(button::primary),
+                                    vertical_space(),
+                                    text("Or select an existing report category:"),
+                                    scrollable(
+                                        column(
+                                            self.report_categories
+                                                .values()
+                                                .map(|category| {
+                                                    button(text(&category.name))
+                                                        .on_press(Message::ReportCategories(category.id, report_categories::Message::Select))
+                                                        .width(Length::Fill)
+                                                        .style(button::secondary)
+                                                        .into()
+                                                })
+                                                .collect::<Vec<_>>()
+                                        )
+                                        .spacing(10)
+                                    )
+                                ]
+                            }
+                        ]
+                        .spacing(10)
+                        .max_width(500)
+                    )
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
+                    .padding(30)
+                    .into()
                 }
             }
             Screen::ChoiceGroups(mode) => {
@@ -957,7 +1517,55 @@ impl MenuBuilder {
                     choice_groups::view(choice_group, mode, &self.choice_groups)
                         .map(move |msg| Message::ChoiceGroups(id, msg))
                 } else {
-                    text("No choice group selected").into()
+                    container(
+                        column![
+                            text("Choice Groups")
+                                .size(24)
+                                .width(Length::Fill),
+                            vertical_space(),
+                            if self.choice_groups.is_empty() {
+                                column![
+                                    text("No choice groups have been created yet.")
+                                        .width(Length::Fill),
+                                    vertical_space(),
+                                    button("Create New Choice Group")
+                                        .on_press(Message::ChoiceGroups(-1, choice_groups::Message::CreateNew))
+                                        .style(button::primary)
+                                ]
+                            } else {
+                                column![
+                                    button("Create New Choice Group")
+                                        .on_press(Message::ChoiceGroups(-1, choice_groups::Message::CreateNew))
+                                        .style(button::primary),
+                                    vertical_space(),
+                                    text("Or select an existing choice group:"),
+                                    scrollable(
+                                        column(
+                                            self.choice_groups
+                                                .values()
+                                                .map(|group| {
+                                                    button(text(&group.name))
+                                                        .on_press(Message::ChoiceGroups(group.id, choice_groups::Message::Select))
+                                                        .width(Length::Fill)
+                                                        .style(button::secondary)
+                                                        .into()
+                                                })
+                                                .collect::<Vec<_>>()
+                                        )
+                                        .spacing(10)
+                                    )
+                                ]
+                            }
+                        ]
+                        .spacing(10)
+                        .max_width(500)
+                    )
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
+                    .padding(30)
+                    .into()
                 }
             }
             Screen::PrinterLogicals(mode) => {
@@ -975,7 +1583,55 @@ impl MenuBuilder {
                     printer_logicals::view(printer, mode, &self.printer_logicals)
                         .map(move |msg| Message::PrinterLogicals(id, msg))
                 } else {
-                    text("No printer selected").into()
+                    container(
+                        column![
+                            text("Printer Logicals")
+                                .size(24)
+                                .width(Length::Fill),
+                            vertical_space(),
+                            if self.printer_logicals.is_empty() {
+                                column![
+                                    text("No printer logicals have been created yet.")
+                                        .width(Length::Fill),
+                                    vertical_space(),
+                                    button("Create New Printer Logical")
+                                        .on_press(Message::PrinterLogicals(-1, printer_logicals::Message::CreateNew))
+                                        .style(button::primary)
+                                ]
+                            } else {
+                                column![
+                                    button("Create New Printer Logical")
+                                        .on_press(Message::PrinterLogicals(-1, printer_logicals::Message::CreateNew))
+                                        .style(button::primary),
+                                    vertical_space(),
+                                    text("Or select an existing printer logical:"),
+                                    scrollable(
+                                        column(
+                                            self.printer_logicals
+                                                .values()
+                                                .map(|printer| {
+                                                    button(text(&printer.name))
+                                                        .on_press(Message::PrinterLogicals(printer.id, printer_logicals::Message::Select))
+                                                        .width(Length::Fill)
+                                                        .style(button::secondary)
+                                                        .into()
+                                                })
+                                                .collect::<Vec<_>>()
+                                        )
+                                        .spacing(10)
+                                    )
+                                ]
+                            }
+                        ]
+                        .spacing(10)
+                        .max_width(500)
+                    )
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
+                    .padding(30)
+                    .into()
                 }
             }
         };
@@ -1090,6 +1746,19 @@ impl MenuBuilder {
                         self.screen = Screen::ItemGroups(item_groups::Mode::View);
                         Task::none()
                     }
+                    item_groups::Operation::CreateNew(item) => {
+                        let new_id = ItemGroup::new_draft();
+                        self.draft_item_group = item;
+                        self.draft_item_group_id = Some(new_id.id);
+                        self.selected_item_group_id = Some(new_id.id);
+                        self.screen = Screen::ItemGroups(item_groups::Mode::Edit);
+                        Task::none()
+                    },
+                    item_groups::Operation::Select(item_group_id) => {
+                        self.selected_item_group_id = Some(item_group_id);
+                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        Task::none()
+                    },
                 }
             }
     
@@ -1132,6 +1801,19 @@ impl MenuBuilder {
                         self.screen = Screen::TaxGroups(tax_groups::Mode::View);
                         Task::none()
                     }
+                    tax_groups::Operation::CreateNew(tax_group) => {
+                        let new_id = TaxGroup::new_draft();
+                        self.draft_tax_group = tax_group;
+                        self.draft_tax_group_id = Some(new_id.id);
+                        self.selected_tax_group_id = Some(new_id.id);
+                        self.screen = Screen::TaxGroups(tax_groups::Mode::Edit);
+                        Task::none()
+                    },
+                    tax_groups::Operation::Select(tax_group_id) => {
+                        self.selected_tax_group_id = Some(tax_group_id);
+                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                        Task::none()
+                    },
                 }
             }
     
@@ -1174,6 +1856,19 @@ impl MenuBuilder {
                         self.screen = Screen::SecurityLevels(security_levels::Mode::View);
                         Task::none()
                     }
+                    security_levels::Operation::CreateNew(security_level) => {
+                        let new_id = SecurityLevel::new_draft();
+                        self.draft_security_level = security_level;
+                        self.draft_security_level_id = Some(new_id.id);
+                        self.selected_tax_group_id = Some(new_id.id);
+                        self.screen = Screen::SecurityLevels(security_levels::Mode::Edit);
+                        Task::none()
+                    },
+                    security_levels::Operation::Select(security_level_id) => {
+                        self.selected_security_level_id = Some(security_level_id);
+                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
+                        Task::none()
+                    },
                 }
             }
     
@@ -1216,6 +1911,19 @@ impl MenuBuilder {
                         self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
                         Task::none()
                     }
+                    revenue_categories::Operation::CreateNew(revenue_category) => {
+                        let new_id = RevenueCategory::new_draft();
+                        self.draft_revenue_category = revenue_category;
+                        self.draft_revenue_category_id = Some(new_id.id);
+                        self.selected_revenue_category_id = Some(new_id.id);
+                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::Edit);
+                        Task::none()
+                    },
+                    revenue_categories::Operation::Select(security_level_id) => {
+                        self.selected_security_level_id = Some(security_level_id);
+                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
+                        Task::none()
+                    },
                 }
             }
     
@@ -1258,6 +1966,19 @@ impl MenuBuilder {
                         self.screen = Screen::ReportCategories(report_categories::Mode::View);
                         Task::none()
                     }
+                    report_categories::Operation::CreateNew(report_category) => {
+                        let new_id = ReportCategory::new_draft();
+                        self.draft_report_category = report_category;
+                        self.draft_report_category_id = Some(new_id.id);
+                        self.selected_report_category_id = Some(new_id.id);
+                        self.screen = Screen::ReportCategories(report_categories::Mode::Edit);
+                        Task::none()
+                    },
+                    report_categories::Operation::Select(security_level_id) => {
+                        self.selected_security_level_id = Some(security_level_id);
+                        self.screen = Screen::ReportCategories(report_categories::Mode::View);
+                        Task::none()
+                    },
                 }
             }
     
@@ -1301,6 +2022,19 @@ impl MenuBuilder {
                         self.screen = Screen::ProductClasses(product_classes::Mode::View);
                         Task::none()
                     }
+                    product_classes::Operation::CreateNew(product_class) => {
+                        let new_id = ProductClass::new_draft();
+                        self.draft_product_class = product_class;
+                        self.draft_product_class_id = Some(new_id.id);
+                        self.selected_product_class_id = Some(new_id.id);
+                        self.screen = Screen::ProductClasses(product_classes::Mode::Edit);
+                        Task::none()
+                    },
+                    product_classes::Operation::Select(security_level_id) => {
+                        self.selected_security_level_id = Some(security_level_id);
+                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
+                        Task::none()
+                    },
                 }
             }
     
@@ -1342,6 +2076,19 @@ impl MenuBuilder {
                     self.screen = Screen::Items(items::Mode::View);
                     Task::none()
                 }
+                choice_groups::Operation::CreateNew(choice_group) => {
+                    let new_id = ChoiceGroup::new_draft();
+                    self.draft_choice_group = choice_group;
+                    self.draft_choice_group_id = Some(new_id.id);
+                    self.selected_choice_group_id = Some(new_id.id);
+                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::Edit);
+                    Task::none()
+                },
+                choice_groups::Operation::Select(choice_group_id) => {
+                    self.selected_choice_group_id = Some(choice_group_id);
+                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    Task::none()
+                },
             },
     
             Operation::PrinterLogicals(id, op) => match op {
@@ -1382,6 +2129,19 @@ impl MenuBuilder {
                     self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
                     Task::none()
                 }
+                printer_logicals::Operation::CreateNew(printer_logical) => {
+                    let new_id = PrinterLogical::new_draft();
+                    self.draft_printer = printer_logical;
+                    self.draft_printer_id = Some(new_id.id);
+                    self.selected_printer_id = Some(new_id.id);
+                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::Edit);
+                    Task::none()
+                },
+                printer_logicals::Operation::Select(printer_logical_id) => {
+                    self.selected_printer_id = Some(printer_logical_id);
+                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
+                    Task::none()
+                },
             },
 
             Operation::PriceLevels(id, op) => match op {
@@ -1424,6 +2184,19 @@ impl MenuBuilder {
                     self.screen = Screen::PriceLevels(price_levels::Mode::View);
                     Task::none()
                 }
+                price_levels::Operation::CreateNew(price_level) => {
+                    let new_id = PriceLevel::new_draft();
+                    self.draft_price_level = price_level;
+                    self.draft_price_level_id = Some(new_id.id);
+                    self.selected_price_level_id = Some(new_id.id);
+                    self.screen = Screen::PriceLevels(price_levels::Mode::Edit);
+                    Task::none()
+                },
+                price_levels::Operation::Select(price_level_id) => {
+                    self.selected_price_level_id = Some(price_level_id);
+                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    Task::none()
+                },
             },
 
         }
