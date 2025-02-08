@@ -3,177 +3,70 @@ use iced::widget::{
     horizontal_space,
 };
 use iced::{Alignment, Element, Length, Color};
+use std::collections::HashMap;
 
 use crate::HotKey;
 use crate::item_groups::ItemGroup;
 use crate::revenue_categories::RevenueCategory;
-use super::{ProductClass, UpdateContext};
+use super::{ProductClass, EditState};
 use crate::data_types::{EntityId, ValidationError};
+
+
 #[derive(Debug, Clone)]
 pub enum Message {
     UpdateName(String),
     UpdateId(String),
-    SelectItemGroup(Option<EntityId>),
-    SelectRevenueCategory(Option<EntityId>),
     Save,
     Cancel,
 }
 
-pub struct EditState {
-    pub name: String,
-    pub id: String,
-    pub item_group_id: Option<EntityId>,
-    pub revenue_category_id: Option<EntityId>,
-    pub validation_error: Option<String>,
-}
-
-impl EditState {
-    pub fn new(class: &ProductClass) -> Self {
-        Self {
-            name: class.name.clone(),
-            id: class.id.to_string(),
-            item_group_id: class.item_group,
-            revenue_category_id: class.revenue_category,
-            validation_error: None,
-        }
-    }
-}
-
-impl EditState {
-    pub fn validate(&self, context: &UpdateContext) -> Result<(), ValidationError> {
-        // Validate name is not empty
-        if self.name.trim().is_empty() {
-            return Err(ValidationError::EmptyName(
-                "Product class name cannot be empty".to_string()
-            ));
-        }
-
-        // Validate ID range (1-999 based on screenshot)
-        let id: EntityId = self.id.parse().map_err(|_| {
-            ValidationError::InvalidId("Invalid ID format".to_string())
-        })?;
-
-        if !(1..=999).contains(&id) {
-            return Err(ValidationError::InvalidId(
-                "Product Class ID must be between 1 and 999".to_string()
-            ));
-        }
-
-        // Check for duplicate IDs
-        for other in context.other_classes {
-            if id == other.id {
-                return Err(ValidationError::DuplicateId(
-                    format!("Product Class with ID {} already exists", id)
-                ));
-            }
-        }
-
-        // Validate item group reference
-        if let Some(group_id) = self.item_group_id {
-            if !context.available_item_groups.iter().any(|g| g.id == group_id) {
-                return Err(ValidationError::InvalidReference(
-                    format!("Referenced Item Group {} does not exist", group_id)
-                ));
-            }
-        } else {
-            return Err(ValidationError::InvalidReference(
-                "Item Group is required".to_string()
-            ));
-        }
-
-        // Validate revenue category reference
-        if let Some(category_id) = self.revenue_category_id {
-            if !context.available_revenue_categories.iter().any(|c| c.id == category_id) {
-                return Err(ValidationError::InvalidReference(
-                    format!("Referenced Revenue Category {} does not exist", category_id)
-                ));
-            }
-        } else {
-            return Err(ValidationError::InvalidReference(
-                "Revenue Category is required".to_string()
-            ));
-        }
-
-        Ok(())
-    }
-}
-
 pub fn view<'a>(
-    class: &'a ProductClass,
-    state: EditState,
-    available_item_groups: &'a [&'a ItemGroup],
-    available_revenue_categories: &'a [&'a RevenueCategory],
+    product_class: &'a ProductClass,
+    state: super::EditState,
+    all_classes: &'a HashMap<EntityId, ProductClass>
 ) -> Element<'a, Message> {
-    // Clone all state data upfront
-    let name = state.name.clone();
-    let id = state.id.clone();
-    let item_group_id = state.item_group_id;
-    let revenue_category_id = state.revenue_category_id;
-    let error_message = state.validation_error.clone();
+
+    let validation_error = &state.validation_error;
+
+    let other_classes: Vec<&ProductClass> = all_classes.values()
+    .filter(|c| c.id != product_class.id)
+    .collect();
 
     let content = container(
         column![
             row![
                 text("Name").width(Length::Fixed(150.0)),
-                text_input("Product Class Name", &name)
+                text_input("Product Class Name", &product_class.name)
                     .on_input(Message::UpdateName)
                     .padding(5)
             ],
             row![
                 text("ID").width(Length::Fixed(150.0)),
-                text_input("ID (1-999)", &id)
+                text_input("ID (1-999)", &product_class.id.to_string())
                     .on_input(Message::UpdateId)
                     .padding(5)
             ],
+            // Show validation error if any
+            if let Some(error) = validation_error {
+                text(error.to_string()).style(text::danger)
+            } else {
+                text("".to_string())
+            },
             row![
-                text("Item Group").width(Length::Fixed(150.0)),
-                pick_list(
-                    &available_item_groups[..],
-                    item_group_id.and_then(|id| available_item_groups.iter().find(|g| g.id == id)),
-                    |group: &ItemGroup| Message::SelectItemGroup(Some(group.id))
-                )
-            ],
-            row![
-                text("Revenue Category").width(Length::Fixed(150.0)),
-                pick_list(
-                    &available_revenue_categories[..],
-                    revenue_category_id.and_then(|id| available_revenue_categories.iter().find(|c| c.id == id)),
-                    |category: &RevenueCategory| Message::SelectRevenueCategory(Some(category.id))
-                )
-            ],
+                horizontal_space(),
+                button("Cancel")
+                    .on_press(Message::Cancel)
+                    .style(button::danger),
+                button("Save")
+                    .on_press(Message::Save)
+                    .style(button::success)
+            ].spacing(10)
         ]
         .spacing(10)
     )
-    .style(container::rounded_box)
     .padding(20);
 
-    let controls = row![
-        horizontal_space(),
-        button("Cancel")
-            .on_press(Message::Cancel)
-            .style(button::danger),
-        button("Save")
-            .on_press(Message::Save)
-            .style(button::success),
-    ]
-    .spacing(10)
-    .padding(20);
-
-    let mut col = column![content, controls].spacing(20);
-
-    if let Some(error) = error_message {
-        col = col.push(
-            container(
-                text(error)
-                    .style(text::danger)
-            )
-            .padding(10)
-        );
-    }
-
-    container(col)
-        .padding(20)
-        .into()
+    container(content).into()
 }
 
 pub fn handle_hotkey(hotkey: HotKey) -> crate::Action<super::Operation, Message> {

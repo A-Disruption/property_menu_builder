@@ -13,10 +13,10 @@ pub enum Message {
     Back,
 }
 
-pub fn view(group: &ChoiceGroup) -> Element<Message> {
+pub fn view<'a>(choice_group: &'a super::ChoiceGroup) -> Element<'a, Message> {
     let header = row![
         button("←").width(40).on_press(Message::Back),
-        text(&group.name).size(16),
+        text(&choice_group.name).size(16),
         horizontal_space(),
         button("Edit").on_press(Message::Edit)
     ]
@@ -27,8 +27,12 @@ pub fn view(group: &ChoiceGroup) -> Element<Message> {
         column![
             row![
                 text("ID:").width(Length::Fixed(150.0)),
-                text(group.id.to_string())
+                text(choice_group.id.to_string())
             ],
+            row![
+                text("Name:").width(Length::Fixed(150.0)), 
+                text(&choice_group.name)
+            ]
         ]
         .spacing(10)
     )
@@ -36,11 +40,8 @@ pub fn view(group: &ChoiceGroup) -> Element<Message> {
     .padding(20);
 
     container(
-        column![
-            header,
-            content,
-        ]
-        .spacing(20)
+        column![header, content]
+            .spacing(20)
     )
     .padding(20)
     .into()

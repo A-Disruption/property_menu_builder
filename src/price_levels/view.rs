@@ -13,7 +13,7 @@ pub enum Message {
     Back,
 }
 
-pub fn view(price_level: &PriceLevel) -> Element<Message> {
+pub fn view<'a>(price_level: &'a super::PriceLevel) -> Element<'a, Message> {
     let header = row![
         button("←").width(40).on_press(Message::Back),
         text(&price_level.name).size(16),
@@ -30,13 +30,17 @@ pub fn view(price_level: &PriceLevel) -> Element<Message> {
                 text(price_level.id.to_string())
             ],
             row![
+                text("Name:").width(Length::Fixed(150.0)), 
+                text(&price_level.name)
+            ],
+            row![
                 text("Price:").width(Length::Fixed(150.0)),
                 text(format!("${:.2}", price_level.price))
             ],
             row![
                 text("Type:").width(Length::Fixed(150.0)),
-                text(format!("{:?}", price_level.level_type))
-            ],
+                text(price_level.level_type.to_string())
+            ]
         ]
         .spacing(10)
     )
@@ -44,11 +48,8 @@ pub fn view(price_level: &PriceLevel) -> Element<Message> {
     .padding(20);
 
     container(
-        column![
-            header,
-            content,
-        ]
-        .spacing(20)
+        column![header, content]
+            .spacing(20)
     )
     .padding(20)
     .into()

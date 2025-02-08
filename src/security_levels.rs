@@ -9,6 +9,7 @@ use crate::data_types::{
 };
 use crate::Action;
 use iced::Element;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -30,6 +31,45 @@ pub enum Mode {
     Edit,
 }
 
+#[derive(Default, Clone)]
+pub struct EditState {
+    pub name: String,
+    pub id: String,
+    pub validation_error: Option<String>,
+}
+
+impl EditState {
+    pub fn new(security_level: &SecurityLevel) -> Self {
+        Self {
+            name: security_level.name.clone(),
+            id: security_level.id.to_string(),
+            validation_error: None,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Security level name cannot be empty".to_string()
+            ));
+        }
+
+        if let Ok(id) = self.id.parse::<EntityId>() {
+            if !(1..=999).contains(&id) {
+                return Err(ValidationError::InvalidId(
+                    "Security level ID must be between 1 and 999".to_string()
+                ));
+            }
+        } else {
+            return Err(ValidationError::InvalidId(
+                "Invalid ID format".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SecurityLevel {
     pub id: EntityId,
@@ -42,28 +82,34 @@ impl std::fmt::Display for SecurityLevel {
     }
 }
 
+impl Default for SecurityLevel {
+    fn default() -> Self {
+        Self {
+            id: 1,
+            name: String::new(),
+        }
+    }
+}
+
 impl SecurityLevel {
     fn validate(&self, other_levels: &[&SecurityLevel]) -> Result<(), ValidationError> {
-        // Validate ID range (0-9 based on your screenshot)
-        if !(0..=9).contains(&self.id) {
+        if !(1..=999).contains(&self.id) {
             return Err(ValidationError::InvalidId(
-                "Security Level ID must be between 0 and 9".to_string()
+                "Security level ID must be between 1 and 999".to_string()
             ));
         }
 
-        // Check for duplicate IDs
         for other in other_levels {
             if other.id == self.id {
                 return Err(ValidationError::DuplicateId(
-                    format!("Security Level with ID {} already exists", self.id)
+                    format!("Security level with ID {} already exists", self.id)
                 ));
             }
         }
 
-        // Validate name is not empty
         if self.name.trim().is_empty() {
             return Err(ValidationError::EmptyName(
-                "Security Level name cannot be empty".to_string()
+                "Security level name cannot be empty".to_string()
             ));
         }
 
@@ -72,53 +118,55 @@ impl SecurityLevel {
 }
 
 pub fn update(
-    level: &mut SecurityLevel,
+    security_level: &mut SecurityLevel,
     message: Message,
-    state: &mut edit::EditState,
-    other_levels: &[&SecurityLevel],
+    state: &mut EditState,
+    other_levels: &[&SecurityLevel]
 ) -> Action<Operation, Message> {
     match message {
         Message::Edit(msg) => match msg {
             edit::Message::UpdateName(name) => {
-                state.name = name;
-                state.validation_error = None;
+                security_level.name = name;
                 Action::none()
             }
             edit::Message::UpdateId(id) => {
-                state.id = id;
-                state.validation_error = None;
-                Action::none()
+                if let Ok(id) = id.parse() {
+                    security_level.id = id;
+                    Action::none()
+                } else {
+                    state.validation_error = Some("Invalid ID format".to_string());
+                    Action::none()
+                }
             }
             edit::Message::Save => {
-                match state.validate(other_levels) {
-                    Ok(_) => Action::operation(Operation::Save(level.clone())),
-                    Err(e) => {
-                        state.validation_error = Some(e.to_string());
-                        Action::none()
-                    }
+                if security_level.validate(other_levels).is_ok() {
+                    Action::operation(Operation::Save(security_level.clone()))
+                } else {
+                    state.validation_error = Some("Validation failed".to_string());
+                    Action::none()
                 }
             }
             edit::Message::Cancel => Action::operation(Operation::Cancel),
         },
         Message::View(msg) => match msg {
-            view::Message::Edit => Action::operation(Operation::StartEdit(level.id)),
+            view::Message::Edit => Action::operation(Operation::StartEdit(security_level.id)),
             view::Message::Back => Action::operation(Operation::Back),
-        },
+        }
     }
 }
 
 pub fn view<'a>(
-    level: &'a SecurityLevel, 
+    security_level: &'a SecurityLevel, 
     mode: &'a Mode,
-    other_levels: &'a [&'a SecurityLevel]
+    all_levels: &'a HashMap<EntityId, SecurityLevel>
 ) -> Element<'a, Message> {
     match mode {
-        Mode::View => view::view(level).map(Message::View),
+        Mode::View => view::view(security_level).map(Message::View),
         Mode::Edit => {
             edit::view(
-                level,
-                edit::EditState::new(level),
-                other_levels
+                security_level,
+                EditState::new(security_level),
+                all_levels
             ).map(Message::Edit)
         }
     }

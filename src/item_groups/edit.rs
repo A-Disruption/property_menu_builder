@@ -6,10 +6,11 @@ use iced::{Element, Length};
 use crate::data_types::{EntityId, ValidationError};
 use rangemap::RangeInclusiveSet;
 use std::iter::empty;
+use std::collections::HashMap;
 use crate::HotKey;
-use super::ItemGroup;
+use super::{ItemGroup, EditState};
 
-#[derive(Debug, Clone)]
+/* #[derive(Debug, Clone)]
 pub struct EditState {
     pub name: String,
     pub range_start: String,
@@ -65,83 +66,77 @@ impl EditState {
 
 fn ranges_overlap<T: Ord>(range1: &std::ops::RangeInclusive<T>, range2: &std::ops::RangeInclusive<T>) -> bool {
     range1.start() <= range2.end() && range2.start() <= range1.end()
-}
+} */
 
 #[derive(Debug, Clone)]
 pub enum Message {
     UpdateName(String),
+    UpdateId(String),
     UpdateRangeStart(String),
     UpdateRangeEnd(String),
-    ValidateRange,
     Save,
     Cancel,
 }
 
 pub fn view<'a>(
-    group: &'a ItemGroup,
-    state: EditState,
-    other_groups: &'a [&'a ItemGroup]
+    item_group: &'a ItemGroup,
+    state: super::EditState,
+    all_groups: &'a HashMap<EntityId, ItemGroup>
 ) -> Element<'a, Message> {
-    // Collect all data from state upfront
-    let name = state.name.clone();
-    let range_start = state.range_start.clone();
-    let range_end = state.range_end.clone();
-    let error_message = state.validation_error.clone();
 
-    // Build UI with cloned data
+    let validation_error = &state.validation_error;
+
+    let other_groups: Vec<&ItemGroup> = all_groups.values()
+    .filter(|g| g.id != item_group.id)
+    .collect();
+
     let content = container(
         column![
             row![
                 text("Name").width(Length::Fixed(150.0)),
-                text_input("Group Name", &name)
+                text_input("Item Group Name", &item_group.name)
                     .on_input(Message::UpdateName)
                     .padding(5)
             ],
             row![
+                text("ID").width(Length::Fixed(150.0)),
+                text_input("ID (1-999)", &item_group.id.to_string())
+                    .on_input(Message::UpdateId)
+                    .padding(5)
+            ],
+            row![
                 text("ID Range Start").width(Length::Fixed(150.0)),
-                text_input("Start ID", &range_start)
+                text_input("Range Start", &item_group.id_range.start.to_string())
                     .on_input(Message::UpdateRangeStart)
                     .padding(5)
             ],
             row![
                 text("ID Range End").width(Length::Fixed(150.0)),
-                text_input("End ID", &range_end)
+                text_input("Range End", &item_group.id_range.end.to_string())
                     .on_input(Message::UpdateRangeEnd)
                     .padding(5)
             ],
+            // Show validation error if any
+            if let Some(error) = validation_error {
+                text(error.to_string()).style(text::danger)
+            } else {
+                text("".to_string())
+            },
+            row![
+                horizontal_space(),
+                button("Cancel")
+                    .on_press(Message::Cancel)
+                    .style(button::danger),
+                button("Save")
+                    .on_press(Message::Save)
+                    .style(button::success)
+            ].spacing(10)
         ]
         .spacing(10)
     )
-    .style(container::rounded_box)
     .padding(20);
 
-    let controls = row![
-        horizontal_space(),
-        button("Cancel")
-            .on_press(Message::Cancel)
-            .style(button::danger),
-        button("Save")
-            .on_press(Message::Save)
-            .style(button::success),
-    ]
-    .spacing(10)
-    .padding(20);
-
-    let mut col = column![content, controls].spacing(20);
-
-    if let Some(error) = error_message {
-        col = col.push(
-            container(
-                text(error)
-                    .style(text::danger)
-            )
-            .padding(10)
-        );
-    }
-
-    container(col)
-        .padding(20)
-        .into()
+    container(content).into()
 }
 
 pub fn handle_hotkey(hotkey: HotKey) -> crate::Action<super::Operation, Message> {

@@ -5,9 +5,11 @@ use crate::data_types::{
     EntityId,
     Validatable,
     IdRange,
+    ValidationError,
 };
 use crate::Action;
 use iced::Element;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -29,11 +31,43 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Debug, Clone)]
-pub enum ValidationError {
-    InvalidId(String),
-    DuplicateId(String),
-    EmptyName(String),
+#[derive(Default, Clone)]
+pub struct EditState {
+    pub name: String,
+    pub id: String,
+    pub validation_error: Option<String>,
+}
+
+impl EditState {
+    pub fn new(revenue_category: &RevenueCategory) -> Self {
+        Self {
+            name: revenue_category.name.clone(),
+            id: revenue_category.id.to_string(),
+            validation_error: None,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Revenue category name cannot be empty".to_string()
+            ));
+        }
+
+        if let Ok(id) = self.id.parse::<EntityId>() {
+            if !(1..=999).contains(&id) {
+                return Err(ValidationError::InvalidId(
+                    "Revenue category ID must be between 1 and 999".to_string()
+                ));
+            }
+        } else {
+            return Err(ValidationError::InvalidId(
+                "Invalid ID format".to_string()
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,28 +82,34 @@ impl std::fmt::Display for RevenueCategory {
     }
 }
 
+impl Default for RevenueCategory {
+    fn default() -> Self {
+        Self {
+            id: 1,
+            name: String::new(),
+        }
+    }
+}
+
 impl RevenueCategory {
     fn validate(&self, other_categories: &[&RevenueCategory]) -> Result<(), ValidationError> {
-        // Validate ID range (1-99 based on your screenshot)
-        if !(1..=99).contains(&self.id) {
+        if !(1..=999).contains(&self.id) {
             return Err(ValidationError::InvalidId(
-                "Revenue Category ID must be between 1 and 99".to_string()
+                "Revenue category ID must be between 1 and 999".to_string()
             ));
         }
 
-        // Check for duplicate IDs
         for other in other_categories {
             if other.id == self.id {
                 return Err(ValidationError::DuplicateId(
-                    format!("Revenue Category with ID {} already exists", self.id)
+                    format!("Revenue category with ID {} already exists", self.id)
                 ));
             }
         }
 
-        // Validate name is not empty
         if self.name.trim().is_empty() {
             return Err(ValidationError::EmptyName(
-                "Revenue Category name cannot be empty".to_string()
+                "Revenue category name cannot be empty".to_string()
             ));
         }
 
@@ -78,53 +118,55 @@ impl RevenueCategory {
 }
 
 pub fn update(
-    category: &mut RevenueCategory,
+    revenue_category: &mut RevenueCategory,
     message: Message,
-    state: &mut edit::EditState,
-    other_categories: &[&RevenueCategory],
+    state: &mut EditState,
+    other_categories: &[&RevenueCategory]
 ) -> Action<Operation, Message> {
     match message {
         Message::Edit(msg) => match msg {
             edit::Message::UpdateName(name) => {
-                state.name = name;
-                state.validation_error = None;
+                revenue_category.name = name;
                 Action::none()
             }
             edit::Message::UpdateId(id) => {
-                state.id = id;
-                state.validation_error = None;
-                Action::none()
+                if let Ok(id) = id.parse() {
+                    revenue_category.id = id;
+                    Action::none()
+                } else {
+                    state.validation_error = Some("Invalid ID format".to_string());
+                    Action::none()
+                }
             }
             edit::Message::Save => {
-                match state.validate(other_categories) {
-                    Ok(_) => Action::operation(Operation::Save(category.clone())),
-                    Err(e) => {
-                        state.validation_error = Some(e.to_string());
-                        Action::none()
-                    }
+                if revenue_category.validate(other_categories).is_ok() {
+                    Action::operation(Operation::Save(revenue_category.clone()))
+                } else {
+                    state.validation_error = Some("Validation failed".to_string());
+                    Action::none()
                 }
             }
             edit::Message::Cancel => Action::operation(Operation::Cancel),
         },
         Message::View(msg) => match msg {
-            view::Message::Edit => Action::operation(Operation::StartEdit(category.id)),
+            view::Message::Edit => Action::operation(Operation::StartEdit(revenue_category.id)),
             view::Message::Back => Action::operation(Operation::Back),
-        },
+        }
     }
 }
 
 pub fn view<'a>(
-    category: &'a RevenueCategory, 
+    revenue_category: &'a RevenueCategory, 
     mode: &'a Mode,
-    other_categories: &'a [&'a RevenueCategory]
+    all_categories: &'a HashMap<EntityId, RevenueCategory>
 ) -> Element<'a, Message> {
     match mode {
-        Mode::View => view::view(category).map(Message::View),
+        Mode::View => view::view(revenue_category).map(Message::View),
         Mode::Edit => {
             edit::view(
-                category,
-                edit::EditState::new(category),
-                other_categories
+                revenue_category,
+                EditState::new(revenue_category),
+                all_categories
             ).map(Message::Edit)
         }
     }

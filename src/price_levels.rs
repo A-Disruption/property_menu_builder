@@ -6,9 +6,11 @@ use crate::data_types::{
     Currency,
     Validatable,
     IdRange,
+    ValidationError
 };
 use crate::Action;
 use iced::Element;
+use std::collections::HashMap;
 use rust_decimal::Decimal;
 
 #[derive(Debug, Clone)]
@@ -31,11 +33,75 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Debug, Clone)]
-pub enum ValidationError {
-    InvalidId(String),
-    DuplicateId(String),
-    InvalidPrice(String),
+#[derive(Default, Clone)]
+pub struct EditState {
+    pub name: String,
+    pub id: String,
+    pub price: String,
+    pub level_type: PriceLevelType,
+    pub validation_error: Option<String>,
+}
+
+impl EditState {
+    pub fn new(price_level: &PriceLevel) -> Self {
+        Self {
+            name: price_level.name.clone(),
+            id: price_level.id.to_string(),
+            price: price_level.price.to_string(),
+            level_type: price_level.level_type.clone(),
+            validation_error: None,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Price level name cannot be empty".to_string()
+            ));
+        }
+
+        if let Ok(id) = self.id.parse::<EntityId>() {
+            if !(1..=999).contains(&id) {
+                return Err(ValidationError::InvalidId(
+                    "Price level ID must be between 1 and 999".to_string()
+                ));
+            }
+        } else {
+            return Err(ValidationError::InvalidId(
+                "Invalid ID format".to_string()
+            ));
+        }
+
+        if let Err(_) = self.price.parse::<Decimal>() {
+            return Err(ValidationError::InvalidValue(
+                "Invalid price format".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PriceLevelType {
+    Enterprise,
+    Store
+}
+
+impl Default for PriceLevelType {
+    fn default() -> Self {
+        Self::Enterprise
+    }
+}
+
+impl std::fmt::Display for PriceLevelType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PriceLevelType::Enterprise => write!(f, "Enterprise Price Level"),
+            PriceLevelType::Store => write!(f, "Store Price Level"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,48 +118,41 @@ impl std::fmt::Display for PriceLevel {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum PriceLevelType {
-    Item,     // Valid range: 1-999
-    Store,    // Valid range: 1-99999
-}
-
-impl std::fmt::Display for PriceLevelType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PriceLevelType::Item => write!(f, "Item Price Level"),
-            PriceLevelType::Store => write!(f, "Store Price Level"),
+impl Default for PriceLevel {
+    fn default() -> Self {
+        Self {
+            id: 1,
+            name: String::new(),
+            price: Decimal::ZERO,
+            level_type: PriceLevelType::default(),
         }
     }
 }
 
 impl PriceLevel {
     fn validate(&self, other_levels: &[&PriceLevel]) -> Result<(), ValidationError> {
-        // Validate ID range based on type
-        let valid_range = match self.level_type {
-            PriceLevelType::Item => 1..=999,
-            PriceLevelType::Store => 1..=99999,
-        };
-
-        if !valid_range.contains(&self.id) {
+        if !(1..=999).contains(&self.id) {
             return Err(ValidationError::InvalidId(
-                format!("ID must be between {} and {} for {:?} price levels",
-                    valid_range.start(), valid_range.end(), self.level_type)
+                "Price level ID must be between 1 and 999".to_string()
             ));
         }
 
-        // Check for duplicate IDs within the same type
         for other in other_levels {
-            if other.id == self.id && other.level_type == self.level_type {
+            if other.id == self.id {
                 return Err(ValidationError::DuplicateId(
                     format!("Price level with ID {} already exists", self.id)
                 ));
             }
         }
 
-        // Validate price is non-negative
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Price level name cannot be empty".to_string()
+            ));
+        }
+
         if self.price < Decimal::ZERO {
-            return Err(ValidationError::InvalidPrice(
+            return Err(ValidationError::InvalidValue(
                 "Price cannot be negative".to_string()
             ));
         }
@@ -105,42 +164,46 @@ impl PriceLevel {
 pub fn update(
     price_level: &mut PriceLevel,
     message: Message,
-    state: &mut edit::EditState,
-    other_levels: &[&PriceLevel],
+    state: &mut EditState,
+    other_levels: &[&PriceLevel]
 ) -> Action<Operation, Message> {
     match message {
         Message::Edit(msg) => match msg {
             edit::Message::UpdateName(name) => {
-                state.name = name;
-                state.validation_error = None;
+                price_level.name = name;
                 Action::none()
             }
             edit::Message::UpdateId(id) => {
-                state.id = id;
-                state.validation_error = None;
-                Action::none()
-            }
-            edit::Message::UpdatePrice(price) => {
-                if let Ok(price_val) = price.parse::<Currency>() {
-                    state.price = price;
-                    state.validation_error = None;
+                if let Ok(id) = id.parse() {
+                    price_level.id = id;
+                    Action::none()
                 } else {
-                    state.validation_error = Some("Invalid price value".to_string());
+                    state.validation_error = Some("Invalid ID format".to_string());
+                    Action::none()
                 }
-                Action::none()
+            }
+            edit::Message::UpdatePrice(price_str) => {
+                match price_str.parse() {
+                    Ok(price) => {
+                        price_level.price = price;
+                        Action::none()
+                    }
+                    Err(_) => {
+                        state.validation_error = Some("Invalid price format".to_string());
+                        Action::none()
+                    }
+                }
             }
             edit::Message::UpdateType(level_type) => {
-                state.level_type = level_type;
-                state.validation_error = None;
+                price_level.level_type = level_type;
                 Action::none()
             }
             edit::Message::Save => {
-                match state.validate(other_levels) {
-                    Ok(_) => Action::operation(Operation::Save(price_level.clone())),
-                    Err(e) => {
-                        state.validation_error = Some(e.to_string());
-                        Action::none()
-                    }
+                if price_level.validate(other_levels).is_ok() {
+                    Action::operation(Operation::Save(price_level.clone()))
+                } else {
+                    state.validation_error = Some("Validation failed".to_string());
+                    Action::none()
                 }
             }
             edit::Message::Cancel => Action::operation(Operation::Cancel),
@@ -148,22 +211,22 @@ pub fn update(
         Message::View(msg) => match msg {
             view::Message::Edit => Action::operation(Operation::StartEdit(price_level.id)),
             view::Message::Back => Action::operation(Operation::Back),
-        },
+        }
     }
 }
 
 pub fn view<'a>(
-    level: &'a PriceLevel, 
+    price_level: &'a PriceLevel, 
     mode: &'a Mode,
-    other_levels: &'a [&'a PriceLevel]
+    all_levels: &'a HashMap<EntityId, PriceLevel>
 ) -> Element<'a, Message> {
     match mode {
-        Mode::View => view::view(level).map(Message::View),
+        Mode::View => view::view(price_level).map(Message::View),
         Mode::Edit => {
             edit::view(
-                level,
-                edit::EditState::new(level),
-                other_levels
+                price_level,
+                EditState::new(price_level),
+                all_levels
             ).map(Message::Edit)
         }
     }

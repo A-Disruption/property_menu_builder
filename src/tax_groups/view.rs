@@ -13,7 +13,7 @@ pub enum Message {
     Back,
 }
 
-pub fn view(tax_group: &TaxGroup) -> Element<Message> {
+pub fn view<'a>(tax_group: &'a super::TaxGroup) -> Element<'a, Message> {
     let header = row![
         button("←").width(40).on_press(Message::Back),
         text(&tax_group.name).size(16),
@@ -30,9 +30,13 @@ pub fn view(tax_group: &TaxGroup) -> Element<Message> {
                 text(tax_group.id.to_string())
             ],
             row![
+                text("Name:").width(Length::Fixed(150.0)), 
+                text(&tax_group.name)
+            ],
+            row![
                 text("Tax Rate:").width(Length::Fixed(150.0)),
                 text(format!("{}%", tax_group.rate_percentage()))
-            ],
+            ]
         ]
         .spacing(10)
     )
@@ -40,11 +44,8 @@ pub fn view(tax_group: &TaxGroup) -> Element<Message> {
     .padding(20);
 
     container(
-        column![
-            header,
-            content,
-        ]
-        .spacing(20)
+        column![header, content]
+            .spacing(20)
     )
     .padding(20)
     .into()

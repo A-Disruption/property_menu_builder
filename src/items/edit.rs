@@ -3,6 +3,7 @@ use iced::widget::{
     text, text_input, horizontal_space, vertical_space, scrollable
 };
 use iced::{Element, Length};
+use std::collections::HashMap;
 use crate::data_types::{EntityId, Currency, Validatable, ValidationError};
 use crate::{
     choice_groups::ChoiceGroup,
@@ -16,7 +17,7 @@ use crate::{
     tax_groups::TaxGroup,
 };
 use crate::HotKey;
-use super::{Item, Action, Operation, ViewContext};
+use super::{Item, Action, Operation, ViewContext, EditState};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -38,8 +39,6 @@ pub enum Message {
     UpdateCostAmount(String),
     ToggleAskPrice(bool),
     ToggleAllowPriceOverride(bool),
-
-    // Price Levels
     AddPriceLevel(EntityId),
     RemovePriceLevel(EntityId),
     UpdateStorePriceLevel(Option<EntityId>),
@@ -85,111 +84,12 @@ pub enum Message {
     Cancel,
 }
 
-#[derive(Default, Clone)]
-pub struct EditState {
-    pub name: String,
-    pub button1: String,
-    pub button2: Option<String>,
-    pub printer_text: String,
-    pub price_levels: Vec<EntityId>,
-    pub product_class: Option<EntityId>,
-    pub revenue_category: Option<EntityId>,
-    pub tax_group: Option<EntityId>,
-    pub security_level: Option<EntityId>,
-    pub report_category: Option<EntityId>,
-    pub use_weight: bool,
-    pub weight_amount: Currency,
-    pub sku: Option<String>,
-    pub bar_gun_code: Option<String>,
-    pub cost_amount: Option<Currency>,
-    pub reserved1: bool,
-    pub ask_price: bool,
-    pub print_on_check: bool,
-    pub discountable: bool,
-    pub voidable: bool,
-    pub not_active: bool,
-    pub tax_included: bool,
-    pub item_group: Option<EntityId>,
-    pub customer_receipt: String,
-    pub allow_price_override: bool,
-    pub reserved2: bool,
-    pub choice_groups: Option<Vec<EntityId>>,
-    pub printer_logicals: Option<Vec<EntityId>>,
-    pub covers: i32,
-    pub store_id: i32,
-    pub kitchen_video: String,
-    pub kds_dept: i32,
-    pub kds_category: String,
-    pub kds_cooktime: i32,
-    pub store_price_level: Option<Vec<EntityId>>,
-    pub image_id: i32,
-    pub stock_item: bool,
-    pub language_iso_code: String,
-    pub validation_error: Option<String>,
-}
-
-impl EditState {
-    pub fn new(item: &Item) -> Self {
-        Self {
-            name: item.name.clone(),
-            button1: item.button1.clone(),
-            button2: item.button2.clone(),
-            printer_text: item.printer_text.clone(),
-            price_levels: item.price_levels.clone().unwrap_or_default(),
-            product_class: item.product_class,
-            revenue_category: item.revenue_category,
-            tax_group: item.tax_group,
-            security_level: item.security_level,
-            report_category: item.report_category,
-            use_weight: item.use_weight,
-            weight_amount: item.weight_amount,
-            sku: item.sku.clone(),
-            bar_gun_code: item.bar_gun_code.clone(),
-            cost_amount: item.cost_amount,
-            reserved1: item.reserved1,
-            ask_price: item.ask_price,
-            print_on_check: item.print_on_check,
-            discountable: item.discountable,
-            voidable: item.voidable,
-            not_active: item.not_active,
-            tax_included: item.tax_included,
-            item_group: item.item_group,
-            customer_receipt: item.customer_receipt.clone(),
-            allow_price_override: item.allow_price_override,
-            reserved2: item.reserved2,
-            choice_groups: item.choice_groups.clone(),
-            printer_logicals: item.printer_logicals.clone(),
-            covers: item.covers,
-            store_id: item.store_id,
-            kitchen_video: item.kitchen_video.clone(),
-            kds_dept: item.kds_dept,
-            kds_category: item.kds_category.clone(),
-            kds_cooktime: item.kds_cooktime,
-            store_price_level: item.store_price_level.clone(),
-            image_id: item.image_id,
-            stock_item: item.stock_item,
-            language_iso_code: item.language_iso_code.clone(),
-            validation_error: None,
-        }
-    }
-
-    pub fn validate(&self, context: &ViewContext) -> Result<(), ValidationError> {
-        // Add validation logic here
-        Ok(())
-    }
-}
-
-pub fn update(
-    item: &mut Item,
-    message: Message,
-    state: &mut EditState,
-) -> Action<Operation, Message> {
-    match message {
+pub fn update(item: &mut Item, msg: Message, state: &mut super::EditState) -> super::Action<super::Operation, Message> {
+    match msg {
         // Basic Info
         Message::UpdateName(name) => {
             item.name = name;
-            state.validation_error = None;
-            Action::none()
+            super::Action::none()
         }
         Message::UpdateButton1(text) => {
             if text.len() <= 15 {
@@ -198,123 +98,113 @@ pub fn update(
             } else {
                 state.validation_error = Some("Button 1 text cannot exceed 15 characters".to_string());
             }
-            Action::none()
+            super::Action::none()
         }
         Message::UpdateButton2(text) => {
-            if text.len() <= 15 {
+            if text.is_empty() {
+                item.button2 = None;
+            } else if text.len() <= 15 {
                 item.button2 = Some(text);
                 state.validation_error = None;
             } else {
                 state.validation_error = Some("Button 2 text cannot exceed 15 characters".to_string());
             }
-            Action::none()
+            super::Action::none()
         }
         Message::UpdatePrinterText(text) => {
             item.printer_text = text;
-            state.validation_error = None;
-            Action::none()
+            super::Action::none()
         }
 
         // Classifications
-        Message::SelectItemGroup(maybe_id) => {
-            item.item_group = maybe_id;
-            state.validation_error = None;
-            Action::none()
+        Message::SelectItemGroup(group_id) => {
+            item.item_group = group_id;
+            super::Action::none()
         }
-        Message::SelectProductClass(maybe_id) => {
-            item.product_class = maybe_id;
-            state.validation_error = None;
-            Action::none()
+        Message::SelectProductClass(class_id) => {
+            item.product_class = class_id;
+            super::Action::none()
         }
-        Message::SelectRevenueCategory(maybe_id) => {
-            item.revenue_category = maybe_id;
-            state.validation_error = None;
-            Action::none()
+        Message::SelectRevenueCategory(category_id) => {
+            item.revenue_category = category_id;
+            super::Action::none()
         }
-        Message::SelectTaxGroup(maybe_id) => {
-            item.tax_group = maybe_id;
-            state.validation_error = None;
-            Action::none()
+        Message::SelectTaxGroup(group_id) => {
+            item.tax_group = group_id;
+            super::Action::none()
         }
-        Message::SelectSecurityLevel(maybe_id) => {
-            item.security_level = maybe_id;
-            state.validation_error = None;
-            Action::none()
+        Message::SelectSecurityLevel(level_id) => {
+            item.security_level = level_id;
+            super::Action::none()
         }
-        Message::SelectReportCategory(maybe_id) => {
-            item.report_category = maybe_id;
-            state.validation_error = None;
-            Action::none()
+        Message::SelectReportCategory(category_id) => {
+            item.report_category = category_id;
+            super::Action::none()
         }
 
         // Pricing
-        Message::UpdateCostAmount(amount_str) => {
-            match amount_str.parse::<Currency>() {
-                Ok(amount) => {
-                    item.cost_amount = Some(amount);
-                    state.validation_error = None;
-                }
-                Err(_) => {
-                    if !amount_str.is_empty() {
+        Message::UpdateCostAmount(amount) => {
+            item.cost_amount = if amount.is_empty() {
+                None
+            } else {
+                match amount.parse() {
+                    Ok(amount) => Some(amount),
+                    Err(_) => {
                         state.validation_error = Some("Invalid cost amount format".to_string());
-                    } else {
-                        item.cost_amount = None;
-                        state.validation_error = None;
+                        return super::Action::none();
                     }
                 }
-            }
-            Action::none()
+            };
+            super::Action::none()
         }
         Message::ToggleAskPrice(value) => {
             item.ask_price = value;
-            Action::none()
+            super::Action::none()
         }
         Message::ToggleAllowPriceOverride(value) => {
             item.allow_price_override = value;
-            Action::none()
+            super::Action::none()
         }
-
-        // Price Levels
-        Message::AddPriceLevel(price_level_id) => {
-            if let Some(price_levels) = &mut item.price_levels {
-                if !price_levels.contains(&price_level_id) {
-                    price_levels.push(price_level_id);
+        Message::AddPriceLevel(level_id) => {
+            if let Some(ref mut levels) = item.price_levels {
+                if !levels.contains(&level_id) {
+                    levels.push(level_id);
                 }
             } else {
-                item.price_levels = Some(vec![price_level_id]);
+                item.price_levels = Some(vec![level_id]);
             }
-            Action::none()
+            super::Action::none()
         }
-        Message::RemovePriceLevel(price_level_id) => {
-            if let Some(price_levels) = &mut item.price_levels {
-                price_levels.retain(|&id| id != price_level_id);
-                if price_levels.is_empty() {
+        Message::RemovePriceLevel(level_id) => {
+            if let Some(ref mut levels) = item.price_levels {
+                levels.retain(|&id| id != level_id);
+                if levels.is_empty() {
                     item.price_levels = None;
                 }
             }
-            Action::none()
+            super::Action::none()
         }
-        Message::UpdateStorePriceLevel(maybe_id) => {
-            if let Some(store_levels) = &mut item.store_price_level {
-                if let Some(id) = maybe_id {
-                    store_levels.push(id);
+        Message::UpdateStorePriceLevel(level_id) => {
+            if let Some(level_id) = level_id {
+                if let Some(ref mut levels) = item.store_price_level {
+                    levels.push(level_id);
+                } else {
+                    item.store_price_level = Some(vec![level_id]);
                 }
-            } else if maybe_id.is_some() {
-                item.store_price_level = Some(vec![maybe_id.unwrap()]);
             }
-            Action::none()
+            super::Action::none()
         }
 
         // Weight
         Message::ToggleUseWeight(value) => {
             item.use_weight = value;
             if !value {
-                item.weight_amount = Currency::ZERO;
+                item.weight_amount = rust_decimal::Decimal::ZERO;
             }
-            Action::none()
+            super::Action::none()
         }
-        Message::UpdateWeightAmount(amount_str) => {
-            match amount_str.parse::<Currency>() {
+        Message::UpdateWeightAmount(amount) => {
+            match amount.parse() {
                 Ok(amount) => {
                     item.weight_amount = amount;
                     state.validation_error = None;
@@ -323,68 +213,68 @@ pub fn update(
                     state.validation_error = Some("Invalid weight amount format".to_string());
                 }
             }
-            Action::none()
+            super::Action::none()
         }
 
         // Identifiers
         Message::UpdateSku(sku) => {
-            item.sku = Some(sku);
-            Action::none()
+            item.sku = if sku.is_empty() { None } else { Some(sku) };
+            super::Action::none()
         }
         Message::UpdateBarGunCode(code) => {
-            item.bar_gun_code = Some(code);
-            Action::none()
+            item.bar_gun_code = if code.is_empty() { None } else { Some(code) };
+            super::Action::none()
         }
 
         // Flags
         Message::ToggleReserved1(value) => {
             item.reserved1 = value;
-            Action::none()
+            super::Action::none()
         }
         Message::TogglePrintOnCheck(value) => {
             item.print_on_check = value;
-            Action::none()
+            super::Action::none()
         }
         Message::ToggleDiscountable(value) => {
             item.discountable = value;
-            Action::none()
+            super::Action::none()
         }
         Message::ToggleVoidable(value) => {
             item.voidable = value;
-            Action::none()
+            super::Action::none()
         }
         Message::ToggleNotActive(value) => {
             item.not_active = value;
-            Action::none()
+            super::Action::none()
         }
         Message::ToggleTaxIncluded(value) => {
             item.tax_included = value;
-            Action::none()
+            super::Action::none()
         }
         Message::ToggleStockItem(value) => {
             item.stock_item = value;
-            Action::none()
+            super::Action::none()
         }
         Message::ToggleReserved2(value) => {
             item.reserved2 = value;
-            Action::none()
+            super::Action::none()
         }
 
         // Receipt & Kitchen
         Message::UpdateCustomerReceipt(text) => {
             item.customer_receipt = text;
-            Action::none()
+            super::Action::none()
         }
         Message::UpdateKitchenVideo(text) => {
             item.kitchen_video = text;
-            Action::none()
+            super::Action::none()
         }
-        Message::UpdateKdsCategory(category) => {
-            item.kds_category = category;
-            Action::none()
+        Message::UpdateKdsCategory(text) => {
+            item.kds_category = text;
+            super::Action::none()
         }
-        Message::UpdateKdsCooktime(time_str) => {
-            match time_str.parse::<i32>() {
+        Message::UpdateKdsCooktime(time) => {
+            match time.parse() {
                 Ok(time) => {
                     item.kds_cooktime = time;
                     state.validation_error = None;
@@ -393,10 +283,10 @@ pub fn update(
                     state.validation_error = Some("Invalid cook time format".to_string());
                 }
             }
-            Action::none()
+            super::Action::none()
         }
-        Message::UpdateKdsDept(dept_str) => {
-            match dept_str.parse::<i32>() {
+        Message::UpdateKdsDept(dept) => {
+            match dept.parse() {
                 Ok(dept) => {
                     item.kds_dept = dept;
                     state.validation_error = None;
@@ -405,12 +295,12 @@ pub fn update(
                     state.validation_error = Some("Invalid department number".to_string());
                 }
             }
-            Action::none()
+            super::Action::none()
         }
 
         // Store Settings
-        Message::UpdateStoreId(id_str) => {
-            match id_str.parse::<i32>() {
+        Message::UpdateStoreId(id) => {
+            match id.parse() {
                 Ok(id) => {
                     item.store_id = id;
                     state.validation_error = None;
@@ -419,10 +309,10 @@ pub fn update(
                     state.validation_error = Some("Invalid store ID".to_string());
                 }
             }
-            Action::none()
+            super::Action::none()
         }
-        Message::UpdateCovers(covers_str) => {
-            match covers_str.parse::<i32>() {
+        Message::UpdateCovers(covers) => {
+            match covers.parse() {
                 Ok(covers) => {
                     item.covers = covers;
                     state.validation_error = None;
@@ -431,10 +321,10 @@ pub fn update(
                     state.validation_error = Some("Invalid covers number".to_string());
                 }
             }
-            Action::none()
+            super::Action::none()
         }
-        Message::UpdateImageId(id_str) => {
-            match id_str.parse::<i32>() {
+        Message::UpdateImageId(id) => {
+            match id.parse() {
                 Ok(id) => {
                     item.image_id = id;
                     state.validation_error = None;
@@ -443,79 +333,80 @@ pub fn update(
                     state.validation_error = Some("Invalid image ID".to_string());
                 }
             }
-            Action::none()
+            super::Action::none()
         }
         Message::UpdateLanguageIsoCode(code) => {
             item.language_iso_code = code;
-            Action::none()
+            super::Action::none()
         }
 
         // Related Items
         Message::AddChoiceGroup(group_id) => {
-            if let Some(groups) = &mut item.choice_groups {
+            if let Some(ref mut groups) = item.choice_groups {
                 if !groups.contains(&group_id) {
                     groups.push(group_id);
                 }
             } else {
                 item.choice_groups = Some(vec![group_id]);
             }
-            Action::none()
+            super::Action::none()
         }
         Message::RemoveChoiceGroup(group_id) => {
-            if let Some(groups) = &mut item.choice_groups {
+            if let Some(ref mut groups) = item.choice_groups {
                 groups.retain(|&id| id != group_id);
                 if groups.is_empty() {
                     item.choice_groups = None;
                 }
             }
-            Action::none()
+            super::Action::none()
         }
         Message::AddPrinterLogical(printer_id) => {
-            if let Some(printers) = &mut item.printer_logicals {
+            if let Some(ref mut printers) = item.printer_logicals {
                 if !printers.contains(&printer_id) {
                     printers.push(printer_id);
                 }
             } else {
                 item.printer_logicals = Some(vec![printer_id]);
             }
-            Action::none()
+            super::Action::none()
         }
         Message::RemovePrinterLogical(printer_id) => {
-            if let Some(printers) = &mut item.printer_logicals {
+            if let Some(ref mut printers) = item.printer_logicals {
                 printers.retain(|&id| id != printer_id);
                 if printers.is_empty() {
                     item.printer_logicals = None;
                 }
             }
-            Action::none()
+            super::Action::none()
         }
 
-        // Actions
-        Message::Save => {
-            if item.validate().is_ok() {
-                Action::operation(Operation::Save(item.clone()))
-            } else {
-                state.validation_error = Some("Please fix validation errors before saving".to_string());
-                Action::none()
-            }
-        }
-        Message::Cancel => Action::operation(Operation::Cancel),
+        Message::Save => super::Action::operation(super::Operation::Save(item.clone())),
+        Message::Cancel => super::Action::operation(super::Operation::Cancel),
     }
 }
 
 pub fn view<'a>(
     item: &'a Item,
     state: EditState,
-    context: &'a ViewContext<'a>,
+    item_groups: &'a HashMap<EntityId, ItemGroup>,
+    tax_groups: &'a HashMap<EntityId, TaxGroup>,
+    security_levels: &'a HashMap<EntityId, SecurityLevel>,
+    revenue_categories: &'a HashMap<EntityId, RevenueCategory>,
+    report_categories: &'a HashMap<EntityId, ReportCategory>,
+    product_classes: &'a HashMap<EntityId, ProductClass>,
+    choice_groups: &'a HashMap<EntityId, ChoiceGroup>,
+    printer_logicals: &'a HashMap<EntityId, PrinterLogical>,
+    price_levels: &'a HashMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
 
-    let error_message = state.validation_error.clone();
+    let validation_error = &state.validation_error;
 
-    let content = container(
+    let content = scrollable(
         column![
-            //basic info
+            // Basic Info Section
             container(
                 column![
+                    text("Basic Information").size(16),
                     row![
                         text("Name").width(Length::Fixed(150.0)),
                         text_input("Item Name", &item.name)
@@ -546,55 +437,56 @@ pub fn view<'a>(
             .style(container::rounded_box)
             .padding(20),
 
-            //classifications
+            // Classifications Section
             container(
                 column![
+                    text("Classifications").size(16),
                     row![
                         text("Item Group").width(Length::Fixed(150.0)),
                         pick_list(
-                            context.available_item_groups.values().collect::<Vec<_>>(),
-                            state.item_group.and_then(|id| context.available_item_groups.get(&id)),
+                            item_groups.values().collect::<Vec<_>>(),
+                            item.item_group.and_then(|id| item_groups.get(&id)),
                             |group: &ItemGroup| Message::SelectItemGroup(Some(group.id))
                         )
                     ],
                     row![
                         text("Product Class").width(Length::Fixed(150.0)),
                         pick_list(
-                            context.available_product_classes.values().collect::<Vec<_>>(),
-                            state.product_class.and_then(|id| context.available_product_classes.get(&id)),
-                            |class: &ProductClass| Message::SelectProductClass(Some(class.id))
-                        )
-                    ],
-                    row![
-                        text("Tax Group").width(Length::Fixed(150.0)),
-                        pick_list(
-                            context.available_tax_groups.values().collect::<Vec<_>>(),
-                            state.tax_group.and_then(|id| context.available_tax_groups.get(&id)),
-                            |group: &TaxGroup| Message::SelectTaxGroup(Some(group.id))
-                        )
-                    ],
-                    row![
-                        text("Security Level").width(Length::Fixed(150.0)),
-                        pick_list(
-                            context.available_security_levels.values().collect::<Vec<_>>(),
-                            state.security_level.and_then(|id| context.available_security_levels.get(&id)),
-                            |level: &SecurityLevel| Message::SelectSecurityLevel(Some(level.id))
+                            product_classes.values().collect::<Vec<_>>(),
+                            item.product_class.and_then(|id| product_classes.get(&id)),
+                            |product_class: &ProductClass| Message::SelectProductClass(Some(product_class.id))
                         )
                     ],
                     row![
                         text("Revenue Category").width(Length::Fixed(150.0)),
                         pick_list(
-                            context.available_revenue_categories.values().collect::<Vec<_>>(),
-                            state.revenue_category.and_then(|id| context.available_revenue_categories.get(&id)),
-                            |category: &RevenueCategory| Message::SelectRevenueCategory(Some(category.id))
+                            revenue_categories.values().collect::<Vec<_>>(),
+                            item.revenue_category.and_then(|id| revenue_categories.get(&id)),
+                            |revenue_category: &RevenueCategory| Message::SelectRevenueCategory(Some(revenue_category.id))
+                        )
+                    ],
+                    row![
+                        text("Tax Group").width(Length::Fixed(150.0)),
+                        pick_list(
+                            tax_groups.values().collect::<Vec<_>>(),
+                            item.tax_group.and_then(|id| tax_groups.get(&id)),
+                            |tax_group: &TaxGroup| Message::SelectTaxGroup(Some(tax_group.id))
+                        )
+                    ],
+                    row![
+                        text("Security Level").width(Length::Fixed(150.0)),
+                        pick_list(
+                            security_levels.values().collect::<Vec<_>>(),
+                            item.security_level.and_then(|id| security_levels.get(&id)),
+                            |secureity_level| Message::SelectSecurityLevel(Some(secureity_level.id))
                         )
                     ],
                     row![
                         text("Report Category").width(Length::Fixed(150.0)),
                         pick_list(
-                            context.available_report_categories.values().collect::<Vec<_>>(),
-                            state.report_category.and_then(|id| context.available_report_categories.get(&id)),
-                            |category: &ReportCategory| Message::SelectReportCategory(Some(category.id))
+                            report_categories.values().collect::<Vec<_>>(),
+                            item.report_category.and_then(|id| report_categories.get(&id)),
+                            |report_category: &ReportCategory| Message::SelectReportCategory(Some(report_category.id))
                         )
                     ],
                 ]
@@ -603,9 +495,10 @@ pub fn view<'a>(
             .style(container::rounded_box)
             .padding(20),
 
-            //pricing
+            // Pricing Section
             container(
                 column![
+                    text("Pricing").size(16),
                     row![
                         text("Cost Amount").width(Length::Fixed(150.0)),
                         text_input(
@@ -621,7 +514,7 @@ pub fn view<'a>(
                     ).on_toggle(Message::ToggleAskPrice),
                     checkbox(
                         "Allow Price Override",
-                        item.allow_price_override,
+                        item.allow_price_override
                     ).on_toggle(Message::ToggleAllowPriceOverride),
                 ]
                 .spacing(10)
@@ -629,37 +522,56 @@ pub fn view<'a>(
             .style(container::rounded_box)
             .padding(20),
 
-            //flags
+            // Weight Section
             container(
                 column![
+                    text("Weight").size(16),
                     checkbox(
                         "Use Weight",
-                        item.use_weight,
+                        item.use_weight
                     ).on_toggle(Message::ToggleUseWeight),
+                    row![
+                        text("Weight Amount").width(Length::Fixed(150.0)),
+                        text_input(
+                            "Weight",
+                            &item.weight_amount.to_string()
+                        )
+                        .on_input(Message::UpdateWeightAmount)
+                        .padding(5)
+                    ],
+                ]
+                .spacing(10)
+            )
+            .style(container::rounded_box)
+            .padding(20),
+
+            // Flags Section
+            container(
+                column![
+                    text("Flags").size(16),
                     checkbox(
                         "Print on Check",
-                        item.print_on_check,
+                        item.print_on_check
                     ).on_toggle(Message::TogglePrintOnCheck),
                     checkbox(
                         "Discountable",
-                        item.discountable,
+                        item.discountable
                     ).on_toggle(Message::ToggleDiscountable),
                     checkbox(
                         "Voidable",
-                        item.voidable,
-                        
+                        item.voidable
                     ).on_toggle(Message::ToggleVoidable),
                     checkbox(
                         "Not Active",
-                        item.not_active,
+                        item.not_active
                     ).on_toggle(Message::ToggleNotActive),
                     checkbox(
                         "Tax Included",
-                        item.tax_included,
+                        item.tax_included
                     ).on_toggle(Message::ToggleTaxIncluded),
                     checkbox(
                         "Stock Item",
-                        item.stock_item,
+                        item.stock_item
                     ).on_toggle(Message::ToggleStockItem),
                 ]
                 .spacing(10)
@@ -667,9 +579,10 @@ pub fn view<'a>(
             .style(container::rounded_box)
             .padding(20),
 
-            //kitchen info
+            // Kitchen Info Section
             container(
                 column![
+                    text("Kitchen Information").size(16),
                     row![
                         text("Kitchen Video").width(Length::Fixed(150.0)),
                         text_input("Kitchen Video", &item.kitchen_video)
@@ -700,82 +613,51 @@ pub fn view<'a>(
             .style(container::rounded_box)
             .padding(20),
 
-            //related items
+            // Store Settings Section
             container(
                 column![
-                    text("Choice Groups").size(16),
-                    pick_list(
-                        context.available_choice_groups.values().collect::<Vec<_>>(),
-                        None::<&ChoiceGroup>, 
-                        |group: &ChoiceGroup| Message::AddChoiceGroup(group.id)
-                    ),
-/*                     if let Some(ref groups) = state.choice_groups {
-                        column(
-                            groups.iter()
-                                .filter_map(|id| context.available_choice_groups.get(id))
-                                .map(|group| {
-                                    row![
-                                        text(&group.name),
-                                        button("×")
-                                            .on_press(Message::RemoveChoiceGroup(group.id))
-                                            .style(button::danger)
-                                    ]
-                                    .spacing(10)
-                                })
-                                .collect()
-                        )
-                    } else {
-                        column![ text("No Choice Groups Selected") ]
-                        
-                    }, */
-                    vertical_space(),
-                    text("Printer Logicals").size(16),
-                    pick_list(
-                        context.available_printer_logicals.values().collect::<Vec<_>>(),
-                        None::<&PrinterLogical>,
-                        |printer: &PrinterLogical| Message::AddPrinterLogical(printer.id)
-                    ),
-/*                     if let Some(ref printers) = state.printer_logicals {
-                        column(
-                            printers.iter()
-                                .filter_map(|id| context.available_printer_logicals.get(id))
-                                .map(|printer| {
-                                    row![
-                                        text(&printer.name),
-                                        button("×")
-                                            .on_press(Message::RemovePrinterLogical(printer.id))
-                                            .style(button::danger)
-                                    ]
-                                    .spacing(10)
-                                    .into()
-                                })
-                                .collect()
-                        )
-                    } else {
-                        column![ text("No Printer Logicals Selected") ] 
-                    }, */
+                    text("Store Settings").size(16),
+                    row![
+                        text("Store ID").width(Length::Fixed(150.0)),
+                        text_input("Store ID", &item.store_id.to_string())
+                            .on_input(Message::UpdateStoreId)
+                            .padding(5)
+                    ],
+                    row![
+                        text("Covers").width(Length::Fixed(150.0)),
+                        text_input("Covers", &item.covers.to_string())
+                            .on_input(Message::UpdateCovers)
+                            .padding(5)
+                    ],
+                    row![
+                        text("Image ID").width(Length::Fixed(150.0)),
+                        text_input("Image ID", &item.image_id.to_string())
+                            .on_input(Message::UpdateImageId)
+                            .padding(5)
+                    ],
+                    row![
+                        text("Language ISO Code").width(Length::Fixed(150.0)),
+                        text_input("Language Code", &item.language_iso_code)
+                            .on_input(Message::UpdateLanguageIsoCode)
+                            .padding(5)
+                    ],
                 ]
                 .spacing(10)
             )
             .style(container::rounded_box)
             .padding(20),
 
-            // Show validation error if any
-            if let Some(error) = error_message {
+            // Validation Error
+            if let Some(error) = validation_error {
                 container(
-                    text(error)
-                        .style(iced::widget::text::danger)
+                    text(error.to_string()).style(text::danger)
                 )
                 .padding(10)
             } else {
-                container(
-                    text("")
-                        .style(iced::widget::text::danger)
-                )
-                .padding(10)
+                container(vertical_space())
             },
 
-            //controls
+            // Action Buttons
             row![
                 horizontal_space(),
                 button("Cancel")
@@ -787,9 +669,9 @@ pub fn view<'a>(
             ]
             .spacing(10)
             .padding(20),
-
-        ].spacing(20)
-    ).padding(20);
+        ]
+        .spacing(20)
+    );
 
     scrollable(content).into()
 }

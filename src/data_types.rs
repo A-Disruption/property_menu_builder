@@ -18,6 +18,27 @@ pub enum ValidationError {
     InvalidValue(String),
     InvalidReference(String),
     InvalidRate(String),
+    InvalidPrice(String),
+    MissingItemGroup(String),
+    MissingRevenueCategory(String),
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValidationError::InvalidRange(msg) => write!(f, "Invalid range: {}", msg),
+            ValidationError::RangeOverlap(msg) => write!(f, "Range overlap: {}", msg),
+            ValidationError::InvalidId(msg) => write!(f, "Invalid ID: {}", msg),
+            ValidationError::DuplicateId(msg) => write!(f, "Duplicate ID: {}", msg),
+            ValidationError::EmptyName(msg) => write!(f, "Empty name: {}", msg),
+            ValidationError::InvalidValue(msg) => write!(f, "Invalid value: {}", msg),
+            ValidationError::InvalidReference(msg) => write!(f, "Invalid refernce: {}", msg),
+            ValidationError::InvalidRate(msg) => write!(f, "Invalid rate: {}", msg),
+            ValidationError::InvalidPrice(msg)=> write!(f, "Invalid Price: {}", msg),
+            ValidationError::MissingItemGroup(msg)=> write!(f, "Missing Item Group: {}", msg),
+            ValidationError::MissingRevenueCategory(msg)=> write!(f, "Missing Revenue Group: {}", msg),
+        }
+    }
 }
 
 // Common export error type

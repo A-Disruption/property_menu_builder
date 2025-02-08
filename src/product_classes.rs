@@ -5,11 +5,13 @@ use crate::data_types::{
     EntityId,
     Validatable,
     IdRange,
+    ValidationError,
 };
-use crate::item_groups::ItemGroup;
+use crate::item_groups::{self, ItemGroup};
 use crate::revenue_categories::RevenueCategory;
 use crate::Action;
 use iced::Element;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -31,27 +33,57 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Debug, Clone)]
-pub enum ValidationError {
-    InvalidId(String),
-    DuplicateId(String),
-    EmptyName(String),
-    MissingItemGroup(String),
-    MissingRevenueCategory(String),
+#[derive(Default, Clone)]
+pub struct EditState {
+    pub name: String,
+    pub id: String,
+    pub validation_error: Option<String>,
 }
 
-pub struct UpdateContext<'a> {
+impl EditState {
+    pub fn new(product_class: &ProductClass) -> Self {
+        Self {
+            name: product_class.name.clone(),
+            id: product_class.id.to_string(),
+            validation_error: None,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Product class name cannot be empty".to_string()
+            ));
+        }
+
+        if let Ok(id) = self.id.parse::<EntityId>() {
+            if !(1..=999).contains(&id) {
+                return Err(ValidationError::InvalidId(
+                    "Product class ID must be between 1 and 999".to_string()
+                ));
+            }
+        } else {
+            return Err(ValidationError::InvalidId(
+                "Invalid ID format".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+/* pub struct UpdateContext<'a> {
     pub other_classes: &'a [&'a ProductClass],
     pub available_item_groups: &'a [&'a ItemGroup],
     pub available_revenue_categories: &'a [&'a RevenueCategory],
 }
+ */
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProductClass {
     pub id: EntityId,
     pub name: String,
-    pub item_group: Option<EntityId>,        // Reference to ItemGroup
-    pub revenue_category: Option<EntityId>,   // Reference to RevenueCategory
 }
 
 impl std::fmt::Display for ProductClass {
@@ -60,52 +92,35 @@ impl std::fmt::Display for ProductClass {
     }
 }
 
+impl Default for ProductClass {
+    fn default() -> Self {
+        Self {
+            id: 1,
+            name: String::new(),
+        }
+    }
+}
+
 impl ProductClass {
-    fn validate(
-        &self,
-        other_classes: &[&ProductClass],
-        available_item_groups: &[&ItemGroup],
-        available_revenue_categories: &[&RevenueCategory],
-    ) -> Result<(), ValidationError> {
-        // Validate ID range (1-999 based on your screenshot)
+    fn validate(&self, other_classes: &[&ProductClass]) -> Result<(), ValidationError> {
         if !(1..=999).contains(&self.id) {
             return Err(ValidationError::InvalidId(
-                "Product Class ID must be between 1 and 999".to_string()
+                "Product class ID must be between 1 and 999".to_string()
             ));
         }
 
-        // Check for duplicate IDs
         for other in other_classes {
             if other.id == self.id {
                 return Err(ValidationError::DuplicateId(
-                    format!("Product Class with ID {} already exists", self.id)
+                    format!("Product class with ID {} already exists", self.id)
                 ));
             }
         }
 
-        // Validate name is not empty
         if self.name.trim().is_empty() {
             return Err(ValidationError::EmptyName(
-                "Product Class name cannot be empty".to_string()
+                "Product class name cannot be empty".to_string()
             ));
-        }
-
-        // Validate ItemGroup reference exists
-        if let Some(group_id) = self.item_group {
-            if !available_item_groups.iter().any(|g| g.id == group_id) {
-                return Err(ValidationError::MissingItemGroup(
-                    format!("Referenced Item Group {} does not exist", group_id)
-                ));
-            }
-        }
-
-        // Validate RevenueCategory reference exists
-        if let Some(category_id) = self.revenue_category {
-            if !available_revenue_categories.iter().any(|c| c.id == category_id) {
-                return Err(ValidationError::MissingRevenueCategory(
-                    format!("Referenced Revenue Category {} does not exist", category_id)
-                ));
-            }
         }
 
         Ok(())
@@ -113,65 +128,55 @@ impl ProductClass {
 }
 
 pub fn update(
-    class: &mut ProductClass,
+    product_class: &mut ProductClass,
     message: Message,
-    state: &mut edit::EditState,
-    context: &UpdateContext,
+    state: &mut EditState,
+    other_classes: &[&ProductClass]
 ) -> Action<Operation, Message> {
     match message {
         Message::Edit(msg) => match msg {
             edit::Message::UpdateName(name) => {
-                state.name = name;
-                state.validation_error = None;
+                product_class.name = name;
                 Action::none()
             }
             edit::Message::UpdateId(id) => {
-                state.id = id;
-                state.validation_error = None;
-                Action::none()
-            }
-            edit::Message::SelectItemGroup(group_id) => {
-                state.item_group_id = group_id;
-                state.validation_error = None;
-                Action::none()
-            }
-            edit::Message::SelectRevenueCategory(category_id) => {
-                state.revenue_category_id = category_id;
-                state.validation_error = None;
-                Action::none()
+                if let Ok(id) = id.parse() {
+                    product_class.id = id;
+                    Action::none()
+                } else {
+                    state.validation_error = Some("Invalid ID format".to_string());
+                    Action::none()
+                }
             }
             edit::Message::Save => {
-                match state.validate(context) {
-                    Ok(_) => Action::operation(Operation::Save(class.clone())),
-                    Err(e) => {
-                        state.validation_error = Some(e.to_string());
-                        Action::none()
-                    }
+                if product_class.validate(other_classes).is_ok() {
+                    Action::operation(Operation::Save(product_class.clone()))
+                } else {
+                    state.validation_error = Some("Validation failed".to_string());
+                    Action::none()
                 }
             }
             edit::Message::Cancel => Action::operation(Operation::Cancel),
         },
         Message::View(msg) => match msg {
-            view::Message::Edit => Action::operation(Operation::StartEdit(class.id)),
+            view::Message::Edit => Action::operation(Operation::StartEdit(product_class.id)),
             view::Message::Back => Action::operation(Operation::Back),
-        },
+        }
     }
 }
 
 pub fn view<'a>(
-    class: &'a ProductClass,
+    product_class: &'a ProductClass, 
     mode: &'a Mode,
-    available_item_groups: &'a [&'a ItemGroup],
-    available_revenue_categories: &'a [&'a RevenueCategory]
+    all_classes: &'a HashMap<EntityId, ProductClass>
 ) -> Element<'a, Message> {
     match mode {
-        Mode::View => view::view(class, available_item_groups, available_revenue_categories).map(Message::View),
+        Mode::View => view::view(product_class).map(Message::View),
         Mode::Edit => {
             edit::view(
-                class, 
-                edit::EditState::new(class),
-                available_item_groups, 
-                available_revenue_categories
+                product_class,
+                EditState::new(product_class),
+                all_classes
             ).map(Message::Edit)
         }
     }

@@ -13,10 +13,10 @@ pub enum Message {
     Back,
 }
 
-pub fn view(level: &SecurityLevel) -> Element<Message> {
+pub fn view<'a>(security_level: &'a super::SecurityLevel) -> Element<'a, Message> {
     let header = row![
         button("←").width(40).on_press(Message::Back),
-        text(&level.name).size(16),
+        text(&security_level.name).size(16),
         horizontal_space(),
         button("Edit").on_press(Message::Edit)
     ]
@@ -27,8 +27,12 @@ pub fn view(level: &SecurityLevel) -> Element<Message> {
         column![
             row![
                 text("ID:").width(Length::Fixed(150.0)),
-                text(level.id.to_string())
+                text(security_level.id.to_string())
             ],
+            row![
+                text("Name:").width(Length::Fixed(150.0)), 
+                text(&security_level.name)
+            ]
         ]
         .spacing(10)
     )
@@ -36,11 +40,8 @@ pub fn view(level: &SecurityLevel) -> Element<Message> {
     .padding(20);
 
     container(
-        column![
-            header,
-            content,
-        ]
-        .spacing(20)
+        column![header, content]
+            .spacing(20)
     )
     .padding(20)
     .into()

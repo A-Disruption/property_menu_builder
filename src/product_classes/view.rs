@@ -16,14 +16,10 @@ pub enum Message {
     Back,
 }
 
-pub fn view<'a>(
-    class: &'a ProductClass,
-    available_item_groups: &'a [&'a ItemGroup],
-    available_revenue_categories: &'a [&'a RevenueCategory],
-) -> Element<'a, Message> {
+pub fn view<'a>(product_class: &'a super::ProductClass) -> Element<'a, Message> {
     let header = row![
         button("←").width(40).on_press(Message::Back),
-        text(&class.name).size(16),
+        text(&product_class.name).size(16),
         horizontal_space(),
         button("Edit").on_press(Message::Edit)
     ]
@@ -34,24 +30,12 @@ pub fn view<'a>(
         column![
             row![
                 text("ID:").width(Length::Fixed(150.0)),
-                text(class.id.to_string())
+                text(product_class.id.to_string())
             ],
             row![
-                text("Item Group:").width(Length::Fixed(150.0)),
-                text(
-                    class.item_group
-                        .and_then(|id| available_item_groups.iter().find(|g| g.id == id))
-                        .map_or("None".to_string(), |g| g.name.clone())
-                )
-            ],
-            row![
-                text("Revenue Category:").width(Length::Fixed(150.0)),
-                text(
-                    class.revenue_category
-                        .and_then(|id| available_revenue_categories.iter().find(|c| c.id == id))
-                        .map_or("None".to_string(), |c| c.name.clone())
-                )
-            ],
+                text("Name:").width(Length::Fixed(150.0)), 
+                text(&product_class.name)
+            ]
         ]
         .spacing(10)
     )
@@ -59,11 +43,8 @@ pub fn view<'a>(
     .padding(20);
 
     container(
-        column![
-            header,
-            content,
-        ]
-        .spacing(20)
+        column![header, content]
+            .spacing(20)
     )
     .padding(20)
     .into()

@@ -9,6 +9,7 @@ use crate::data_types::{
 };
 use crate::Action;
 use iced::Element;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -30,6 +31,45 @@ pub enum Mode {
     Edit,
 }
 
+#[derive(Default, Clone)]
+pub struct EditState {
+    pub name: String,
+    pub id: String,
+    pub validation_error: Option<String>,
+}
+
+impl EditState {
+    pub fn new(report_category: &ReportCategory) -> Self {
+        Self {
+            name: report_category.name.clone(),
+            id: report_category.id.to_string(),
+            validation_error: None,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Report category name cannot be empty".to_string()
+            ));
+        }
+
+        if let Ok(id) = self.id.parse::<EntityId>() {
+            if !(1..=999).contains(&id) {
+                return Err(ValidationError::InvalidId(
+                    "Report category ID must be between 1 and 999".to_string()
+                ));
+            }
+        } else {
+            return Err(ValidationError::InvalidId(
+                "Invalid ID format".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReportCategory {
     pub id: EntityId,
@@ -42,28 +82,34 @@ impl std::fmt::Display for ReportCategory {
     }
 }
 
+impl Default for ReportCategory {
+    fn default() -> Self {
+        Self {
+            id: 1,
+            name: String::new(),
+        }
+    }
+}
+
 impl ReportCategory {
     fn validate(&self, other_categories: &[&ReportCategory]) -> Result<(), ValidationError> {
-        // Validate ID range (1-255 based on your screenshot)
-        if !(1..=255).contains(&self.id) {
+        if !(1..=999).contains(&self.id) {
             return Err(ValidationError::InvalidId(
-                "Report Category ID must be between 1 and 255".to_string()
+                "Report category ID must be between 1 and 999".to_string()
             ));
         }
 
-        // Check for duplicate IDs
         for other in other_categories {
             if other.id == self.id {
                 return Err(ValidationError::DuplicateId(
-                    format!("Report Category with ID {} already exists", self.id)
+                    format!("Report category with ID {} already exists", self.id)
                 ));
             }
         }
 
-        // Validate name is not empty
         if self.name.trim().is_empty() {
             return Err(ValidationError::EmptyName(
-                "Report Category name cannot be empty".to_string()
+                "Report category name cannot be empty".to_string()
             ));
         }
 
@@ -71,54 +117,58 @@ impl ReportCategory {
     }
 }
 
+
 pub fn update(
-    category: &mut ReportCategory,
+    report_category: &mut ReportCategory,
     message: Message,
-    state: &mut edit::EditState,
-    other_categories: &[&ReportCategory],
+    state: &mut EditState,
+    other_categories: &[&ReportCategory]
 ) -> Action<Operation, Message> {
     match message {
         Message::Edit(msg) => match msg {
             edit::Message::UpdateName(name) => {
-                state.name = name;
-                state.validation_error = None;
+                report_category.name = name;
                 Action::none()
             }
             edit::Message::UpdateId(id) => {
-                state.id = id;
-                state.validation_error = None;
-                Action::none()
+                if let Ok(id) = id.parse() {
+                    report_category.id = id;
+                    Action::none()
+                } else {
+                    state.validation_error = Some("Invalid ID format".to_string());
+                    Action::none()
+                }
             }
             edit::Message::Save => {
-                match state.validate(other_categories) {
-                    Ok(_) => Action::operation(Operation::Save(category.clone())),
-                    Err(e) => {
-                        state.validation_error = Some(e.to_string());
-                        Action::none()
-                    }
+                if report_category.validate(other_categories).is_ok() {
+                    Action::operation(Operation::Save(report_category.clone()))
+                } else {
+                    state.validation_error = Some("Validation failed".to_string());
+                    Action::none()
                 }
             }
             edit::Message::Cancel => Action::operation(Operation::Cancel),
         },
         Message::View(msg) => match msg {
-            view::Message::Edit => Action::operation(Operation::StartEdit(category.id)),
+            view::Message::Edit => Action::operation(Operation::StartEdit(report_category.id)),
             view::Message::Back => Action::operation(Operation::Back),
-        },
+        }
     }
 }
 
+
 pub fn view<'a>(
-    category: &'a ReportCategory, 
+    report_category: &'a ReportCategory, 
     mode: &'a Mode,
-    other_categories: &'a [&'a ReportCategory]
+    all_categories: &'a HashMap<EntityId, ReportCategory>
 ) -> Element<'a, Message> {
     match mode {
-        Mode::View => view::view(category).map(Message::View),
+        Mode::View => view::view(report_category).map(Message::View),
         Mode::Edit => {
             edit::view(
-                category,
-                edit::EditState::new(category),
-                other_categories
+                report_category,
+                EditState::new(report_category),
+                all_categories
             ).map(Message::Edit)
         }
     }

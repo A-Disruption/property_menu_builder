@@ -9,6 +9,7 @@ use crate::data_types::{
 };
 use crate::Action;
 use iced::Element;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -30,6 +31,45 @@ pub enum Mode {
     Edit,
 }
 
+#[derive(Default, Clone)]
+pub struct EditState {
+    pub name: String,
+    pub id: String,
+    pub validation_error: Option<String>,
+}
+
+impl EditState {
+    pub fn new(printer: &PrinterLogical) -> Self {
+        Self {
+            name: printer.name.clone(),
+            id: printer.id.to_string(),
+            validation_error: None,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Printer name cannot be empty".to_string()
+            ));
+        }
+
+        if let Ok(id) = self.id.parse::<EntityId>() {
+            if !(1..=999).contains(&id) {
+                return Err(ValidationError::InvalidId(
+                    "Printer ID must be between 1 and 999".to_string()
+                ));
+            }
+        } else {
+            return Err(ValidationError::InvalidId(
+                "Invalid ID format".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrinterLogical {
     pub id: EntityId,
@@ -39,6 +79,15 @@ pub struct PrinterLogical {
 impl std::fmt::Display for PrinterLogical {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
+    }
+}
+
+impl Default for PrinterLogical {
+    fn default() -> Self {
+        Self {
+            id: 1,
+            name: String::new(),
+        }
     }
 }
 
@@ -74,28 +123,30 @@ impl PrinterLogical {
 pub fn update(
     printer: &mut PrinterLogical,
     message: Message,
-    state: &mut edit::EditState,
-    other_printers: &[&PrinterLogical],
+    state: &mut EditState,
+    other_printers: &[&PrinterLogical]
 ) -> Action<Operation, Message> {
     match message {
         Message::Edit(msg) => match msg {
             edit::Message::UpdateName(name) => {
-                state.name = name;
-                state.validation_error = None;
+                printer.name = name;
                 Action::none()
             }
             edit::Message::UpdateId(id) => {
-                state.id = id;
-                state.validation_error = None;
-                Action::none()
+                if let Ok(id) = id.parse() {
+                    printer.id = id;
+                    Action::none()
+                } else {
+                    state.validation_error = Some("Invalid ID format".to_string());
+                    Action::none()
+                }
             }
             edit::Message::Save => {
-                match state.validate(other_printers) {
-                    Ok(_) => Action::operation(Operation::Save(printer.clone())),
-                    Err(e) => {
-                        state.validation_error = Some(e.to_string());
-                        Action::none()
-                    }
+                if printer.validate(other_printers).is_ok() {
+                    Action::operation(Operation::Save(printer.clone()))
+                } else {
+                    state.validation_error = Some("Validation failed".to_string());
+                    Action::none()
                 }
             }
             edit::Message::Cancel => Action::operation(Operation::Cancel),
@@ -103,22 +154,22 @@ pub fn update(
         Message::View(msg) => match msg {
             view::Message::Edit => Action::operation(Operation::StartEdit(printer.id)),
             view::Message::Back => Action::operation(Operation::Back),
-        },
+        }
     }
 }
 
 pub fn view<'a>(
     printer: &'a PrinterLogical, 
     mode: &'a Mode,
-    other_printers: &'a [&'a PrinterLogical]
+    all_printers: &'a HashMap<EntityId, PrinterLogical>
 ) -> Element<'a, Message> {
     match mode {
         Mode::View => view::view(printer).map(Message::View),
         Mode::Edit => {
             edit::view(
                 printer,
-                edit::EditState::new(printer),
-                other_printers
+                EditState::new(printer),
+                all_printers
             ).map(Message::Edit)
         }
     }
