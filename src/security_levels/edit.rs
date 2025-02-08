@@ -2,11 +2,11 @@ use iced::widget::{
     button, column, container, row, text, text_input,
     horizontal_space,
 };
-use iced::{Alignment, Element, Length, Color};
+use iced::{Element, Length};
 use std::collections::HashMap;
-use crate::data_types::{EntityId, ValidationError};
+use crate::data_types::EntityId;
 use crate::HotKey;
-use super::{SecurityLevel, EditState};
+use super::SecurityLevel;
 
 #[derive(Debug, Clone)]
 pub enum Message {

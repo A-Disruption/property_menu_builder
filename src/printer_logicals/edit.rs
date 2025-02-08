@@ -6,8 +6,8 @@ use iced::{Element, Length};
 use std::collections::HashMap;
 
 use crate::HotKey;
-use super::{PrinterLogical, EditState};
-use crate::data_types::{EntityId, ValidationError};
+use super::PrinterLogical;
+use crate::data_types::EntityId;
 
 
 #[derive(Debug, Clone)]

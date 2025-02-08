@@ -3,12 +3,10 @@ use iced::widget::{
     horizontal_space,
 };
 use iced::{Element, Length};
-use crate::data_types::{EntityId, ValidationError};
-use rangemap::RangeInclusiveSet;
-use std::iter::empty;
+use crate::data_types::EntityId;
 use std::collections::HashMap;
 use crate::HotKey;
-use super::{ItemGroup, EditState};
+use super::ItemGroup;
 
 /* #[derive(Debug, Clone)]
 pub struct EditState {

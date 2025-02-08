@@ -4,11 +4,11 @@ use iced::widget::{
 };
 use iced::{Element, Length};
 use std::collections::HashMap;
-use crate::data_types::{EntityId, Currency, Validatable, ValidationError};
+use crate::data_types::EntityId;
 use crate::{
     choice_groups::ChoiceGroup,
     item_groups::ItemGroup,
-    price_levels::{PriceLevel, PriceLevelType},
+    price_levels::PriceLevel,
     printer_logicals::PrinterLogical,
     product_classes::ProductClass,
     report_categories::ReportCategory,
@@ -17,7 +17,7 @@ use crate::{
     tax_groups::TaxGroup,
 };
 use crate::HotKey;
-use super::{Item, Action, Operation, ViewContext, EditState};
+use super::{Item, Action, Operation, EditState};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -401,7 +401,7 @@ pub fn view<'a>(
 
     let validation_error = &state.validation_error;
 
-    let content = scrollable(
+    let content = container(
         column![
             // Basic Info Section
             container(
@@ -673,7 +673,7 @@ pub fn view<'a>(
         .spacing(20)
     );
 
-    scrollable(content).into()
+    container(content).into()
 }
 
 pub fn handle_hotkey(hotkey: HotKey) -> Action<Operation, Message> {

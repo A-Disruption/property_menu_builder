@@ -3,9 +3,7 @@ use iced::widget::{
     horizontal_space,
 };
 use iced::{Alignment, Element, Length};
-use crate::data_types::{EntityId, ValidationError};
 use crate::HotKey;
-use super::ChoiceGroup;
 
 #[derive(Debug, Clone)]
 pub enum Message {

@@ -1,17 +1,11 @@
 use iced::event;
-use iced::keyboard::key::Named;
 use iced::keyboard::{self, Key, Modifiers};
-use iced::overlay::menu::Menu;
 use iced::widget::{
     focus_next, focus_previous,
-    button, checkbox, column, container, pick_list,
-    row, scrollable, text, text_input, vertical_space,
-    Container
+    button, column, container, row, scrollable, text, vertical_space
 };
 use iced::{Element, Length, Size, Subscription, Task};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::any::Any;
 
 mod action;
 mod items;
@@ -39,7 +33,7 @@ use crate::{
     printer_logicals::PrinterLogical,
 };
 
-use data_types::{Currency, EntityId, ValidationError, ExportError};
+use data_types::EntityId;
 pub use action::Action;
 
 fn main() -> iced::Result {
@@ -689,7 +683,58 @@ impl MenuBuilder {
     }
 
     fn view(&self) -> Element<Message> {
-        match &self.screen {
+
+        let sidebar = container(
+            column![
+                button("Items")
+                    .on_press(Message::Navigate(Screen::Items(items::Mode::View)))
+                    .width(Length::Fill)
+                    .style(button::secondary),
+                button("Item Groups")
+                    .on_press(Message::Navigate(Screen::ItemGroups(item_groups::Mode::View)))
+                    .width(Length::Fill)
+                    .style(button::secondary),
+                button("Price Levels")
+                    .on_press(Message::Navigate(Screen::PriceLevels(price_levels::Mode::View)))
+                    .width(Length::Fill)
+                    .style(button::secondary),
+                button("Product Classes")
+                    .on_press(Message::Navigate(Screen::ProductClasses(product_classes::Mode::View)))
+                    .width(Length::Fill)
+                    .style(button::secondary),
+                button("Tax Groups")
+                    .on_press(Message::Navigate(Screen::TaxGroups(tax_groups::Mode::View)))
+                    .width(Length::Fill)
+                    .style(button::secondary),
+                button("Security Levels")
+                    .on_press(Message::Navigate(Screen::SecurityLevels(security_levels::Mode::View)))
+                    .width(Length::Fill)
+                    .style(button::secondary),
+                button("Revenue Categories")
+                    .on_press(Message::Navigate(Screen::RevenueCategories(revenue_categories::Mode::View)))
+                    .width(Length::Fill)
+                    .style(button::secondary),
+                button("Report Categories")
+                    .on_press(Message::Navigate(Screen::ReportCategories(report_categories::Mode::View)))
+                    .width(Length::Fill)
+                    .style(button::secondary),
+                button("Choice Groups")
+                    .on_press(Message::Navigate(Screen::ChoiceGroups(choice_groups::Mode::View)))
+                    .width(Length::Fill)
+                    .style(button::secondary),
+                button("Printer Logicals")
+                    .on_press(Message::Navigate(Screen::PrinterLogicals(printer_logicals::Mode::View)))
+                    .width(Length::Fill)
+                    .style(button::secondary),
+            ]
+            .spacing(5)
+            .padding(10)
+        )
+        .width(Length::Fixed(200.0))
+        .height(Length::Fill)
+        .style(container::rounded_box);
+
+        let content = match &self.screen {
             Screen::Items(mode) => {
                 if let Some(id) = self.selected_item_id {
                     let item = if id < 0 {  // Negative ID indicates new item
@@ -765,6 +810,8 @@ impl MenuBuilder {
                     )
                     .width(Length::Fill)
                     .height(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
                     .padding(30)
                     .into()
                 }
@@ -931,7 +978,15 @@ impl MenuBuilder {
                     text("No printer selected").into()
                 }
             }
-        }
+        };
+
+        row![
+            sidebar,
+            container(content)
+                .width(Length::Fill)
+                .padding(20)
+        ]
+        .into()
      }
 
 

@@ -5,8 +5,6 @@ use iced::widget::{
 use iced::{Alignment, Element, Length};
 
 use crate::HotKey;
-use super::ReportCategory;
-use crate::data_types::{EntityId, ValidationError};
 
 #[derive(Debug, Clone)]
 pub enum Message {

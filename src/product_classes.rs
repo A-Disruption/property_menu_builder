@@ -4,11 +4,8 @@ pub mod view;
 use crate::data_types::{
     EntityId,
     Validatable,
-    IdRange,
     ValidationError,
 };
-use crate::item_groups::{self, ItemGroup};
-use crate::revenue_categories::RevenueCategory;
 use crate::Action;
 use iced::Element;
 use std::collections::HashMap;

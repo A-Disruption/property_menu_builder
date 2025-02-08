@@ -2,9 +2,8 @@ use iced::widget::{
     button, column, container, row, text, text_input,
     horizontal_space,
 };
-use iced::{Element, Length, Color};
-use crate::data_types::{EntityId, ValidationError};
-use std::iter::empty;
+use iced::{Element, Length};
+use crate::data_types::EntityId;
 use std::collections::HashMap;
 use crate::HotKey;
 use super::ChoiceGroup;

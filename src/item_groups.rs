@@ -5,9 +5,7 @@ use crate::data_types::{
     EntityId,
     ValidationError,
     Validatable,
-    IdRange,
 };
-use rangemap::RangeInclusiveSet;
 use crate::Action;
 use iced::Element;
 use std::ops::Range;

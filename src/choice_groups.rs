@@ -4,7 +4,6 @@ pub mod view;
 use crate::data_types::{
     EntityId,
     Validatable,
-    IdRange,
 };
 use crate::Action;
 use iced::Element;

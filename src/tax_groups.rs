@@ -5,7 +5,6 @@ use crate::data_types::{
     EntityId,
     ValidationError,
     Validatable,
-    IdRange,
 };
 use crate::Action;
 use iced::Element;

@@ -5,10 +5,6 @@ use iced::widget::{
 use iced::{Alignment, Element, Length};
 
 use crate::HotKey;
-use crate::item_groups::ItemGroup;
-use crate::revenue_categories::RevenueCategory;
-use crate::data_types::{EntityId, ValidationError};
-use super::ProductClass;
 
 #[derive(Debug, Clone)]
 pub enum Message {

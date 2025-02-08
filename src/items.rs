@@ -4,16 +4,12 @@ pub mod view;
 use std::collections::HashMap;
 use crate::data_types::{
     EntityId,
-    Currency,
     ValidationError,
-    Validatable,
-    IdRange,
-    ExportError,
 };
 use crate::Action;
 use iced::Element;
 use rust_decimal::Decimal;
-use strsim::jaro_winkler; // For fuzzy matching
+ // For fuzzy matching
 use crate::{
     tax_groups::TaxGroup,
     security_levels::SecurityLevel,

@@ -3,10 +3,8 @@ use iced::widget::{
     horizontal_space,
 };
 use iced::{Element, Length};
-use rust_decimal::Decimal;
 use std::collections::HashMap;
-use crate::data_types::{EntityId, ValidationError, Currency};
-use crate::HotKey;
+use crate::data_types::EntityId;
 use super::{PriceLevel, PriceLevelType};
 
 #[derive(Debug, Clone)]

@@ -1,6 +1,6 @@
 use iced::widget::{
     button, column, container, row, text, scrollable,
-    horizontal_space, vertical_space,
+    horizontal_space,
 };
 use iced::{Alignment, Element, Length};
 use std::collections::HashMap;

@@ -1,15 +1,13 @@
 use iced::widget::{
-    button, column, container, row, text, text_input, pick_list,
+    button, column, container, row, text, text_input,
     horizontal_space,
 };
-use iced::{Alignment, Element, Length, Color};
+use iced::{Element, Length};
 use std::collections::HashMap;
 
 use crate::HotKey;
-use crate::item_groups::ItemGroup;
-use crate::revenue_categories::RevenueCategory;
-use super::{ProductClass, EditState};
-use crate::data_types::{EntityId, ValidationError};
+use super::ProductClass;
+use crate::data_types::EntityId;
 
 
 #[derive(Debug, Clone)]
