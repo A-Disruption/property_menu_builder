@@ -810,7 +810,8 @@ impl MenuBuilder {
                         .collect();
     
                     let action = choice_groups::update(
-                        choice_group, msg, 
+                        choice_group, 
+                        msg, 
                         &mut self.choice_group_edit_state, 
                         &other_choice_groups
                     )
@@ -976,6 +977,7 @@ impl MenuBuilder {
                     items::view(
                         item,
                         mode,
+                        &self.items,
                         &self.item_groups,
                         &self.tax_groups,
                         &self.security_levels,
@@ -1009,33 +1011,17 @@ impl MenuBuilder {
                                     button("Create New Item")
                                         .on_press(Message::Items(-1, items::Message::CreateNew))
                                         .style(button::primary),
-                                    vertical_space(),
-                                    text("Or select an existing item:"),
-                                    scrollable(
-                                        column(
-                                            self.items
-                                                .values()
-                                                .map(|item| {
-                                                    button(text(&item.name))
-                                                        .on_press(Message::Items(item.id, items::Message::Select))
-                                                        .width(Length::Fill)
-                                                        .style(button::secondary)
-                                                        .into()
-                                                })
-                                                .collect::<Vec<_>>()
-                                        )
-                                        .spacing(10)
-                                    ).width(Length::Fill)
+                                    vertical_space()
                                 ]
                             }
                         ]
                         .spacing(10)
-                        //.max_width(500)
+                        .max_width(500)
                     )
                     .width(Length::Fill)
                     .height(Length::Fill)
-//                    .center_x(Length::Fill)
-//                    .center_y(Length::Fill)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
                     .padding(30)
                     .into()
                 }
@@ -1075,23 +1061,7 @@ impl MenuBuilder {
                                     button("Create New Item Group")
                                         .on_press(Message::ItemGroups(-1, item_groups::Message::CreateNew))
                                         .style(button::primary),
-                                    vertical_space(),
-                                    text("Or select an existing item group:"),
-                                    scrollable(
-                                        column(
-                                            self.item_groups
-                                                .values()
-                                                .map(|group| {
-                                                    button(text(&group.name))
-                                                        .on_press(Message::ItemGroups(group.id, item_groups::Message::Select))
-                                                        .width(Length::Fill)
-                                                        .style(button::secondary)
-                                                        .into()
-                                                })
-                                                .collect::<Vec<_>>()
-                                        )
-                                        .spacing(10)
-                                    )
+                                    vertical_space()
                                 ]
                             }
                         ]
@@ -1141,23 +1111,7 @@ impl MenuBuilder {
                                     button("Create New Price Level")
                                         .on_press(Message::PriceLevels(-1, price_levels::Message::CreateNew))
                                         .style(button::primary),
-                                    vertical_space(),
-                                    text("Or select an existing price level:"),
-                                    scrollable(
-                                        column(
-                                            self.price_levels
-                                                .values()
-                                                .map(|level| {
-                                                    button(text(&level.name))
-                                                        .on_press(Message::PriceLevels(level.id, price_levels::Message::Select))
-                                                        .width(Length::Fill)
-                                                        .style(button::secondary)
-                                                        .into()
-                                                })
-                                                .collect::<Vec<_>>()
-                                        )
-                                        .spacing(10)
-                                    )
+                                    vertical_space()
                                 ]
                             }
                         ]
@@ -1207,23 +1161,7 @@ impl MenuBuilder {
                                     button("Create New Product Class")
                                         .on_press(Message::ProductClasses(-1, product_classes::Message::CreateNew))
                                         .style(button::primary),
-                                    vertical_space(),
-                                    text("Or select an existing product class:"),
-                                    scrollable(
-                                        column(
-                                            self.product_classes
-                                                .values()
-                                                .map(|class| {
-                                                    button(text(&class.name))
-                                                        .on_press(Message::ProductClasses(class.id, product_classes::Message::Select))
-                                                        .width(Length::Fill)
-                                                        .style(button::secondary)
-                                                        .into()
-                                                })
-                                                .collect::<Vec<_>>()
-                                        )
-                                        .spacing(10)
-                                    )
+                                    vertical_space()
                                 ]
                             }
                         ]
@@ -1273,23 +1211,7 @@ impl MenuBuilder {
                                     button("Create New Tax Group")
                                         .on_press(Message::TaxGroups(-1, tax_groups::Message::CreateNew))
                                         .style(button::primary),
-                                    vertical_space(),
-                                    text("Or select an existing tax group:"),
-                                    scrollable(
-                                        column(
-                                            self.tax_groups
-                                                .values()
-                                                .map(|group| {
-                                                    button(text(&group.name))
-                                                        .on_press(Message::TaxGroups(group.id, tax_groups::Message::Select))
-                                                        .width(Length::Fill)
-                                                        .style(button::secondary)
-                                                        .into()
-                                                })
-                                                .collect::<Vec<_>>()
-                                        )
-                                        .spacing(10)
-                                    )
+                                    vertical_space()
                                 ]
                             }
                         ]
@@ -1339,23 +1261,7 @@ impl MenuBuilder {
                                     button("Create New Security Level")
                                         .on_press(Message::SecurityLevels(-1, security_levels::Message::CreateNew))
                                         .style(button::primary),
-                                    vertical_space(),
-                                    text("Or select an existing security level:"),
-                                    scrollable(
-                                        column(
-                                            self.security_levels
-                                                .values()
-                                                .map(|level| {
-                                                    button(text(&level.name))
-                                                        .on_press(Message::SecurityLevels(level.id, security_levels::Message::Select))
-                                                        .width(Length::Fill)
-                                                        .style(button::secondary)
-                                                        .into()
-                                                })
-                                                .collect::<Vec<_>>()
-                                        )
-                                        .spacing(10)
-                                    )
+                                    vertical_space()
                                 ]
                             }
                         ]
@@ -1405,23 +1311,7 @@ impl MenuBuilder {
                                     button("Create New Revenue Category")
                                         .on_press(Message::RevenueCategories(-1, revenue_categories::Message::CreateNew))
                                         .style(button::primary),
-                                    vertical_space(),
-                                    text("Or select an existing revenue category:"),
-                                    scrollable(
-                                        column(
-                                            self.revenue_categories
-                                                .values()
-                                                .map(|category| {
-                                                    button(text(&category.name))
-                                                        .on_press(Message::RevenueCategories(category.id, revenue_categories::Message::Select))
-                                                        .width(Length::Fill)
-                                                        .style(button::secondary)
-                                                        .into()
-                                                })
-                                                .collect::<Vec<_>>()
-                                        )
-                                        .spacing(10)
-                                    )
+                                    vertical_space()
                                 ]
                             }
                         ]
@@ -1471,23 +1361,7 @@ impl MenuBuilder {
                                     button("Create New Report Category")
                                         .on_press(Message::ReportCategories(-1, report_categories::Message::CreateNew))
                                         .style(button::primary),
-                                    vertical_space(),
-                                    text("Or select an existing report category:"),
-                                    scrollable(
-                                        column(
-                                            self.report_categories
-                                                .values()
-                                                .map(|category| {
-                                                    button(text(&category.name))
-                                                        .on_press(Message::ReportCategories(category.id, report_categories::Message::Select))
-                                                        .width(Length::Fill)
-                                                        .style(button::secondary)
-                                                        .into()
-                                                })
-                                                .collect::<Vec<_>>()
-                                        )
-                                        .spacing(10)
-                                    )
+                                    vertical_space()
                                 ]
                             }
                         ]
@@ -1537,23 +1411,7 @@ impl MenuBuilder {
                                     button("Create New Choice Group")
                                         .on_press(Message::ChoiceGroups(-1, choice_groups::Message::CreateNew))
                                         .style(button::primary),
-                                    vertical_space(),
-                                    text("Or select an existing choice group:"),
-                                    scrollable(
-                                        column(
-                                            self.choice_groups
-                                                .values()
-                                                .map(|group| {
-                                                    button(text(&group.name))
-                                                        .on_press(Message::ChoiceGroups(group.id, choice_groups::Message::Select))
-                                                        .width(Length::Fill)
-                                                        .style(button::secondary)
-                                                        .into()
-                                                })
-                                                .collect::<Vec<_>>()
-                                        )
-                                        .spacing(10)
-                                    )
+                                    vertical_space()
                                 ]
                             }
                         ]
@@ -1604,22 +1462,6 @@ impl MenuBuilder {
                                         .on_press(Message::PrinterLogicals(-1, printer_logicals::Message::CreateNew))
                                         .style(button::primary),
                                     vertical_space(),
-                                    text("Or select an existing printer logical:"),
-                                    scrollable(
-                                        column(
-                                            self.printer_logicals
-                                                .values()
-                                                .map(|printer| {
-                                                    button(text(&printer.name))
-                                                        .on_press(Message::PrinterLogicals(printer.id, printer_logicals::Message::Select))
-                                                        .width(Length::Fill)
-                                                        .style(button::secondary)
-                                                        .into()
-                                                })
-                                                .collect::<Vec<_>>()
-                                        )
-                                        .spacing(10)
-                                    )
                                 ]
                             }
                         ]
@@ -1650,20 +1492,22 @@ impl MenuBuilder {
         match operation {
             Operation::Items(id, op) => {
                 match op {
-                    items::Operation::Save(item) => {
-                        if let Some(draft_id) = self.draft_item_id {
-                            if draft_id == id {
-                                //We're saving a draft
-                                self.items.insert(id, item);
-                                self.draft_item_id = None;
-                                self.draft_item = Item::default();
-                            } else {
-                                // Updating existing Item
-                                self.items.insert(id, item);
-                            }
+                    items::Operation::Save(mut item) => {
+
+                        if item.id < 0 {
+                            let next_id = self.items
+                                .keys()
+                                .max()
+                                .map_or(1, |max_id| max_id + 1);
+                            item.id = next_id;
+
+                            self.items.insert(next_id, item.clone());
+                            self.draft_item_id = None;
+                            self.draft_item = Item::default();
+                            self.selected_item_id = Some(next_id);
                         } else {
-                            // Updating existing Item
-                            self.items.insert(id, item);
+                            self.items.insert(item.id, item.clone());
+                            self.selected_item_id = Some(item.id);
                         }
                         self.screen = Screen::Items(items::Mode::View);
                         Task::none()
@@ -1691,16 +1535,21 @@ impl MenuBuilder {
                         todo!();
                         Task::none()
                     }
-                    items::Operation::CreateNew(item) => {
-                        let new_id = Item::new_draft();
+                    items::Operation::CreateNew(mut item) => {
+                        let next_id = self.items
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                        item.id = next_id;
+
                         self.draft_item = item;
-                        self.draft_item_id = Some(new_id.id);
-                        self.selected_item_id = Some(new_id.id);
+                        self.draft_item_id = Some(-1);
+                        self.selected_item_id = Some(-1);
                         self.screen = Screen::Items(items::Mode::Edit);
                         Task::none()
                     },
-                    items::Operation::Select(item_id) => {
-                        self.selected_item_id = Some(item_id);
+                    items::Operation::Select(id) => {
+                        self.selected_item_id = Some(id);
                         self.screen = Screen::Items(items::Mode::View);
                         Task::none()
                     },
@@ -1709,20 +1558,22 @@ impl MenuBuilder {
     
             Operation::ItemGroups(id, op) => {
                 match op {
-                    item_groups::Operation::Save(group) => {
-                        if let Some(draft_id) = self.draft_item_group_id {
-                            if draft_id == id {
-                                //We're saving a draft
-                                self.item_groups.insert(id, group);
-                                self.draft_item_group_id = None;
-                                self.draft_item_group = ItemGroup::default();
-                            } else {
-                                // Updating existing Item group
-                                self.item_groups.insert(id, group);
-                            }
+                    item_groups::Operation::Save(mut group) => {
+                        if group.id < 0 {
+                            //Generate new ID only for new items
+                            let next_id = self.item_groups
+                                .keys()
+                                .max()
+                                .map_or(1, |max_id| max_id + 1);
+                            group.id = next_id;
+
+                            self.item_groups.insert(next_id, group.clone());
+                            self.draft_item_group_id = None;
+                            self.draft_item_group = ItemGroup::default();
+                            self.selected_item_group_id = Some(group.id);
                         } else {
-                            // Updating existing Item group
-                            self.item_groups.insert(id, group);
+                            self.item_groups.insert(group.id, group.clone());
+                            self.selected_item_group_id = Some(group.id);
                         }
                         self.screen = Screen::ItemGroups(item_groups::Mode::View);
                         Task::none()
@@ -1746,11 +1597,17 @@ impl MenuBuilder {
                         self.screen = Screen::ItemGroups(item_groups::Mode::View);
                         Task::none()
                     }
-                    item_groups::Operation::CreateNew(item) => {
-                        let new_id = ItemGroup::new_draft();
-                        self.draft_item_group = item;
-                        self.draft_item_group_id = Some(new_id.id);
-                        self.selected_item_group_id = Some(new_id.id);
+                    item_groups::Operation::CreateNew(mut group) => {
+
+                        let next_id = self.item_groups
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                        group.id = next_id;
+
+                        self.draft_item_group = group;
+                        self.draft_item_group_id = Some(-1);
+                        self.selected_item_group_id = Some(-1);
                         self.screen = Screen::ItemGroups(item_groups::Mode::Edit);
                         Task::none()
                     },
@@ -1764,20 +1621,22 @@ impl MenuBuilder {
     
             Operation::TaxGroups(id, op) => {
                 match op {
-                    tax_groups::Operation::Save(group) => {
-                        if let Some(draft_id) = self.draft_tax_group_id {
-                            if draft_id == id {
-                                //We're saving a draft
-                                self.tax_groups.insert(id, group);
-                                self.draft_tax_group_id = None;
-                                self.draft_tax_group = TaxGroup::default();
-                            } else {
-                                // Updating existing tax group
-                                self.tax_groups.insert(id, group);
-                            }
+                    tax_groups::Operation::Save(mut group) => {
+
+                        if group.id < 0 {
+                            let next_id = self.tax_groups
+                                .keys()
+                                .max()
+                                .map_or(1, |max_id|  max_id + 1);
+                            group.id = next_id;
+
+                            self.tax_groups.insert(next_id, group.clone());
+                            self.draft_tax_group_id = None;
+                            self.draft_tax_group = TaxGroup::default();
+                            self.selected_tax_group_id = Some(next_id);
                         } else {
-                            // Updating existing tax group
-                            self.tax_groups.insert(id, group);
+                            self.tax_groups.insert(group.id, group.clone());
+                            self.selected_tax_group_id = Some(group.id);
                         }
                         self.screen = Screen::TaxGroups(tax_groups::Mode::View);
                         Task::none()
@@ -1801,16 +1660,21 @@ impl MenuBuilder {
                         self.screen = Screen::TaxGroups(tax_groups::Mode::View);
                         Task::none()
                     }
-                    tax_groups::Operation::CreateNew(tax_group) => {
-                        let new_id = TaxGroup::new_draft();
+                    tax_groups::Operation::CreateNew(mut tax_group) => {
+                        let next_id = self.tax_groups
+                                .keys()
+                                .max()
+                                .map_or(1, |max_id|  max_id + 1);
+                            tax_group.id = next_id;
+                        
                         self.draft_tax_group = tax_group;
-                        self.draft_tax_group_id = Some(new_id.id);
-                        self.selected_tax_group_id = Some(new_id.id);
+                        self.draft_tax_group_id = Some(-1);
+                        self.selected_tax_group_id = Some(-1);
                         self.screen = Screen::TaxGroups(tax_groups::Mode::Edit);
                         Task::none()
                     },
-                    tax_groups::Operation::Select(tax_group_id) => {
-                        self.selected_tax_group_id = Some(tax_group_id);
+                    tax_groups::Operation::Select(id) => {
+                        self.selected_tax_group_id = Some(id);
                         self.screen = Screen::TaxGroups(tax_groups::Mode::View);
                         Task::none()
                     },
@@ -1819,20 +1683,22 @@ impl MenuBuilder {
     
             Operation::SecurityLevels(id, op) => {
                 match op {
-                    security_levels::Operation::Save(level) => {
-                        if let Some(draft_id) = self.draft_security_level_id {
-                            if draft_id == id {
-                                //We're saving a draft
-                                self.security_levels.insert(id, level);
-                                self.draft_security_level_id = None;
-                                self.draft_security_level = SecurityLevel::default();
-                            } else {
-                                // Updating existing Security Level
-                                self.security_levels.insert(id, level);
-                            }
+                    security_levels::Operation::Save(mut level) => {
+
+                        if level.id < 0 {
+                            let next_id = self.security_levels
+                                .keys()
+                                .max()
+                                .map_or(1, |max_id| max_id + 1);
+                            level.id = next_id;
+
+                            self.security_levels.insert(next_id, level.clone());
+                            self.draft_security_level_id = None;
+                            self.draft_security_level = SecurityLevel::default();
+                            self.selected_security_level_id = Some(next_id);
                         } else {
-                            // Updating existing Security Level
-                            self.security_levels.insert(id, level);
+                            self.security_levels.insert(level.id, level.clone());
+                            self.selected_security_level_id = Some(level.id);
                         }
                         self.screen = Screen::SecurityLevels(security_levels::Mode::View);
                         Task::none()
@@ -1856,16 +1722,22 @@ impl MenuBuilder {
                         self.screen = Screen::SecurityLevels(security_levels::Mode::View);
                         Task::none()
                     }
-                    security_levels::Operation::CreateNew(security_level) => {
-                        let new_id = SecurityLevel::new_draft();
-                        self.draft_security_level = security_level;
-                        self.draft_security_level_id = Some(new_id.id);
-                        self.selected_tax_group_id = Some(new_id.id);
+                    security_levels::Operation::CreateNew(mut level) => {
+                        println!("CreateNew operation received in main");
+                        let next_id = self.security_levels
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                        level.id = next_id;
+
+                        self.draft_security_level = level;
+                        self.draft_security_level_id = Some(-1);
+                        self.selected_tax_group_id = Some(-1);
                         self.screen = Screen::SecurityLevels(security_levels::Mode::Edit);
                         Task::none()
                     },
-                    security_levels::Operation::Select(security_level_id) => {
-                        self.selected_security_level_id = Some(security_level_id);
+                    security_levels::Operation::Select(id) => {
+                        self.selected_security_level_id = Some(id);
                         self.screen = Screen::SecurityLevels(security_levels::Mode::View);
                         Task::none()
                     },
@@ -1874,20 +1746,21 @@ impl MenuBuilder {
     
             Operation::RevenueCategories(id, op) => {
                 match op {
-                    revenue_categories::Operation::Save(category) => {
-                        if let Some(draft_id) = self.draft_revenue_category_id {
-                            if draft_id == id {
-                                //We're saving a draft
-                                self.revenue_categories.insert(id, category);
-                                self.draft_revenue_category_id = None;
-                                self.draft_revenue_category = RevenueCategory::default();
-                            } else {
-                                // Updating existing revenue category
-                                self.revenue_categories.insert(id, category);
-                            }
+                    revenue_categories::Operation::Save(mut category) => {
+                        if category.id < 0 {
+                            let next_id = self.revenue_categories
+                                .keys()
+                                .max()
+                                .map_or(1, |max_id| max_id + 1);
+                            category.id = next_id;
+
+                            self.revenue_categories.insert(next_id, category.clone());
+                            self.draft_revenue_category_id = None;
+                            self.draft_revenue_category = RevenueCategory::default();
+                            self.selected_revenue_category_id = Some(next_id);
                         } else {
-                            // Updating existing revenue category
-                            self.revenue_categories.insert(id, category);
+                            self.revenue_categories.insert(category.id, category.clone());
+                            self.selected_revenue_category_id = Some(category.id);
                         }
                         self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
                         Task::none()
@@ -1911,16 +1784,21 @@ impl MenuBuilder {
                         self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
                         Task::none()
                     }
-                    revenue_categories::Operation::CreateNew(revenue_category) => {
-                        let new_id = RevenueCategory::new_draft();
+                    revenue_categories::Operation::CreateNew(mut revenue_category) => {
+                        let next_id = self.revenue_categories
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                        revenue_category.id = next_id;
+
                         self.draft_revenue_category = revenue_category;
-                        self.draft_revenue_category_id = Some(new_id.id);
-                        self.selected_revenue_category_id = Some(new_id.id);
+                        self.draft_revenue_category_id = Some(-1);
+                        self.selected_revenue_category_id = Some(-1);
                         self.screen = Screen::RevenueCategories(revenue_categories::Mode::Edit);
                         Task::none()
                     },
-                    revenue_categories::Operation::Select(security_level_id) => {
-                        self.selected_security_level_id = Some(security_level_id);
+                    revenue_categories::Operation::Select(id) => {
+                        self.selected_revenue_category_id = Some(id);
                         self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
                         Task::none()
                     },
@@ -1929,20 +1807,22 @@ impl MenuBuilder {
     
             Operation::ReportCategories(id, op) => {
                 match op {
-                    report_categories::Operation::Save(category) => {
-                        if let Some(draft_id) = self.draft_report_category_id {
-                            if draft_id == id {
-                                //We're saving a draft
-                                self.report_categories.insert(id, category);
-                                self.draft_report_category_id = None;
-                                self.draft_report_category = ReportCategory::default();
-                            } else {
-                                // Updating existing report category
-                                self.report_categories.insert(id, category);
-                            }
+                    report_categories::Operation::Save(mut category) => {
+
+                        if category.id < 0 {
+                            let next_id = self.report_categories
+                                .keys()
+                                .max()
+                                .map_or(1, |max_id| max_id + 1);
+                            category.id = next_id;
+
+                            self.report_categories.insert(next_id, category.clone());
+                            self.draft_report_category_id = None;
+                            self.draft_report_category = ReportCategory::default();
+                            self.selected_report_category_id = Some(next_id);
                         } else {
-                            // Updating existing report category
-                            self.report_categories.insert(id, category);
+                            self.report_categories.insert(category.id, category.clone());
+                            self.selected_report_category_id = Some(category.id);
                         }
                         self.screen = Screen::ReportCategories(report_categories::Mode::View);
                         Task::none()
@@ -1966,16 +1846,21 @@ impl MenuBuilder {
                         self.screen = Screen::ReportCategories(report_categories::Mode::View);
                         Task::none()
                     }
-                    report_categories::Operation::CreateNew(report_category) => {
-                        let new_id = ReportCategory::new_draft();
+                    report_categories::Operation::CreateNew(mut report_category) => {
+                        let next_id = self.report_categories
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                        report_category.id = next_id;
+
                         self.draft_report_category = report_category;
-                        self.draft_report_category_id = Some(new_id.id);
-                        self.selected_report_category_id = Some(new_id.id);
+                        self.draft_report_category_id = Some(-1);
+                        self.selected_report_category_id = Some(-1);
                         self.screen = Screen::ReportCategories(report_categories::Mode::Edit);
                         Task::none()
                     },
-                    report_categories::Operation::Select(security_level_id) => {
-                        self.selected_security_level_id = Some(security_level_id);
+                    report_categories::Operation::Select(id) => {
+                        self.selected_report_category_id = Some(id);
                         self.screen = Screen::ReportCategories(report_categories::Mode::View);
                         Task::none()
                     },
@@ -1984,22 +1869,22 @@ impl MenuBuilder {
     
             Operation::ProductClasses(id, op) => {
                 match op {
-                    product_classes::Operation::Save(class) => {
-                        if let Some(draft_id) = self.draft_product_class_id {
-                            if draft_id == id {
-                                //We're saving a draft
-                                self.product_classes.insert(id, class);
-                                self.draft_product_class_id = None;
-                                self.draft_product_class = ProductClass::default();
-                            } else {
-                                // Updating existing product class
-                                self.product_classes.insert(id, class);
-                            }
-                        } else {
-                            // Updating existing product class
-                            self.product_classes.insert(id, class);
-                        }
+                    product_classes::Operation::Save(mut class) => {
+                        if class.id < 0 {
+                            let next_id = self.product_classes
+                                .keys()
+                                .max()
+                                .map_or(1, |max_id| max_id + 1);
+                            class.id = next_id;
 
+                            self.product_classes.insert(next_id, class.clone());
+                            self.draft_product_class_id = None;
+                            self.draft_product_class = ProductClass::default();
+                            self.selected_product_class_id = Some(next_id);
+                        } else {
+                            self.product_classes.insert(class.id, class.clone());
+                            self.selected_product_class_id = Some(class.id);
+                        }
                         self.screen = Screen::ProductClasses(product_classes::Mode::View);
                         Task::none()
                     }
@@ -2022,16 +1907,21 @@ impl MenuBuilder {
                         self.screen = Screen::ProductClasses(product_classes::Mode::View);
                         Task::none()
                     }
-                    product_classes::Operation::CreateNew(product_class) => {
-                        let new_id = ProductClass::new_draft();
+                    product_classes::Operation::CreateNew(mut product_class) => {
+                        let next_id = self.product_classes
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                        product_class.id = next_id;
+
                         self.draft_product_class = product_class;
-                        self.draft_product_class_id = Some(new_id.id);
-                        self.selected_product_class_id = Some(new_id.id);
+                        self.draft_product_class_id = Some(-1);
+                        self.selected_product_class_id = Some(-1);
                         self.screen = Screen::ProductClasses(product_classes::Mode::Edit);
                         Task::none()
                     },
-                    product_classes::Operation::Select(security_level_id) => {
-                        self.selected_security_level_id = Some(security_level_id);
+                    product_classes::Operation::Select(id) => {
+                        self.selected_product_class_id = Some(id);
                         self.screen = Screen::ProductClasses(product_classes::Mode::View);
                         Task::none()
                     },
@@ -2039,20 +1929,24 @@ impl MenuBuilder {
             }
     
             Operation::ChoiceGroups(id, op) => match op {
-                choice_groups::Operation::Save(choice_group) => {
-                    if let Some(draft_id) = self.draft_choice_group_id {
-                        if draft_id == id {
-                            // We're saving a draft
-                            self.choice_groups.insert(id, choice_group);
-                            self.draft_choice_group_id = None;
-                            self.draft_choice_group = ChoiceGroup::default();
-                        } else {
-                            // Updating existing choice group
-                            self.choice_groups.insert(id, choice_group);
-                        }
+                choice_groups::Operation::Save(mut choice_group) => {
+                    if choice_group.id < 0 {
+                        // Only generate new ID for new items
+                        let next_id = self.choice_groups
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                        choice_group.id = next_id;
+                        
+                        // Insert the new choice group
+                        self.choice_groups.insert(next_id, choice_group.clone());
+                        self.draft_choice_group_id = None;
+                        self.draft_choice_group = ChoiceGroup::default();
+                        self.selected_choice_group_id = Some(next_id); // Update selection
                     } else {
-                        // Updating existing choice group
-                        self.choice_groups.insert(id, choice_group);
+                        // Updating existing choice group - keep same ID
+                        self.choice_groups.insert(choice_group.id, choice_group.clone());
+                        self.selected_choice_group_id = Some(choice_group.id); // Keep selection
                     }
                     self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
                     Task::none()
@@ -2076,11 +1970,18 @@ impl MenuBuilder {
                     self.screen = Screen::Items(items::Mode::View);
                     Task::none()
                 }
-                choice_groups::Operation::CreateNew(choice_group) => {
-                    let new_id = ChoiceGroup::new_draft();
+                choice_groups::Operation::CreateNew(mut choice_group) => {
+                    let next_id = self.choice_groups
+                                .keys()
+                                .max()
+                                .map_or(1, |max_id| max_id + 1);
+                            choice_group.id = next_id;
+                    //let new_id = ChoiceGroup::new_draft();
                     self.draft_choice_group = choice_group;
-                    self.draft_choice_group_id = Some(new_id.id);
-                    self.selected_choice_group_id = Some(new_id.id);
+                    self.draft_choice_group_id = Some(-1);
+                    self.selected_choice_group_id = Some(-1);
+                    //self.draft_choice_group_id = Some(next_id);
+                    //self.selected_choice_group_id = Some(next_id);
                     self.screen = Screen::ChoiceGroups(choice_groups::Mode::Edit);
                     Task::none()
                 },
@@ -2092,20 +1993,22 @@ impl MenuBuilder {
             },
     
             Operation::PrinterLogicals(id, op) => match op {
-                printer_logicals::Operation::Save(printer) => {
-                    if let Some(draft_id) = self.draft_printer_id {
-                        if draft_id == id {
-                            // We're saving a draft
-                            self.printer_logicals.insert(id, printer);
-                            self.draft_printer_id = None;
-                            self.draft_printer = PrinterLogical::default();
-                        } else {
-                            // Updating existing printer
-                            self.printer_logicals.insert(id, printer);
-                        }
+                printer_logicals::Operation::Save(mut printer) => {
+
+                    if printer.id < 0 {
+                        let next_id = self.printer_logicals
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                        printer.id = next_id;
+
+                        self.printer_logicals.insert(next_id, printer.clone());
+                        self.draft_printer_id = None;
+                        self.draft_printer = PrinterLogical::default();
+                        self.selected_printer_id = Some(next_id);
                     } else {
-                        // Updating existing printer
-                        self.printer_logicals.insert(id, printer);
+                        self.printer_logicals.insert(printer.id, printer.clone());
+                        self.selected_printer_id = Some(printer.id);
                     }
                     self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
                     Task::none()
@@ -2129,11 +2032,16 @@ impl MenuBuilder {
                     self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
                     Task::none()
                 }
-                printer_logicals::Operation::CreateNew(printer_logical) => {
-                    let new_id = PrinterLogical::new_draft();
+                printer_logicals::Operation::CreateNew(mut printer_logical) => {
+                    let next_id = self.printer_logicals
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                    printer_logical.id = next_id;
+                    
                     self.draft_printer = printer_logical;
-                    self.draft_printer_id = Some(new_id.id);
-                    self.selected_printer_id = Some(new_id.id);
+                    self.draft_printer_id = Some(-1);
+                    self.selected_printer_id = Some(-1);
                     self.screen = Screen::PrinterLogicals(printer_logicals::Mode::Edit);
                     Task::none()
                 },
@@ -2145,23 +2053,22 @@ impl MenuBuilder {
             },
 
             Operation::PriceLevels(id, op) => match op {
-                price_levels::Operation::Save(level) => {
-                    if let Some(draft_id) = self.draft_price_level_id {
-                        if draft_id == id {
-                            //we're saving a draft
-                            self.price_levels.insert(id, level);
-                            self.draft_price_level_id = None;
-                            self.draft_price_level = PriceLevel::default();
-                        }
-                        else {
-                            //updating existing price level
-                            self.price_levels.insert(id, level);
-                        }
-                    }else {
-                        //updating existing price level
-                        self.price_levels.insert(id, level);
-                    }
+                price_levels::Operation::Save(mut level) => {
+                    if level.id < 0 {
+                        let next_id = self.price_levels
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                        level.id = next_id;
 
+                        self.price_levels.insert(id, level);
+                        self.draft_price_level_id = None;
+                        self.draft_price_level = PriceLevel::default();
+                        self.selected_price_level_id = Some(next_id);
+                    } else {
+                        self.price_levels.insert(level.id, level.clone());
+                        self.selected_price_level_id = Some(level.id);
+                    }
                     self.screen = Screen::PriceLevels(price_levels::Mode::View);
                     Task::none()
                 }
@@ -2184,11 +2091,17 @@ impl MenuBuilder {
                     self.screen = Screen::PriceLevels(price_levels::Mode::View);
                     Task::none()
                 }
-                price_levels::Operation::CreateNew(price_level) => {
-                    let new_id = PriceLevel::new_draft();
+                price_levels::Operation::CreateNew(mut price_level) => {
+
+                    let next_id = self.price_levels
+                        .keys()
+                        .max()
+                        .map_or(1, |max_id| max_id + 1);
+                    price_level.id = next_id;
+
                     self.draft_price_level = price_level;
-                    self.draft_price_level_id = Some(new_id.id);
-                    self.selected_price_level_id = Some(new_id.id);
+                    self.draft_price_level_id = Some(-1);
+                    self.selected_price_level_id = Some(-1);
                     self.screen = Screen::PriceLevels(price_levels::Mode::Edit);
                     Task::none()
                 },
@@ -2200,38 +2113,6 @@ impl MenuBuilder {
             },
 
         }
-    }
-
-    fn view_sidebar<'a>(&'a self) -> Element<'a, Message> {
-        let nav_button = |label: &'a str| {
-            move |screen: Screen| {
-                button(
-                    text(label.to_string())
-                        .width(Length::Fill)
-                )
-                .width(Length::Fill)
-                .on_press(Message::Navigate(screen))
-            }
-        };
-
-        container(
-            column![
-                nav_button("Items")(Screen::Items(items::Mode::View)),
-                nav_button("Item Groups")(Screen::ItemGroups(item_groups::Mode::View)),
-                nav_button("Price Levels")(Screen::PriceLevels(price_levels::Mode::View)),
-                nav_button("Product Classes")(Screen::ProductClasses(product_classes::Mode::View)),
-                nav_button("Tax Groups")(Screen::TaxGroups(tax_groups::Mode::View)),
-                nav_button("Security Levels")(Screen::SecurityLevels(security_levels::Mode::View)),
-                nav_button("Revenue Categories")(Screen::RevenueCategories(revenue_categories::Mode::View)),
-                nav_button("Report Categories")(Screen::ReportCategories(report_categories::Mode::View)),
-                nav_button("Choice Groups")(Screen::ChoiceGroups(choice_groups::Mode::View)),
-                nav_button("Printer Logicals")(Screen::PrinterLogicals(printer_logicals::Mode::View))
-            ]
-            .spacing(5)
-            .width(Length::Fixed(200.0))
-        )
-        .style(iced::widget::container::bordered_box)
-        .into()
     }
 
     fn subscription(&self) -> Subscription<Message> {

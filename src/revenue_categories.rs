@@ -8,6 +8,7 @@ use crate::data_types::{
 };
 use crate::Action;
 use iced::Element;
+use iced::widget::{button, container, column, row, text};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -15,7 +16,7 @@ pub enum Message {
     Edit(edit::Message),
     View(view::Message),
     CreateNew,
-    Select,
+    Select(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -88,7 +89,7 @@ impl std::fmt::Display for RevenueCategory {
 impl Default for RevenueCategory {
     fn default() -> Self {
         Self {
-            id: 1,
+            id: -1,
             name: String::new(),
         }
     }
@@ -97,11 +98,7 @@ impl Default for RevenueCategory {
 impl RevenueCategory {
 
     pub fn new_draft() -> Self {
-        Self {
-            id: -1,  // Temporary UI-only ID
-            name: String::new(),
-            ..RevenueCategory::default()
-        } 
+        Self::default()
     }
 
     fn validate(&self, other_categories: &[&RevenueCategory]) -> Result<(), ValidationError> {
@@ -143,7 +140,9 @@ pub fn update(
             }
             edit::Message::UpdateId(id) => {
                 if let Ok(id) = id.parse() {
-                    revenue_category.id = id;
+                    if revenue_category.id < 0 {
+                        revenue_category.id = id;
+                    }
                     Action::none()
                 } else {
                     state.validation_error = Some("Invalid ID format".to_string());
@@ -168,8 +167,8 @@ pub fn update(
             let new_revenue_category = RevenueCategory::default();
             Action::operation(Operation::CreateNew(new_revenue_category))
         },
-        Message::Select => {
-            Action::operation(Operation::Select(revenue_category.id))
+        Message::Select(id) => {
+            Action::operation(Operation::Select(id))
         },
     }
 }
@@ -179,7 +178,27 @@ pub fn view<'a>(
     mode: &'a Mode,
     all_categories: &'a HashMap<EntityId, RevenueCategory>
 ) -> Element<'a, Message> {
-    match mode {
+
+    let category_list = column(
+        all_categories
+            .values()
+            .map(|category| {
+                button(text(&category.name))
+                    .width(iced::Length::Fill)
+                    .on_press(Message::Select(category.id))
+                    .style(if category.id == revenue_category.id {
+                        button::primary
+                    } else {
+                        button::secondary
+                    })
+                    .into()
+            })
+            .collect::<Vec<_>>()
+    )
+    .spacing(5)
+    .width(iced::Length::Fixed(200.0));
+
+    let content = match mode {
         Mode::View => view::view(revenue_category).map(Message::View),
         Mode::Edit => {
             edit::view(
@@ -188,5 +207,25 @@ pub fn view<'a>(
                 all_categories
             ).map(Message::Edit)
         }
-    }
+    };
+
+    row![
+        container(
+            column![
+                text("Revenue Categories").size(24),
+                button("Create New")
+                    .on_press(Message::CreateNew)
+                    .style(button::primary),
+                category_list,
+            ]
+            .spacing(10)
+            .padding(10)
+        )
+        .style(container::rounded_box),
+        container(content)
+            .width(iced::Length::Fill)
+            .style(container::rounded_box)
+    ]
+    .spacing(20)
+    .into()
 }

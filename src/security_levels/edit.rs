@@ -21,6 +21,7 @@ pub fn view<'a>(
     state: super::EditState,
     all_levels: &'a HashMap<EntityId, SecurityLevel>
 ) -> Element<'a, Message> {
+    println!("Security Group: Edit View");
 
     let validation_error = &state.validation_error;
 

@@ -8,6 +8,7 @@ use crate::data_types::{
 };
 use crate::Action;
 use iced::Element;
+use iced::widget::{button, container, column, row, text};
 use rust_decimal::Decimal;
  // For fuzzy matching
 use crate::{
@@ -27,7 +28,7 @@ pub enum Message {
     Edit(edit::Message),
     View(view::Message),
     CreateNew,
-    Select,
+    Select(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -273,7 +274,7 @@ pub struct Item {
 impl Default for Item {
     fn default() -> Self {
         Self {
-            id: 1,
+            id: -1,
             name: String::new(),
             button1: String::new(),
             button2: None,
@@ -324,12 +325,8 @@ impl std::fmt::Display for Item {
 
 impl Item {
 
-    pub fn new_draft() -> Self {
-        Self {
-            id: -1,  // Temporary UI-only ID
-            name: String::new(),
-            ..Item::default()
-        } 
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn assign_id_from_group(&mut self, item_group: &ItemGroup) -> Result<(), ValidationError> {
@@ -771,8 +768,8 @@ pub fn update(
             let new_item = Item::default();
             Action::operation(Operation::CreateNew(new_item))
         },
-        Message::Select => {
-            Action::operation(Operation::Select(item.id))
+        Message::Select(id) => {
+            Action::operation(Operation::Select(id))
         },
     }
 }
@@ -780,6 +777,7 @@ pub fn update(
 pub fn view<'a>(
     item: &'a Item, 
     mode: &'a Mode,
+    items: &'a HashMap<EntityId, Item>,
     item_groups: &'a HashMap<EntityId, ItemGroup>,
     tax_groups: &'a HashMap<EntityId, TaxGroup>,
     security_levels: &'a HashMap<EntityId, SecurityLevel>,
@@ -790,7 +788,27 @@ pub fn view<'a>(
     printer_logicals: &'a HashMap<EntityId, PrinterLogical>,
     price_levels: &'a HashMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
-    match mode {
+
+    let items_list = column(
+        items
+            .values()
+            .map(|an_item| {
+                button(text(&an_item.name))
+                    .width(iced::Length::Fill)
+                    .on_press(Message::Select(an_item.id))
+                    .style(if an_item.id == item.id {
+                        button::primary
+                    } else {
+                        button::secondary
+                    })
+                    .into()
+            })
+            .collect::<Vec<_>>()
+    )
+    .spacing(5)
+    .width(iced::Length::Fixed(200.0));
+
+    let content = match mode {
         Mode::View => view::view(
             item,
             item_groups,
@@ -818,7 +836,27 @@ pub fn view<'a>(
                 price_levels,
             ).map(Message::Edit)
         }
-    }
+    };
+
+    row![
+        container(
+            column![
+                text("Items").size(24),
+                button("Create New")
+                    .on_press(Message::CreateNew)
+                    .style(button::primary),
+                items_list,
+            ]
+            .spacing(10)
+            .padding(10)
+        )
+        .style(container::rounded_box),
+        container(content)
+            .width(iced::Length::Fill)
+            .style(container::rounded_box)
+    ]
+    .spacing(20)
+    .into()
 }
 
 pub struct ViewContext {

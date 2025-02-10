@@ -9,6 +9,7 @@ use crate::data_types::{
 };
 use crate::Action;
 use iced::Element;
+use iced::widget::{button, text, container, row, column};
 use std::collections::HashMap;
 use rust_decimal::Decimal;
 
@@ -17,7 +18,7 @@ pub enum Message {
     Edit(edit::Message),
     View(view::Message),
     CreateNew,
-    Select,
+    Select(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -124,7 +125,7 @@ impl std::fmt::Display for PriceLevel {
 impl Default for PriceLevel {
     fn default() -> Self {
         Self {
-            id: 1,
+            id: -1,
             name: String::new(),
             price: Decimal::ZERO,
             level_type: PriceLevelType::default(),
@@ -135,11 +136,7 @@ impl Default for PriceLevel {
 impl PriceLevel {
 
     pub fn new_draft() -> Self {
-        Self {
-            id: -1,  // Temporary UI-only ID
-            name: String::new(),
-            ..PriceLevel::default()
-        } 
+        Self::default()
     }
 
     fn validate(&self, other_levels: &[&PriceLevel]) -> Result<(), ValidationError> {
@@ -187,7 +184,9 @@ pub fn update(
             }
             edit::Message::UpdateId(id) => {
                 if let Ok(id) = id.parse() {
-                    price_level.id = id;
+                    if price_level.id < 0 {
+                        price_level.id = id;
+                    }
                     Action::none()
                 } else {
                     state.validation_error = Some("Invalid ID format".to_string());
@@ -228,8 +227,8 @@ pub fn update(
             let new_price_level = PriceLevel::default();
             Action::operation(Operation::CreateNew(new_price_level))
         },
-        Message::Select => {
-            Action::operation(Operation::Select(price_level.id))
+        Message::Select(id) => {
+            Action::operation(Operation::Select(id))
         },
     }
 }
@@ -239,7 +238,27 @@ pub fn view<'a>(
     mode: &'a Mode,
     all_levels: &'a HashMap<EntityId, PriceLevel>
 ) -> Element<'a, Message> {
-    match mode {
+
+    let levels_list = column(
+        all_levels
+            .values()
+            .map(|level| {
+                button(text(&level.name))
+                    .width(iced::Length::Fill)
+                    .on_press(Message::Select(level.id))
+                    .style(if level.id == price_level.id {
+                        button::primary
+                    } else {
+                        button::secondary
+                    })
+                    .into()
+            })
+            .collect::<Vec<_>>()
+    )
+    .spacing(5)
+    .width(iced::Length::Fixed(200.0));
+
+    let content = match mode {
         Mode::View => view::view(price_level).map(Message::View),
         Mode::Edit => {
             edit::view(
@@ -248,5 +267,26 @@ pub fn view<'a>(
                 all_levels
             ).map(Message::Edit)
         }
-    }
+    };
+
+    row![
+        container(
+            column![
+                text("Price Levels").size(24),
+                button("Create New")
+                    .on_press(Message::CreateNew)
+                    .style(button::primary),
+                levels_list,
+            ]
+            .spacing(10)
+            .padding(10)
+        )
+        .style(container::rounded_box),
+        container(content)
+            .width(iced::Length::Fill)
+            .style(container::rounded_box)
+    ]
+    .spacing(20)
+    .into()
+
 }

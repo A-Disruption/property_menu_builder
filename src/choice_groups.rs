@@ -6,6 +6,7 @@ use crate::data_types::{
     Validatable,
 };
 use crate::Action;
+use iced::widget::{button, row, column, container, text};
 use iced::Element;
 use std::collections::HashMap;
 
@@ -14,7 +15,7 @@ pub enum Message {
     Edit(edit::Message),
     View(view::Message),
     CreateNew,
-    Select,
+    Select(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -38,14 +39,16 @@ pub struct EditState {
     pub name: String,
     pub id: String,
     pub validation_error: Option<String>,
+    pub next_id: EntityId,
 }
 
 impl EditState {
-    pub fn new(choice_group: &ChoiceGroup) -> Self {
+    pub fn new(choice_group: &ChoiceGroup, next_id: EntityId) -> Self {
         Self {
             name: choice_group.name.clone(),
             id: choice_group.id.to_string(),
             validation_error: None,
+            next_id,
         }
     }
 
@@ -94,7 +97,7 @@ impl std::fmt::Display for ChoiceGroup {
 impl Default for ChoiceGroup {
     fn default() -> Self {
         Self {
-            id: 1,
+            id: -1,
             name: String::new(),
         }
     }
@@ -103,11 +106,7 @@ impl Default for ChoiceGroup {
 impl ChoiceGroup {
 
     pub fn new_draft() -> Self {
-        Self {
-            id: -1,  // Temporary UI-only ID
-            name: String::new(),
-            ..ChoiceGroup::default()
-        } 
+        Self::default()
     }
 
     fn validate(&self, other_groups: &[&ChoiceGroup]) -> Result<(), ValidationError> {
@@ -149,7 +148,10 @@ pub fn update(
             }
             edit::Message::UpdateId(id) => {
                 if let Ok(id) = id.parse() {
-                    choice_group.id = id;
+                    //Only allow ID updates for new items
+                    if choice_group.id < 0 {
+                        choice_group.id = id;
+                    }
                     Action::none()
                 } else {
                     state.validation_error = Some("Invalid ID format".to_string());
@@ -174,8 +176,8 @@ pub fn update(
             let new_choice_group = ChoiceGroup::default();
             Action::operation(Operation::CreateNew(new_choice_group))
         },
-        Message::Select => {
-            Action::operation(Operation::Select(choice_group.id))
+        Message::Select(id) => {
+            Action::operation(Operation::Select(id))
         },
     }
 }
@@ -185,14 +187,61 @@ pub fn view<'a>(
     mode: &'a Mode,
     all_groups: &'a HashMap<EntityId, ChoiceGroup>
 ) -> Element<'a, Message> {
-    match mode {
+
+    let groups_list = column(
+        all_groups
+            .values()
+            .map(|group| {
+                button(text(&group.name))
+                    .width(iced::Length::Fill)
+                    .on_press(Message::Select(group.id))
+                    .style(if group.id == choice_group.id {
+                        button::primary
+                    } else {
+                        button::secondary
+                    })
+                    .into()
+            })
+            .collect::<Vec<_>>()
+    )
+    .spacing(5)
+    .width(iced::Length::Fixed(200.0));
+
+    let content = match mode {
         Mode::View => view::view(choice_group).map(Message::View),
         Mode::Edit => {
             edit::view(
                 choice_group,
-                EditState::new(choice_group),
+                EditState::new(choice_group, get_next_id(all_groups)),
                 all_groups
             ).map(Message::Edit)
         }
-    }
+    };
+
+    row![
+        container(
+            column![
+                text("Choice Groups").size(24),
+                button("Create New")
+                    .on_press(Message::CreateNew)
+                    .style(button::primary),
+                groups_list,
+            ]
+            .spacing(10)
+            .padding(10)
+        )
+        .style(container::rounded_box),
+        container(content)
+            .width(iced::Length::Fill)
+            .style(container::rounded_box)
+    ]
+    .spacing(20)
+    .into()
+}
+
+fn get_next_id(groups: &HashMap<EntityId, ChoiceGroup>) -> EntityId {
+    groups
+        .keys()
+        .max()
+        .map_or(1, |max_id| max_id + 1)
 }

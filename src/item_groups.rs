@@ -8,6 +8,7 @@ use crate::data_types::{
 };
 use crate::Action;
 use iced::Element;
+use iced::widget::{row, column, text, button, container};
 use std::ops::Range;
 use std::collections::HashMap;
 
@@ -16,7 +17,7 @@ pub enum Message {
     Edit(edit::Message),
     View(view::Message),
     CreateNew,
-    Select,
+    Select(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -108,7 +109,7 @@ impl std::fmt::Display for ItemGroup {
 impl Default for ItemGroup {
     fn default() -> Self {
         Self {
-            id: 1,
+            id: -1,
             name: String::new(),
             id_range: Range { start: 1, end: 1000 }
         }
@@ -118,11 +119,7 @@ impl Default for ItemGroup {
  impl ItemGroup {
 
     pub fn new_draft() -> Self {
-        Self {
-            id: -1,  // Temporary UI-only ID
-            name: String::new(),
-            ..ItemGroup::default()
-        } 
+        Self::default()
     }
 
     fn validate(&self, other_groups: &[&ItemGroup]) -> Result<(), ValidationError> {
@@ -183,7 +180,9 @@ pub fn update(
             }
             edit::Message::UpdateId(id) => {
                 if let Ok(id) = id.parse() {
-                    item_group.id = id;
+                    if item_group.id < 0 {
+                        item_group.id = id;
+                    }
                     Action::none()
                 } else {
                     state.validation_error = Some("Invalid ID format".to_string());
@@ -226,8 +225,8 @@ pub fn update(
             let new_item_group = ItemGroup::default();
             Action::operation(Operation::CreateNew(new_item_group))
         },
-        Message::Select => {
-            Action::operation(Operation::Select(item_group.id))
+        Message::Select(id) => {
+            Action::operation(Operation::Select(id))
         },
     }
  }
@@ -237,7 +236,27 @@ pub fn update(
     mode: &'a Mode,
     all_groups: &'a HashMap<EntityId, ItemGroup>
 ) -> Element<'a, Message> {
-    match mode {
+
+    let groups_list = column(
+        all_groups
+            .values()
+            .map(|group| {
+                button(text(&group.name))
+                    .width(iced::Length::Fill)
+                    .on_press(Message::Select(group.id))
+                    .style(if group.id == item_group.id {
+                        button::primary
+                    } else {
+                        button::secondary
+                    })
+                    .into()
+            })
+            .collect::<Vec<_>>()
+    )
+    .spacing(5)
+    .width(iced::Length::Fixed(200.0));
+
+    let content = match mode {
         Mode::View => view::view(item_group).map(Message::View),
         Mode::Edit => {
             edit::view(
@@ -246,8 +265,29 @@ pub fn update(
                 all_groups
             ).map(Message::Edit)
         }
-    }
+    };
+
+    row![
+        container(
+            column![
+                text("Item Groups").size(24),
+                button("Create New")
+                    .on_press(Message::CreateNew)
+                    .style(button::primary),
+                groups_list,
+            ]
+            .spacing(10)
+            .padding(10)
+        )
+        .style(container::rounded_box),
+        container(content)
+            .width(iced::Length::Fill)
+            .style(container::rounded_box)
+    ]
+    .spacing(20)
+    .into()
 }
+
 
 /*  
 // Update Display implementation for ValidationError

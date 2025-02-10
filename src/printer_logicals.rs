@@ -8,6 +8,7 @@ use crate::data_types::{
 };
 use crate::Action;
 use iced::Element;
+use iced::widget::{button, column, container, row, text};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -15,7 +16,7 @@ pub enum Message {
     Edit(edit::Message),
     View(view::Message),
     CreateNew,
-    Select,
+    Select(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -88,7 +89,7 @@ impl std::fmt::Display for PrinterLogical {
 impl Default for PrinterLogical {
     fn default() -> Self {
         Self {
-            id: 1,
+            id: -1,
             name: String::new(),
         }
     }
@@ -97,11 +98,7 @@ impl Default for PrinterLogical {
 impl PrinterLogical {
 
     pub fn new_draft() -> Self {
-        Self {
-            id: -1,  // Temporary UI-only ID
-            name: String::new(),
-            ..PrinterLogical::default()
-        } 
+        Self::default()
     }
 
     fn validate(&self, other_printers: &[&PrinterLogical]) -> Result<(), ValidationError> {
@@ -171,8 +168,8 @@ pub fn update(
             let new_printer_logical = PrinterLogical::default();
             Action::operation(Operation::CreateNew(new_printer_logical))
         },
-        Message::Select => {
-            Action::operation(Operation::Select(printer.id))
+        Message::Select(id) => {
+            Action::operation(Operation::Select(id))
         },
     }
 }
@@ -182,7 +179,27 @@ pub fn view<'a>(
     mode: &'a Mode,
     all_printers: &'a HashMap<EntityId, PrinterLogical>
 ) -> Element<'a, Message> {
-    match mode {
+
+    let printer_list = column(
+        all_printers
+            .values()
+            .map(|printer| {
+                button(text(&printer.name))
+                    .width(iced::Length::Fill)
+                    .on_press(Message::Select(printer.id))
+                    .style(if printer.id == printer.id {
+                        button::primary
+                    } else {
+                        button::secondary
+                    })
+                    .into()
+            })
+            .collect::<Vec<_>>()
+    )
+    .spacing(5)
+    .width(iced::Length::Fixed(200.0));
+
+    let content = match mode {
         Mode::View => view::view(printer).map(Message::View),
         Mode::Edit => {
             edit::view(
@@ -191,5 +208,25 @@ pub fn view<'a>(
                 all_printers
             ).map(Message::Edit)
         }
-    }
+    };
+
+    row![
+        container(
+            column![
+                text("Printer Logicals").size(24),
+                button("Create New")
+                    .on_press(Message::CreateNew)
+                    .style(button::primary),
+                printer_list,
+            ]
+            .spacing(10)
+            .padding(10)
+        )
+        .style(container::rounded_box),
+        container(content)
+            .width(iced::Length::Fill)
+            .style(container::rounded_box)
+    ]
+    .spacing(20)
+    .into()
 }

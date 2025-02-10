@@ -8,6 +8,7 @@ use crate::data_types::{
 };
 use crate::Action;
 use iced::Element;
+use iced::widget::{button, container, column, row, text};
 use std::collections::HashMap;
 use rust_decimal::Decimal;
 use std::fmt;
@@ -18,7 +19,7 @@ pub enum Message {
     Edit(edit::Message),
     View(view::Message),
     CreateNew,
-    Select,
+    Select(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -109,7 +110,7 @@ impl fmt::Display for TaxGroup {
 impl Default for TaxGroup {
     fn default() -> Self {
         Self {
-            id: 1,
+            id: -1,
             name: String::new(),
             rate: Decimal::ZERO,
         }
@@ -119,11 +120,7 @@ impl Default for TaxGroup {
 impl TaxGroup {
 
     pub fn new_draft() -> Self {
-        Self {
-            id: -1,  // Temporary UI-only ID
-            name: String::new(),
-            ..TaxGroup::default()
-        } 
+        Self::default()
     }
 
     fn validate(&self, other_groups: &[&TaxGroup]) -> Result<(), ValidationError> {
@@ -176,7 +173,9 @@ pub fn update(
             }
             edit::Message::UpdateId(id) => {
                 if let Ok(id) = id.parse() {
-                    tax_group.id = id;
+                    if tax_group.id < 0 {
+                        tax_group.id = id;
+                    }
                     Action::none()
                 } else {
                     state.validation_error = Some("Invalid ID format".to_string());
@@ -213,8 +212,8 @@ pub fn update(
             let new_tax_group = TaxGroup::default();
             Action::operation(Operation::CreateNew(new_tax_group))
         },
-        Message::Select => {
-            Action::operation(Operation::Select(tax_group.id))
+        Message::Select(id) => {
+            Action::operation(Operation::Select(id))
         },
     }
 }
@@ -224,7 +223,27 @@ pub fn view<'a>(
     mode: &'a Mode,
     all_groups: &'a HashMap<EntityId, TaxGroup>
 ) -> Element<'a, Message> {
-    match mode {
+
+    let groups_list = column(
+        all_groups
+            .values()
+            .map(|group| {
+                button(text(&group.name))
+                    .width(iced::Length::Fill)
+                    .on_press(Message::Select(group.id))
+                    .style(if group.id == tax_group.id {
+                        button::primary
+                    } else {
+                        button::secondary
+                    })
+                    .into()
+            })
+            .collect::<Vec<_>>()
+    )
+    .spacing(5)
+    .width(iced::Length::Fixed(200.0));
+
+    let content = match mode {
         Mode::View => view::view(tax_group).map(Message::View),
         Mode::Edit => {
             edit::view(
@@ -233,5 +252,25 @@ pub fn view<'a>(
                 all_groups
             ).map(Message::Edit)
         }
-    }
+    };
+
+    row![
+        container(
+            column![
+                text("Item Groups").size(24),
+                button("Create New")
+                    .on_press(Message::CreateNew)
+                    .style(button::primary),
+                groups_list,
+            ]
+            .spacing(10)
+            .padding(10)
+        )
+        .style(container::rounded_box),
+        container(content)
+            .width(iced::Length::Fill)
+            .style(container::rounded_box)
+    ]
+    .spacing(20)
+    .into()
 }

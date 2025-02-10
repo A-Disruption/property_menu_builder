@@ -12,6 +12,9 @@ pub enum Message {
 }
 
 pub fn view<'a>(security_level: &'a super::SecurityLevel) -> Element<'a, Message> {
+
+    println!("Security Group: View View");
+
     let header = row![
         button("←").width(40).on_press(Message::Back),
         text(&security_level.name).size(16),
