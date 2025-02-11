@@ -258,7 +258,7 @@ pub fn view<'a>(
     row![
         container(
             column![
-                text("Item Groups").size(24),
+                text("Tax Groups").size(24),
                 button("Create New")
                     .on_press(Message::CreateNew)
                     .style(button::primary),

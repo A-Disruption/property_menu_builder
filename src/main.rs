@@ -1010,7 +1010,10 @@ impl MenuBuilder {
             },
             Screen::Items(mode) => {
                 if let Some(id) = self.selected_item_id {
-                    let item = if id < 0 {  // Negative ID indicates new item
+                    // When an item is selected, determine whether it represents a new item
+                    // (negative ID) or an existing one, and if there’s a draft override.
+                    let item = if id < 0 {
+                        // Negative ID indicates a new item; use the draft.
                         &self.draft_item
                     } else if let Some(draft_id) = self.draft_item_id {
                         if draft_id == id {
@@ -1021,7 +1024,7 @@ impl MenuBuilder {
                     } else {
                         &self.items[&id]
                     };
-     
+                
                     items::view(
                         item,
                         mode,
@@ -1037,31 +1040,37 @@ impl MenuBuilder {
                         &self.price_levels,
                     )
                     .map(move |msg| Message::Items(id, msg))
+                } else if let Some((&first_id, first_item)) = self.items.iter().next() {
+                    // No selected item, but there is at least one in the collection.
+                    items::view(
+                        first_item,
+                        mode,
+                        &self.items,
+                        &self.item_groups,
+                        &self.tax_groups,
+                        &self.security_levels,
+                        &self.revenue_categories,
+                        &self.report_categories,
+                        &self.product_classes,
+                        &self.choice_groups,
+                        &self.printer_logicals,
+                        &self.price_levels,
+                    )
+                    .map(move |msg| Message::Items(first_id, msg))
                 } else {
-                    // Welcome screen with Create New button
+                    // No selected item and no items available: show the welcome screen.
                     container(
                         column![
                             text("Item Management")
                                 .size(24)
                                 .width(Length::Fill),
                             vertical_space(),
-                            if self.items.is_empty() {
-                                column![
-                                    text("No items have been created yet.")
-                                        .width(Length::Fill),
-                                    vertical_space(),
-                                    button("Create New Item")
-                                        .on_press(Message::Items(-1, items::Message::CreateNew))
-                                        .style(button::primary)
-                                ]
-                            } else {
-                                column![
-                                    button("Create New Item")
-                                        .on_press(Message::Items(-1, items::Message::CreateNew))
-                                        .style(button::primary),
-                                    vertical_space()
-                                ]
-                            }
+                            text("No items have been created yet.")
+                                .width(Length::Fill),
+                            vertical_space(),
+                            button("Create New Item")
+                                .on_press(Message::Items(-1, items::Message::CreateNew))
+                                .style(button::primary)
                         ]
                         .spacing(10)
                         .max_width(500)
@@ -1076,42 +1085,33 @@ impl MenuBuilder {
             }
             Screen::ItemGroups(mode) => {
                 if let Some(id) = self.selected_item_group_id {
-                    let item_group = if let Some(draft_id) = self.draft_item_group_id {
-                        if draft_id == id {
-                            &self.draft_item_group
-                        } else {
-                            &self.item_groups[&id]
-                        }
+                    // Use the draft if its ID matches; otherwise, use the stored item group.
+                    let item_group = if self.draft_item_group_id == Some(id) {
+                        &self.draft_item_group
                     } else {
                         &self.item_groups[&id]
                     };
-     
+                
                     item_groups::view(item_group, mode, &self.item_groups)
                         .map(move |msg| Message::ItemGroups(id, msg))
+                } else if let Some((&first_id, first_item_group)) = self.item_groups.iter().next() {
+                    // No selected item group, but there is at least one available: show its view.
+                    item_groups::view(first_item_group, mode, &self.item_groups)
+                        .map(move |msg| Message::ItemGroups(first_id.clone(), msg))
                 } else {
+                    // No selected item group and the collection is empty: show the empty state.
                     container(
                         column![
                             text("Item Groups")
                                 .size(24)
                                 .width(Length::Fill),
                             vertical_space(),
-                            if self.item_groups.is_empty() {
-                                column![
-                                    text("No item groups have been created yet.")
-                                        .width(Length::Fill),
-                                    vertical_space(),
-                                    button("Create New Item Group")
-                                        .on_press(Message::ItemGroups(-1, item_groups::Message::CreateNew))
-                                        .style(button::primary)
-                                ]
-                            } else {
-                                column![
-                                    button("Create New Item Group")
-                                        .on_press(Message::ItemGroups(-1, item_groups::Message::CreateNew))
-                                        .style(button::primary),
-                                    vertical_space()
-                                ]
-                            }
+                            text("No item groups have been created yet.")
+                                .width(Length::Fill),
+                            vertical_space(),
+                            button("Create New Item Group")
+                                .on_press(Message::ItemGroups(-1, item_groups::Message::CreateNew))
+                                .style(button::primary)
                         ]
                         .spacing(10)
                         .max_width(500)
@@ -1126,42 +1126,33 @@ impl MenuBuilder {
             }
             Screen::PriceLevels(mode) => {
                 if let Some(id) = self.selected_price_level_id {
-                    let price_level = if let Some(draft_id) = self.draft_price_level_id {
-                        if draft_id == id {
-                            &self.draft_price_level
-                        } else {
-                            &self.price_levels[&id]
-                        }
+                    // Use the draft if its ID matches; otherwise, use the stored price level.
+                    let price_level = if self.draft_price_level_id == Some(id) {
+                        &self.draft_price_level
                     } else {
                         &self.price_levels[&id]
                     };
-     
+                
                     price_levels::view(price_level, mode, &self.price_levels)
                         .map(move |msg| Message::PriceLevels(id, msg))
+                } else if let Some((&first_id, first_price_level)) = self.price_levels.iter().next() {
+                    // No selected price level, but there is at least one: show the first one.
+                    price_levels::view(first_price_level, mode, &self.price_levels)
+                        .map(move |msg| Message::PriceLevels(first_id.clone(), msg))
                 } else {
+                    // No selected price level and the collection is empty: show the empty state.
                     container(
                         column![
                             text("Price Levels")
                                 .size(24)
                                 .width(Length::Fill),
                             vertical_space(),
-                            if self.price_levels.is_empty() {
-                                column![
-                                    text("No price levels have been created yet.")
-                                        .width(Length::Fill),
-                                    vertical_space(),
-                                    button("Create New Price Level")
-                                        .on_press(Message::PriceLevels(-1, price_levels::Message::CreateNew))
-                                        .style(button::primary)
-                                ]
-                            } else {
-                                column![
-                                    button("Create New Price Level")
-                                        .on_press(Message::PriceLevels(-1, price_levels::Message::CreateNew))
-                                        .style(button::primary),
-                                    vertical_space()
-                                ]
-                            }
+                            text("No price levels have been created yet.")
+                                .width(Length::Fill),
+                            vertical_space(),
+                            button("Create New Price Level")
+                                .on_press(Message::PriceLevels(-1, price_levels::Message::CreateNew))
+                                .style(button::primary)
                         ]
                         .spacing(10)
                         .max_width(500)
@@ -1176,42 +1167,34 @@ impl MenuBuilder {
             }
             Screen::ProductClasses(mode) => {
                 if let Some(id) = self.selected_product_class_id {
-                    let product_class = if let Some(draft_id) = self.draft_product_class_id {
-                        if draft_id == id {
-                            &self.draft_product_class
-                        } else {
-                            &self.product_classes[&id]
-                        }
+                    // Use the draft if its ID matches the selected one
+                    let product_class = if self.draft_product_class_id == Some(id) {
+                        &self.draft_product_class
                     } else {
                         &self.product_classes[&id]
                     };
-     
+                
                     product_classes::view(product_class, mode, &self.product_classes)
                         .map(move |msg| Message::ProductClasses(id, msg))
+                } else if let Some((&first_id, first_product_class)) = self.product_classes.iter().next() {
+                    // No selected product class but there is at least one in the collection:
+                    // show the view for the first product class.
+                    product_classes::view(first_product_class, mode, &self.product_classes)
+                        .map(move |msg| Message::ProductClasses(first_id.clone(), msg))
                 } else {
+                    // No selected product class and the collection is empty; show the empty state.
                     container(
                         column![
                             text("Product Classes")
                                 .size(24)
                                 .width(Length::Fill),
                             vertical_space(),
-                            if self.product_classes.is_empty() {
-                                column![
-                                    text("No product classes have been created yet.")
-                                        .width(Length::Fill),
-                                    vertical_space(),
-                                    button("Create New Product Class")
-                                        .on_press(Message::ProductClasses(-1, product_classes::Message::CreateNew))
-                                        .style(button::primary)
-                                ]
-                            } else {
-                                column![
-                                    button("Create New Product Class")
-                                        .on_press(Message::ProductClasses(-1, product_classes::Message::CreateNew))
-                                        .style(button::primary),
-                                    vertical_space()
-                                ]
-                            }
+                            text("No product classes have been created yet.")
+                                .width(Length::Fill),
+                            vertical_space(),
+                            button("Create New Product Class")
+                                .on_press(Message::ProductClasses(-1, product_classes::Message::CreateNew))
+                                .style(button::primary)
                         ]
                         .spacing(10)
                         .max_width(500)
@@ -1226,42 +1209,33 @@ impl MenuBuilder {
             }
             Screen::TaxGroups(mode) => {
                 if let Some(id) = self.selected_tax_group_id {
-                    let tax_group = if let Some(draft_id) = self.draft_tax_group_id {
-                        if draft_id == id {
-                            &self.draft_tax_group
-                        } else {
-                            &self.tax_groups[&id]
-                        }
+                    // Use the draft tax group if its ID matches the selected ID
+                    let tax_group = if self.draft_tax_group_id == Some(id) {
+                        &self.draft_tax_group
                     } else {
                         &self.tax_groups[&id]
                     };
-     
+                
                     tax_groups::view(tax_group, mode, &self.tax_groups)
                         .map(move |msg| Message::TaxGroups(id, msg))
+                } else if let Some((&first_id, first_tax_group)) = self.tax_groups.iter().next() {
+                    // No selected ID but there is at least one tax group; show the first one.
+                    tax_groups::view(first_tax_group, mode, &self.tax_groups)
+                        .map(move |msg| Message::TaxGroups(first_id.clone(), msg))
                 } else {
+                    // No selected ID and the collection is empty; show the empty state.
                     container(
                         column![
                             text("Tax Groups")
                                 .size(24)
                                 .width(Length::Fill),
                             vertical_space(),
-                            if self.tax_groups.is_empty() {
-                                column![
-                                    text("No tax groups have been created yet.")
-                                        .width(Length::Fill),
-                                    vertical_space(),
-                                    button("Create New Tax Group")
-                                        .on_press(Message::TaxGroups(-1, tax_groups::Message::CreateNew))
-                                        .style(button::primary)
-                                ]
-                            } else {
-                                column![
-                                    button("Create New Tax Group")
-                                        .on_press(Message::TaxGroups(-1, tax_groups::Message::CreateNew))
-                                        .style(button::primary),
-                                    vertical_space()
-                                ]
-                            }
+                            text("No tax groups have been created yet.")
+                                .width(Length::Fill),
+                            vertical_space(),
+                            button("Create New Tax Group")
+                                .on_press(Message::TaxGroups(-1, tax_groups::Message::CreateNew))
+                                .style(button::primary)
                         ]
                         .spacing(10)
                         .max_width(500)
@@ -1276,42 +1250,33 @@ impl MenuBuilder {
             }
             Screen::SecurityLevels(mode) => {
                 if let Some(id) = self.selected_security_level_id {
-                    let security_level = if let Some(draft_id) = self.draft_security_level_id {
-                        if draft_id == id {
-                            &self.draft_security_level
-                        } else {
-                            &self.security_levels[&id]
-                        }
+                    // Use the draft if its ID matches; otherwise, use the stored security level.
+                    let security_level = if self.draft_security_level_id == Some(id) {
+                        &self.draft_security_level
                     } else {
                         &self.security_levels[&id]
                     };
-     
+                
                     security_levels::view(security_level, mode, &self.security_levels)
                         .map(move |msg| Message::SecurityLevels(id, msg))
+                } else if let Some((&first_id, first_security_level)) = self.security_levels.iter().next() {
+                    // No selected security level, but there is at least one available: show its view.
+                    security_levels::view(first_security_level, mode, &self.security_levels)
+                        .map(move |msg| Message::SecurityLevels(first_id.clone(), msg))
                 } else {
+                    // No selected security level and the collection is empty: show the empty state.
                     container(
                         column![
                             text("Security Levels")
                                 .size(24)
                                 .width(Length::Fill),
                             vertical_space(),
-                            if self.security_levels.is_empty() {
-                                column![
-                                    text("No security levels have been created yet.")
-                                        .width(Length::Fill),
-                                    vertical_space(),
-                                    button("Create New Security Level")
-                                        .on_press(Message::SecurityLevels(-1, security_levels::Message::CreateNew))
-                                        .style(button::primary)
-                                ]
-                            } else {
-                                column![
-                                    button("Create New Security Level")
-                                        .on_press(Message::SecurityLevels(-1, security_levels::Message::CreateNew))
-                                        .style(button::primary),
-                                    vertical_space()
-                                ]
-                            }
+                            text("No security levels have been created yet.")
+                                .width(Length::Fill),
+                            vertical_space(),
+                            button("Create New Security Level")
+                                .on_press(Message::SecurityLevels(-1, security_levels::Message::CreateNew))
+                                .style(button::primary)
                         ]
                         .spacing(10)
                         .max_width(500)
@@ -1326,42 +1291,33 @@ impl MenuBuilder {
             }
             Screen::RevenueCategories(mode) => {
                 if let Some(id) = self.selected_revenue_category_id {
-                    let revenue_category = if let Some(draft_id) = self.draft_revenue_category_id {
-                        if draft_id == id {
-                            &self.draft_revenue_category
-                        } else {
-                            &self.revenue_categories[&id]
-                        }
+                    // Use the draft if its ID matches; otherwise, use the stored revenue category.
+                    let revenue_category = if self.draft_revenue_category_id == Some(id) {
+                        &self.draft_revenue_category
                     } else {
                         &self.revenue_categories[&id]
                     };
-     
+                
                     revenue_categories::view(revenue_category, mode, &self.revenue_categories)
                         .map(move |msg| Message::RevenueCategories(id, msg))
+                } else if let Some((&first_id, first_revenue_category)) = self.revenue_categories.iter().next() {
+                    // No selected revenue category, but there is at least one: show the view for the first one.
+                    revenue_categories::view(first_revenue_category, mode, &self.revenue_categories)
+                        .map(move |msg| Message::RevenueCategories(first_id.clone(), msg))
                 } else {
+                    // No selected revenue category and the collection is empty: show the empty state.
                     container(
                         column![
                             text("Revenue Categories")
                                 .size(24)
                                 .width(Length::Fill),
                             vertical_space(),
-                            if self.revenue_categories.is_empty() {
-                                column![
-                                    text("No revenue categories have been created yet.")
-                                        .width(Length::Fill),
-                                    vertical_space(),
-                                    button("Create New Revenue Category")
-                                        .on_press(Message::RevenueCategories(-1, revenue_categories::Message::CreateNew))
-                                        .style(button::primary)
-                                ]
-                            } else {
-                                column![
-                                    button("Create New Revenue Category")
-                                        .on_press(Message::RevenueCategories(-1, revenue_categories::Message::CreateNew))
-                                        .style(button::primary),
-                                    vertical_space()
-                                ]
-                            }
+                            text("No revenue categories have been created yet.")
+                                .width(Length::Fill),
+                            vertical_space(),
+                            button("Create New Revenue Category")
+                                .on_press(Message::RevenueCategories(-1, revenue_categories::Message::CreateNew))
+                                .style(button::primary)
                         ]
                         .spacing(10)
                         .max_width(500)
@@ -1376,42 +1332,34 @@ impl MenuBuilder {
             }
             Screen::ReportCategories(mode) => {
                 if let Some(id) = self.selected_report_category_id {
-                    let report_category = if let Some(draft_id) = self.draft_report_category_id {
-                        if draft_id == id {
-                            &self.draft_report_category
-                        } else {
-                            &self.report_categories[&id]
-                        }
+                    // Use the draft if its ID matches; otherwise, use the stored report category.
+                    let report_category = if self.draft_report_category_id == Some(id) {
+                        &self.draft_report_category
                     } else {
                         &self.report_categories[&id]
                     };
-     
+                
                     report_categories::view(report_category, mode, &self.report_categories)
                         .map(move |msg| Message::ReportCategories(id, msg))
+                } else if let Some((&first_id, first_report_category)) = self.report_categories.iter().next() {
+                    // No selected report category, but there is at least one in the collection:
+                    // Show its view.
+                    report_categories::view(first_report_category, mode, &self.report_categories)
+                        .map(move |msg| Message::ReportCategories(first_id.clone(), msg))
                 } else {
+                    // No selected report category and the collection is empty; show the empty state.
                     container(
                         column![
                             text("Report Categories")
                                 .size(24)
                                 .width(Length::Fill),
                             vertical_space(),
-                            if self.report_categories.is_empty() {
-                                column![
-                                    text("No report categories have been created yet.")
-                                        .width(Length::Fill),
-                                    vertical_space(),
-                                    button("Create New Report Category")
-                                        .on_press(Message::ReportCategories(-1, report_categories::Message::CreateNew))
-                                        .style(button::primary)
-                                ]
-                            } else {
-                                column![
-                                    button("Create New Report Category")
-                                        .on_press(Message::ReportCategories(-1, report_categories::Message::CreateNew))
-                                        .style(button::primary),
-                                    vertical_space()
-                                ]
-                            }
+                            text("No report categories have been created yet.")
+                                .width(Length::Fill),
+                            vertical_space(),
+                            button("Create New Report Category")
+                                .on_press(Message::ReportCategories(-1, report_categories::Message::CreateNew))
+                                .style(button::primary)
                         ]
                         .spacing(10)
                         .max_width(500)
@@ -1426,42 +1374,33 @@ impl MenuBuilder {
             }
             Screen::ChoiceGroups(mode) => {
                 if let Some(id) = self.selected_choice_group_id {
-                    let choice_group = if let Some(draft_id) = self.draft_choice_group_id {
-                        if draft_id == id {
-                            &self.draft_choice_group
-                        } else {
-                            &self.choice_groups[&id]
-                        }
+                    // Use the draft if its ID matches; otherwise, use the stored choice group.
+                    let choice_group = if self.draft_choice_group_id == Some(id) {
+                        &self.draft_choice_group
                     } else {
                         &self.choice_groups[&id]
                     };
-     
+                
                     choice_groups::view(choice_group, mode, &self.choice_groups)
                         .map(move |msg| Message::ChoiceGroups(id, msg))
+                } else if let Some((&first_id, first_choice_group)) = self.choice_groups.iter().next() {
+                    // No selected choice group, but there is at least one available: show its view.
+                    choice_groups::view(first_choice_group, mode, &self.choice_groups)
+                        .map(move |msg| Message::ChoiceGroups(first_id.clone(), msg))
                 } else {
+                    // No selected choice group and no choice groups available: show the empty state.
                     container(
                         column![
                             text("Choice Groups")
                                 .size(24)
                                 .width(Length::Fill),
                             vertical_space(),
-                            if self.choice_groups.is_empty() {
-                                column![
-                                    text("No choice groups have been created yet.")
-                                        .width(Length::Fill),
-                                    vertical_space(),
-                                    button("Create New Choice Group")
-                                        .on_press(Message::ChoiceGroups(-1, choice_groups::Message::CreateNew))
-                                        .style(button::primary)
-                                ]
-                            } else {
-                                column![
-                                    button("Create New Choice Group")
-                                        .on_press(Message::ChoiceGroups(-1, choice_groups::Message::CreateNew))
-                                        .style(button::primary),
-                                    vertical_space()
-                                ]
-                            }
+                            text("No choice groups have been created yet.")
+                                .width(Length::Fill),
+                            vertical_space(),
+                            button("Create New Choice Group")
+                                .on_press(Message::ChoiceGroups(-1, choice_groups::Message::CreateNew))
+                                .style(button::primary)
                         ]
                         .spacing(10)
                         .max_width(500)
@@ -1476,42 +1415,36 @@ impl MenuBuilder {
             }
             Screen::PrinterLogicals(mode) => {
                 if let Some(id) = self.selected_printer_id {
-                    let printer = if let Some(draft_id) = self.draft_printer_id {
-                        if draft_id == id {
-                            &self.draft_printer
-                        } else {
-                            &self.printer_logicals[&id]
-                        }
+                    // Use the draft if its ID matches; otherwise, use the stored printer logical.
+                    let printer = if self.draft_printer_id == Some(id) {
+                        &self.draft_printer
                     } else {
                         &self.printer_logicals[&id]
                     };
-     
+                
                     printer_logicals::view(printer, mode, &self.printer_logicals)
                         .map(move |msg| Message::PrinterLogicals(id, msg))
+                } else if let Some((&first_id, first_printer)) = self.printer_logicals.iter().next() {
+                    // No selected printer, but there is at least one available: show its view.
+                    printer_logicals::view(first_printer, mode, &self.printer_logicals)
+                        .map(move |msg| Message::PrinterLogicals(first_id.clone(), msg))
                 } else {
+                    // No selected printer and no printer logicals available: show the empty state.
                     container(
                         column![
                             text("Printer Logicals")
                                 .size(24)
                                 .width(Length::Fill),
                             vertical_space(),
-                            if self.printer_logicals.is_empty() {
-                                column![
-                                    text("No printer logicals have been created yet.")
-                                        .width(Length::Fill),
-                                    vertical_space(),
-                                    button("Create New Printer Logical")
-                                        .on_press(Message::PrinterLogicals(-1, printer_logicals::Message::CreateNew))
-                                        .style(button::primary)
-                                ]
-                            } else {
-                                column![
-                                    button("Create New Printer Logical")
-                                        .on_press(Message::PrinterLogicals(-1, printer_logicals::Message::CreateNew))
-                                        .style(button::primary),
-                                    vertical_space(),
-                                ]
-                            }
+                            text("No printer logicals have been created yet.")
+                                .width(Length::Fill),
+                            vertical_space(),
+                            button("Create New Printer Logical")
+                                .on_press(Message::PrinterLogicals(
+                                    -1,
+                                    printer_logicals::Message::CreateNew,
+                                ))
+                                .style(button::primary)
                         ]
                         .spacing(10)
                         .max_width(500)

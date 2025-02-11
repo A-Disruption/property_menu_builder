@@ -83,9 +83,9 @@ pub fn view<'a>(
     container(
         column![
             row![
-                button("←")
-                    .width(40)
-                    .on_press(Message::Back),
+//                button("←")
+//                    .width(40)
+//                    .on_press(Message::Back),
                 text("Settings").size(24),
             ].spacing(10),
             
