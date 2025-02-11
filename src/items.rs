@@ -8,9 +8,9 @@ use crate::data_types::{
 };
 use crate::Action;
 use iced::Element;
+use serde::{Serialize, Deserialize};
 use iced::widget::{button, container, column, row, text};
 use rust_decimal::Decimal;
- // For fuzzy matching
 use crate::{
     tax_groups::TaxGroup,
     security_levels::SecurityLevel,
@@ -228,7 +228,7 @@ impl EditState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Item {
     pub id: EntityId,
     pub name: String,

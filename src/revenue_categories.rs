@@ -7,6 +7,7 @@ use crate::data_types::{
     ValidationError,
 };
 use crate::Action;
+use serde::{Serialize, Deserialize};
 use iced::Element;
 use iced::widget::{button, container, column, row, text};
 use std::collections::HashMap;
@@ -74,7 +75,7 @@ impl EditState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RevenueCategory {
     pub id: EntityId,
     pub name: String,

@@ -8,6 +8,7 @@ use crate::data_types::{
     ValidationError
 };
 use crate::Action;
+use serde::{Serialize, Deserialize};
 use iced::Element;
 use iced::widget::{button, text, container, row, column};
 use std::collections::HashMap;
@@ -87,7 +88,7 @@ impl EditState {
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PriceLevelType {
     Enterprise,
     Store
@@ -108,7 +109,7 @@ impl std::fmt::Display for PriceLevelType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PriceLevel {
     pub id: EntityId,
     pub name: String,

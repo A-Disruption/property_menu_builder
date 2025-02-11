@@ -5,9 +5,11 @@ use iced::widget::{
     button, column, container, row, scrollable, text, vertical_space
 };
 use iced::{Element, Length, Size, Subscription, Task};
+use persistence::FileManager;
 use std::collections::HashMap;
 
 mod action;
+mod settings;
 mod items;
 mod item_groups;
 mod price_levels;
@@ -19,6 +21,7 @@ mod report_categories;
 mod choice_groups;
 mod printer_logicals;
 mod data_types;
+mod persistence;
 
 use crate::{
     items::{Item, ViewContext},
@@ -48,6 +51,7 @@ fn main() -> iced::Result {
 
 #[derive(Debug, Clone)]
 pub enum Screen {
+    Settings(settings::Settings),
     Items(items::Mode),
     ItemGroups(item_groups::Mode),
     PriceLevels(price_levels::Mode),
@@ -62,22 +66,24 @@ pub enum Screen {
 
 #[derive(Debug, Clone)]
 pub enum Message {
-   PrinterLogicals(EntityId, printer_logicals::Message),
-   Items(EntityId, items::Message),
-   ItemGroups(EntityId, item_groups::Message), 
-   PriceLevels(EntityId, price_levels::Message),
-   ProductClasses(EntityId, product_classes::Message),
-   TaxGroups(EntityId, tax_groups::Message),
-   SecurityLevels(EntityId, security_levels::Message),
-   RevenueCategories(EntityId, revenue_categories::Message),
-   ReportCategories(EntityId, report_categories::Message),
-   ChoiceGroups(EntityId, choice_groups::Message),
-   Navigate(Screen),
-   HotKey(HotKey)
+    Settings(settings::Message),
+    PrinterLogicals(EntityId, printer_logicals::Message),
+    Items(EntityId, items::Message),
+    ItemGroups(EntityId, item_groups::Message), 
+    PriceLevels(EntityId, price_levels::Message),
+    ProductClasses(EntityId, product_classes::Message),
+    TaxGroups(EntityId, tax_groups::Message),
+    SecurityLevels(EntityId, security_levels::Message),
+    RevenueCategories(EntityId, revenue_categories::Message),
+    ReportCategories(EntityId, report_categories::Message),
+    ChoiceGroups(EntityId, choice_groups::Message),
+    Navigate(Screen),
+    HotKey(HotKey)
 }
 
 #[derive(Debug)]
 pub enum Operation {
+    Settings(settings::Operation),
     Items(EntityId, items::Operation),
     ItemGroups(EntityId, item_groups::Operation),
     PriceLevels(EntityId, price_levels::Operation),
@@ -92,6 +98,9 @@ pub enum Operation {
 
 pub struct MenuBuilder {
     screen: Screen,
+    settings: settings::Settings,
+    file_manager: persistence::FileManager,
+    error_message: Option<String>,
     // Items
     items: HashMap<EntityId, Item>,
     draft_item: Item,
@@ -166,8 +175,19 @@ pub struct MenuBuilder {
  
  impl Default for MenuBuilder {
     fn default() -> Self {
+        // Initialize file manager first
+        let file_manager = FileManager::new()
+            .expect("Failed to initialize file manager");
+        
+        // Ensure data directory exists
+        file_manager.ensure_data_dir()
+            .expect("Failed to create data directory");
+
         Self {
             screen: Screen::Items(items::Mode::View),
+            settings: settings::Settings::default(),
+            error_message: None,
+            file_manager: file_manager,
 
             // Items
             items: HashMap::new(),
@@ -253,14 +273,30 @@ impl MenuBuilder {
     }
 
     fn new() -> (Self, Task<Message>) {
-         (
-            MenuBuilder::default(),
-            Task::none(),
-        )
+        
+        let mut menu_builder = MenuBuilder::default();
+
+        // Try to load state from file
+        match menu_builder.load_state() {
+            Ok(()) => {
+                println!("Successfully loaded saved data");
+                menu_builder.error_message = None;
+            }
+            Err(e) => {
+                eprintln!("Failed to load state: {}", e);
+                menu_builder.error_message = Some(format!("Failed to load saved data: {}", e));
+            }
+        }
+
+        (menu_builder, Task::none())
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Settings(msg) => {
+                Message::Settings(msg);
+                Task::none()
+            }
             Message::Items(id, msg) => {
                 let cloned_items = self.items.clone();
 
@@ -951,6 +987,15 @@ impl MenuBuilder {
                     .on_press(Message::Navigate(Screen::PrinterLogicals(printer_logicals::Mode::View)))
                     .width(Length::Fill)
                     .style(button::secondary),
+
+                vertical_space(),
+                row![
+                    iced::widget::horizontal_space(),
+                    button(text("\u{2699}"))  // Cog icon using Unicode
+                        .on_press(Message::Navigate(Screen::Settings(self.settings.clone())))
+                        .width(Length::Fixed(40.0))
+                        .style(button::secondary),
+                ]
             ]
             .spacing(5)
             .padding(10)
@@ -960,6 +1005,9 @@ impl MenuBuilder {
         .style(container::rounded_box);
 
         let content = match &self.screen {
+            Screen::Settings(settings) => {
+                settings::view(settings, self.error_message.as_deref()).map(Message::Settings)
+            },
             Screen::Items(mode) => {
                 if let Some(id) = self.selected_item_id {
                     let item = if id < 0 {  // Negative ID indicates new item
@@ -1490,6 +1538,31 @@ impl MenuBuilder {
 
     fn perform(&mut self, operation: Operation) -> Task<Message> {
         match operation {
+            Operation::Settings(op) => {
+                match op {
+                    settings::Operation::Save(new_settings) => {
+                        self.settings = new_settings;
+
+                        if let Err(e) = self.save_state() {
+                            self.error_message = Some(e);
+                        } else {
+                            self.error_message = None;
+                        }
+
+                        self.screen = Screen::Settings(self.settings.clone());
+                        Task::none()
+                    }
+                    settings::Operation::Back => {
+                        self.screen = Screen::Items(items::Mode::View);
+                        self.error_message = None;
+                        Task::none()
+                    }
+                    settings::Operation::ShowError(error) => {
+                        self.error_message = Some(error);
+                        Task::none()
+                    }
+                }
+            }
             Operation::Items(id, op) => {
                 match op {
                     items::Operation::Save(mut item) => {
@@ -1510,6 +1583,13 @@ impl MenuBuilder {
                             self.selected_item_id = Some(item.id);
                         }
                         self.screen = Screen::Items(items::Mode::View);
+
+                        if self.settings.auto_save {
+                            if let Err(e) = self.save_state() {
+                                self.handle_save_error(e);
+                            }
+                        }
+
                         Task::none()
                     }
                     items::Operation::StartEdit(id) => {
@@ -1732,7 +1812,7 @@ impl MenuBuilder {
 
                         self.draft_security_level = level;
                         self.draft_security_level_id = Some(-1);
-                        self.selected_tax_group_id = Some(-1);
+                        self.selected_security_level_id = Some(-1);
                         self.screen = Screen::SecurityLevels(security_levels::Mode::Edit);
                         Task::none()
                     },
@@ -2113,6 +2193,68 @@ impl MenuBuilder {
             },
 
         }
+    }
+
+    pub fn save_state(&self) -> Result<(), String> {
+        let state = persistence::AppState {
+            items: self.items.values().cloned().collect(),
+            item_groups: self.item_groups.values().cloned().collect(),
+            price_levels: self.price_levels.values().cloned().collect(),
+            product_classes: self.product_classes.values().cloned().collect(),
+            tax_groups: self.tax_groups.values().cloned().collect(),
+            security_levels: self.security_levels.values().cloned().collect(),
+            revenue_categories: self.revenue_categories.values().cloned().collect(),
+            report_categories: self.report_categories.values().cloned().collect(),
+            choice_groups: self.choice_groups.values().cloned().collect(),
+            printer_logicals: self.printer_logicals.values().cloned().collect(),
+            settings: self.settings.clone(),
+        };
+
+        if self.settings.create_backups {
+            self.file_manager.create_backup(std::path::Path::new(&self.settings.file_path))?;
+        }
+
+        persistence::save_to_file(&state, &self.settings.file_path)
+    }
+
+    fn handle_save_error(&mut self, error: String) {
+        self.error_message = Some(error);
+        // Optionally switch to settings screen to show error
+        self.screen = Screen::Settings(self.settings.clone());
+    }
+
+    pub fn load_state(&mut self) -> Result<(), String> {
+        // Check if file exists
+        let path = std::path::Path::new(&self.settings.file_path);
+        if !path.exists() {
+            println!("No saved data file found at: {}", self.settings.file_path);
+            return Ok(());  // Not an error if file doesn't exist yet
+        }
+
+        let state = persistence::load_from_file(&self.settings.file_path)?;
+
+        // Convert Vec to HashMap using id as key
+        self.items = state.items.into_iter().map(|i| (i.id, i)).collect();
+        self.item_groups = state.item_groups.into_iter().map(|i| (i.id, i)).collect();
+        self.price_levels = state.price_levels.into_iter().map(|i| (i.id, i)).collect();
+        self.product_classes = state.product_classes.into_iter().map(|i| (i.id, i)).collect();
+        self.tax_groups = state.tax_groups.into_iter().map(|i| (i.id, i)).collect();
+        self.security_levels = state.security_levels.into_iter().map(|i| (i.id, i)).collect();
+        self.revenue_categories = state.revenue_categories.into_iter().map(|i| (i.id, i)).collect();
+        self.report_categories = state.report_categories.into_iter().map(|i| (i.id, i)).collect();
+        self.choice_groups = state.choice_groups.into_iter().map(|i| (i.id, i)).collect();
+        self.printer_logicals = state.printer_logicals.into_iter().map(|i| (i.id, i)).collect();
+        self.settings = state.settings.clone();
+
+        // Only update settings if they exist in the loaded state
+        if state.settings.file_path.is_empty() {
+            // Keep current settings if none in file
+            println!("No settings found in save file, keeping current settings");
+        } else {
+            self.settings = state.settings;
+        }
+
+        Ok(())
     }
 
     fn subscription(&self) -> Subscription<Message> {

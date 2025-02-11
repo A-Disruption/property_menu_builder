@@ -7,6 +7,7 @@ use crate::data_types::{
     Validatable,
 };
 use crate::Action;
+use serde::{Serialize, Deserialize};
 use iced::Element;
 use iced::widget::{row, column, text, button, container};
 use std::ops::Range;
@@ -93,7 +94,7 @@ impl EditState {
     }
  }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ItemGroup {
     pub id: EntityId,
     pub name: String,

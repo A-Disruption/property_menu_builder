@@ -8,3 +8,7 @@ iced = { version = "0.13.1", features = ["advanced"] }
 rust_decimal = "1.36"
 strsim = "0.11.1"
 rangemap = "1.5"
+serde = { version="1.0", features = ["derive"] }
+ron = "0.8"
+directories = "6.0.0"
+chrono = "0.4"
