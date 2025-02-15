@@ -3,7 +3,7 @@ use iced::widget::{
     horizontal_space,
 };
 use iced::{Element, Length};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::icon;
 use crate::HotKey;
 use super::ProductClass;
@@ -21,7 +21,7 @@ pub enum Message {
 pub fn view<'a>(
     product_class: &'a ProductClass,
     state: super::EditState,
-    all_classes: &'a HashMap<EntityId, ProductClass>
+    all_classes: &'a BTreeMap<EntityId, ProductClass>
 ) -> Element<'a, Message> {
 
     let header = row![

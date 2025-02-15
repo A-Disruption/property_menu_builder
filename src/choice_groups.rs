@@ -10,7 +10,7 @@ use crate::icon;
 use serde::{Serialize, Deserialize};
 use iced::widget::{button, row, column, container, text};
 use iced::Element;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -187,7 +187,7 @@ pub fn update(
 pub fn view<'a>(
     choice_group: &'a ChoiceGroup, 
     mode: &'a Mode,
-    all_groups: &'a HashMap<EntityId, ChoiceGroup>
+    all_groups: &'a BTreeMap<EntityId, ChoiceGroup>
 ) -> Element<'a, Message> {
 
     let groups_list = column(
@@ -244,7 +244,7 @@ pub fn view<'a>(
     .into()
 }
 
-fn get_next_id(groups: &HashMap<EntityId, ChoiceGroup>) -> EntityId {
+fn get_next_id(groups: &BTreeMap<EntityId, ChoiceGroup>) -> EntityId {
     groups
         .keys()
         .max()

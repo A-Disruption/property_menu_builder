@@ -8,7 +8,7 @@ use iced::widget::{
 use iced::{Element, Length, Size, Subscription, Task};
 //use iced_fontello;
 use persistence::FileManager;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 mod action;
 mod settings;
@@ -107,70 +107,70 @@ pub struct MenuBuilder {
     file_manager: persistence::FileManager,
     error_message: Option<String>,
     // Items
-    items: HashMap<EntityId, Item>,
+    items: BTreeMap<EntityId, Item>,
     draft_item: Item,
     draft_item_id: Option<EntityId>,
     selected_item_id: Option<EntityId>,
     item_edit_state: items::EditState,
  
     // Item Groups 
-    item_groups: HashMap<EntityId, ItemGroup>,
+    item_groups: BTreeMap<EntityId, ItemGroup>,
     draft_item_group: ItemGroup,
     draft_item_group_id: Option<EntityId>,
     selected_item_group_id: Option<EntityId>,
     item_group_edit_state: item_groups::EditState,
  
     // Price Levels
-    price_levels: HashMap<EntityId, PriceLevel>,
+    price_levels: BTreeMap<EntityId, PriceLevel>,
     draft_price_level: PriceLevel,
     draft_price_level_id: Option<EntityId>,
     selected_price_level_id: Option<EntityId>,
     price_level_edit_state: price_levels::EditState,
  
     // Product Classes
-    product_classes: HashMap<EntityId, ProductClass>,
+    product_classes: BTreeMap<EntityId, ProductClass>,
     draft_product_class: ProductClass,
     draft_product_class_id: Option<EntityId>,
     selected_product_class_id: Option<EntityId>,
     product_class_edit_state: product_classes::EditState,
  
     // Tax Groups
-    tax_groups: HashMap<EntityId, TaxGroup>,
+    tax_groups: BTreeMap<EntityId, TaxGroup>,
     draft_tax_group: TaxGroup,
     draft_tax_group_id: Option<EntityId>,
     selected_tax_group_id: Option<EntityId>,
     tax_group_edit_state: tax_groups::EditState,
  
     // Security Levels
-    security_levels: HashMap<EntityId, SecurityLevel>,
+    security_levels: BTreeMap<EntityId, SecurityLevel>,
     draft_security_level: SecurityLevel,
     draft_security_level_id: Option<EntityId>,
     selected_security_level_id: Option<EntityId>,
     security_level_edit_state: security_levels::EditState,
  
     // Revenue Categories
-    revenue_categories: HashMap<EntityId, RevenueCategory>,
+    revenue_categories: BTreeMap<EntityId, RevenueCategory>,
     draft_revenue_category: RevenueCategory,
     draft_revenue_category_id: Option<EntityId>,
     selected_revenue_category_id: Option<EntityId>,
     revenue_category_edit_state: revenue_categories::EditState,
  
     // Report Categories
-    report_categories: HashMap<EntityId, ReportCategory>,
+    report_categories: BTreeMap<EntityId, ReportCategory>,
     draft_report_category: ReportCategory,
     draft_report_category_id: Option<EntityId>,
     selected_report_category_id: Option<EntityId>,
     report_category_edit_state: report_categories::EditState,
  
     // Choice Groups
-    choice_groups: HashMap<EntityId, ChoiceGroup>,
+    choice_groups: BTreeMap<EntityId, ChoiceGroup>,
     draft_choice_group: ChoiceGroup,
     draft_choice_group_id: Option<EntityId>,
     selected_choice_group_id: Option<EntityId>,
     choice_group_edit_state: choice_groups::EditState,
  
     // Printer Logicals
-    printer_logicals: HashMap<EntityId, PrinterLogical>,
+    printer_logicals: BTreeMap<EntityId, PrinterLogical>,
     draft_printer: PrinterLogical,
     draft_printer_id: Option<EntityId>,
     selected_printer_id: Option<EntityId>,
@@ -196,70 +196,70 @@ pub struct MenuBuilder {
             file_manager: file_manager,
 
             // Items
-            items: HashMap::new(),
+            items: BTreeMap::new(),
             draft_item: Item::default(),
             draft_item_id: None,
             selected_item_id: None,
             item_edit_state: items::EditState::default(),
  
             // Item Groups
-            item_groups: HashMap::new(),
+            item_groups: BTreeMap::new(),
             draft_item_group: ItemGroup::default(),
             draft_item_group_id: None,
             selected_item_group_id: None,
             item_group_edit_state: item_groups::EditState::default(),
  
             // Price Levels 
-            price_levels: HashMap::new(),
+            price_levels: BTreeMap::new(),
             draft_price_level: PriceLevel::default(),
             draft_price_level_id: None,
             selected_price_level_id: None,
             price_level_edit_state: price_levels::EditState::default(),
  
             // Product Classes
-            product_classes: HashMap::new(),
+            product_classes: BTreeMap::new(),
             draft_product_class: ProductClass::default(),
             draft_product_class_id: None,
             selected_product_class_id: None,
             product_class_edit_state: product_classes::EditState::default(),
  
             // Tax Groups
-            tax_groups: HashMap::new(),
+            tax_groups: BTreeMap::new(),
             draft_tax_group: TaxGroup::default(),
             draft_tax_group_id: None,
             selected_tax_group_id: None,
             tax_group_edit_state: tax_groups::EditState::default(),
  
             // Security Levels
-            security_levels: HashMap::new(),
+            security_levels: BTreeMap::new(),
             draft_security_level: SecurityLevel::default(),
             draft_security_level_id: None,
             selected_security_level_id: None,
             security_level_edit_state: security_levels::EditState::default(),
  
             // Revenue Categories
-            revenue_categories: HashMap::new(),
+            revenue_categories: BTreeMap::new(),
             draft_revenue_category: RevenueCategory::default(),
             draft_revenue_category_id: None,
             selected_revenue_category_id: None,
             revenue_category_edit_state: revenue_categories::EditState::default(),
  
             // Report Categories
-            report_categories: HashMap::new(),
+            report_categories: BTreeMap::new(),
             draft_report_category: ReportCategory::default(),
             draft_report_category_id: None,
             selected_report_category_id: None,
             report_category_edit_state: report_categories::EditState::default(),
  
             // Choice Groups
-            choice_groups: HashMap::new(),
+            choice_groups: BTreeMap::new(),
             draft_choice_group: ChoiceGroup::default(),
             draft_choice_group_id: None,
             selected_choice_group_id: None,
             choice_group_edit_state: choice_groups::EditState::default(),
  
             // Printer Logicals
-            printer_logicals: HashMap::new(),
+            printer_logicals: BTreeMap::new(),
             draft_printer: PrinterLogical::default(),
             draft_printer_id: None,
             selected_printer_id: None,
@@ -395,7 +395,7 @@ impl MenuBuilder {
                         available_price_levels,
                     );
 
-                    let other_items: HashMap<EntityId, &Item> = cloned_items
+                    let other_items: BTreeMap<EntityId, &Item> = cloned_items
                         .iter()
                         .filter(|(&item_id, _)| item_id != id)
                         .map(|(&k, v)| (k, v))
@@ -2295,7 +2295,7 @@ impl MenuBuilder {
 
         let state = persistence::load_from_file(&self.settings.file_path)?;
 
-        // Convert Vec to HashMap using id as key
+        // Convert Vec to BTreeMap using id as key
         self.items = state.items.into_iter().map(|i| (i.id, i)).collect();
         self.item_groups = state.item_groups.into_iter().map(|i| (i.id, i)).collect();
         self.price_levels = state.price_levels.into_iter().map(|i| (i.id, i)).collect();

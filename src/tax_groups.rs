@@ -11,7 +11,7 @@ use crate::icon;
 use serde::{Serialize, Deserialize};
 use iced::Element;
 use iced::widget::{button, container, column, row, text};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use rust_decimal::Decimal;
 use std::fmt;
 
@@ -223,7 +223,7 @@ pub fn update(
 pub fn view<'a>(
     tax_group: &'a TaxGroup, 
     mode: &'a Mode,
-    all_groups: &'a HashMap<EntityId, TaxGroup>
+    all_groups: &'a BTreeMap<EntityId, TaxGroup>
 ) -> Element<'a, Message> {
 
     let groups_list = column(

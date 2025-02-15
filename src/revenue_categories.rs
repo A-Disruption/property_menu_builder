@@ -11,7 +11,7 @@ use crate::icon;
 use serde::{Serialize, Deserialize};
 use iced::Element;
 use iced::widget::{button, container, column, row, text};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -178,7 +178,7 @@ pub fn update(
 pub fn view<'a>(
     revenue_category: &'a RevenueCategory, 
     mode: &'a Mode,
-    all_categories: &'a HashMap<EntityId, RevenueCategory>
+    all_categories: &'a BTreeMap<EntityId, RevenueCategory>
 ) -> Element<'a, Message> {
 
     let category_list = column(

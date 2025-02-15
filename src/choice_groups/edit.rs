@@ -5,7 +5,7 @@ use iced::widget::{
 use iced::{Element, Length};
 use crate::data_types::EntityId;
 use crate::icon;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::HotKey;
 use super::ChoiceGroup;
 
@@ -20,7 +20,7 @@ pub enum Message {
 pub fn view<'a>(
     choice_group: &'a ChoiceGroup,
     state: super::EditState,
-    all_groups: &'a HashMap<EntityId, ChoiceGroup>
+    all_groups: &'a BTreeMap<EntityId, ChoiceGroup>
 ) -> Element<'a, Message> {
 
     let header = row![

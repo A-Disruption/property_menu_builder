@@ -4,7 +4,7 @@ use iced::widget::{
 };
 use iced::{Element, Length};
 use crate::icon;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::data_types::EntityId;
 use super::{PriceLevel, PriceLevelType};
 
@@ -21,7 +21,7 @@ pub enum Message {
 pub fn view<'a>(
     price_level: &'a PriceLevel,
     state: super::EditState,
-    all_levels: &'a HashMap<EntityId, PriceLevel>
+    all_levels: &'a BTreeMap<EntityId, PriceLevel>
 ) -> Element<'a, Message> {
 
     let header = row![

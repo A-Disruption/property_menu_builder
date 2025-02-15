@@ -12,7 +12,7 @@ use crate::icon;
 use serde::{Serialize, Deserialize};
 use iced::Element;
 use iced::widget::{button, text, container, row, column};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use rust_decimal::Decimal;
 
 #[derive(Debug, Clone)]
@@ -238,7 +238,7 @@ pub fn update(
 pub fn view<'a>(
     price_level: &'a PriceLevel, 
     mode: &'a Mode,
-    all_levels: &'a HashMap<EntityId, PriceLevel>
+    all_levels: &'a BTreeMap<EntityId, PriceLevel>
 ) -> Element<'a, Message> {
 
     let levels_list = column(

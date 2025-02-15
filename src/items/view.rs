@@ -3,7 +3,7 @@ use iced::widget::{
     horizontal_space,
 };
 use iced::{Alignment, Element, Length};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::HotKey;
 use crate::{
     items::{Item, EntityId},
@@ -29,15 +29,15 @@ pub enum Message {
 
 pub fn view<'a>(
     item: &'a Item,
-    item_groups: &'a HashMap<EntityId, ItemGroup>,
-    tax_groups: &'a HashMap<EntityId, TaxGroup>,
-    security_levels: &'a HashMap<EntityId, SecurityLevel>,
-    revenue_categories: &'a HashMap<EntityId, RevenueCategory>,
-    report_categories: &'a HashMap<EntityId, ReportCategory>,
-    product_classes: &'a HashMap<EntityId, ProductClass>,
-    choice_groups: &'a HashMap<EntityId, ChoiceGroup>,
-    printer_logicals: &'a HashMap<EntityId, PrinterLogical>,
-    price_levels: &'a HashMap<EntityId, PriceLevel>,
+    item_groups: &'a BTreeMap<EntityId, ItemGroup>,
+    tax_groups: &'a BTreeMap<EntityId, TaxGroup>,
+    security_levels: &'a BTreeMap<EntityId, SecurityLevel>,
+    revenue_categories: &'a BTreeMap<EntityId, RevenueCategory>,
+    report_categories: &'a BTreeMap<EntityId, ReportCategory>,
+    product_classes: &'a BTreeMap<EntityId, ProductClass>,
+    choice_groups: &'a BTreeMap<EntityId, ChoiceGroup>,
+    printer_logicals: &'a BTreeMap<EntityId, PrinterLogical>,
+    price_levels: &'a BTreeMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
     let header = row![
         horizontal_space().width(10),

@@ -11,7 +11,7 @@ use crate::icon;
 use serde::{Serialize, Deserialize};
 use iced::Element;
 use iced::widget::{button, container, column, row, text};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -179,7 +179,7 @@ pub fn update(
 pub fn view<'a>(
     security_level: &'a SecurityLevel, 
     mode: &'a Mode,
-    all_levels: &'a HashMap<EntityId, SecurityLevel>
+    all_levels: &'a BTreeMap<EntityId, SecurityLevel>
 ) -> Element<'a, Message> {
     let levels_list = column(
         all_levels

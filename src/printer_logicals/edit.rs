@@ -3,7 +3,7 @@ use iced::widget::{
     horizontal_space,
 };
 use iced::{Element, Length};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::HotKey;
 use crate::icon;
@@ -22,7 +22,7 @@ pub enum Message {
 pub fn view<'a>(
     printer: &'a PrinterLogical,
     state: super::EditState,
-    all_printers: &'a HashMap<EntityId, PrinterLogical>
+    all_printers: &'a BTreeMap<EntityId, PrinterLogical>
 ) -> Element<'a, Message> {
 
     let header = row![

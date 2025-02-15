@@ -1,7 +1,7 @@
 pub mod edit;
 pub mod view;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::data_types::{
     EntityId,
     ValidationError,
@@ -821,17 +821,17 @@ pub fn update(
 pub fn view<'a>(
     item: &'a Item, 
     mode: &'a Mode,
-    items: &'a HashMap<EntityId, Item>,
+    items: &'a BTreeMap<EntityId, Item>,
     item_edit_state: &'a EditState,
-    item_groups: &'a HashMap<EntityId, ItemGroup>,
-    tax_groups: &'a HashMap<EntityId, TaxGroup>,
-    security_levels: &'a HashMap<EntityId, SecurityLevel>,
-    revenue_categories: &'a HashMap<EntityId, RevenueCategory>,
-    report_categories: &'a HashMap<EntityId, ReportCategory>,
-    product_classes: &'a HashMap<EntityId, ProductClass>,
-    choice_groups: &'a HashMap<EntityId, ChoiceGroup>,
-    printer_logicals: &'a HashMap<EntityId, PrinterLogical>,
-    price_levels: &'a HashMap<EntityId, PriceLevel>,
+    item_groups: &'a BTreeMap<EntityId, ItemGroup>,
+    tax_groups: &'a BTreeMap<EntityId, TaxGroup>,
+    security_levels: &'a BTreeMap<EntityId, SecurityLevel>,
+    revenue_categories: &'a BTreeMap<EntityId, RevenueCategory>,
+    report_categories: &'a BTreeMap<EntityId, ReportCategory>,
+    product_classes: &'a BTreeMap<EntityId, ProductClass>,
+    choice_groups: &'a BTreeMap<EntityId, ChoiceGroup>,
+    printer_logicals: &'a BTreeMap<EntityId, PrinterLogical>,
+    price_levels: &'a BTreeMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
 
     let items_list = column(
@@ -908,14 +908,14 @@ pub fn view<'a>(
 }
 
 pub struct ViewContext {
-    pub available_items: HashMap<EntityId, Item>,
-    pub available_item_groups: HashMap<EntityId, ItemGroup>,
-    pub available_tax_groups: HashMap<EntityId, TaxGroup>,
-    pub available_security_levels: HashMap<EntityId, SecurityLevel>,
-    pub available_revenue_categories: HashMap<EntityId, RevenueCategory>,
-    pub available_report_categories: HashMap<EntityId, ReportCategory>,
-    pub available_product_classes: HashMap<EntityId, ProductClass>,
-    pub available_choice_groups: HashMap<EntityId, ChoiceGroup>,
-    pub available_printer_logicals: HashMap<EntityId, PrinterLogical>,
-    pub available_price_levels: HashMap<EntityId, PriceLevel>,
+    pub available_items: BTreeMap<EntityId, Item>,
+    pub available_item_groups: BTreeMap<EntityId, ItemGroup>,
+    pub available_tax_groups: BTreeMap<EntityId, TaxGroup>,
+    pub available_security_levels: BTreeMap<EntityId, SecurityLevel>,
+    pub available_revenue_categories: BTreeMap<EntityId, RevenueCategory>,
+    pub available_report_categories: BTreeMap<EntityId, ReportCategory>,
+    pub available_product_classes: BTreeMap<EntityId, ProductClass>,
+    pub available_choice_groups: BTreeMap<EntityId, ChoiceGroup>,
+    pub available_printer_logicals: BTreeMap<EntityId, PrinterLogical>,
+    pub available_price_levels: BTreeMap<EntityId, PriceLevel>,
 }

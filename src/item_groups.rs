@@ -12,7 +12,7 @@ use serde::{Serialize, Deserialize};
 use iced::Element;
 use iced::widget::{row, column, text, button, container};
 use std::ops::Range;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -236,7 +236,7 @@ pub fn update(
  pub fn view<'a>(
     item_group: &'a ItemGroup, 
     mode: &'a Mode,
-    all_groups: &'a HashMap<EntityId, ItemGroup>
+    all_groups: &'a BTreeMap<EntityId, ItemGroup>
 ) -> Element<'a, Message> {
 
     let groups_list = column(

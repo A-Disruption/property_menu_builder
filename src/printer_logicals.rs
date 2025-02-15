@@ -11,7 +11,7 @@ use crate::icon;
 use serde::{Serialize, Deserialize};
 use iced::Element;
 use iced::widget::{button, column, container, row, text};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -179,7 +179,7 @@ pub fn update(
 pub fn view<'a>(
     printer: &'a PrinterLogical, 
     mode: &'a Mode,
-    all_printers: &'a HashMap<EntityId, PrinterLogical>
+    all_printers: &'a BTreeMap<EntityId, PrinterLogical>
 ) -> Element<'a, Message> {
 
     let printer_list = column(

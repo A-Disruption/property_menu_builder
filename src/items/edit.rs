@@ -3,7 +3,7 @@ use iced::widget::{
     text, text_input, horizontal_space, vertical_space, scrollable
 };
 use iced::{Element, Length};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::data_types::EntityId;
 use crate::data_types;
 use crate::{
@@ -430,15 +430,15 @@ pub fn update<'a>(item: &mut Item, msg: Message, state: &mut super::EditState) -
 pub fn view<'a>(
     item: &'a Item,
     state: &'a EditState,
-    item_groups: &'a HashMap<EntityId, ItemGroup>,
-    tax_groups: &'a HashMap<EntityId, TaxGroup>,
-    security_levels: &'a HashMap<EntityId, SecurityLevel>,
-    revenue_categories: &'a HashMap<EntityId, RevenueCategory>,
-    report_categories: &'a HashMap<EntityId, ReportCategory>,
-    product_classes: &'a HashMap<EntityId, ProductClass>,
-    choice_groups: &'a HashMap<EntityId, ChoiceGroup>,
-    printer_logicals: &'a HashMap<EntityId, PrinterLogical>,
-    price_levels: &'a HashMap<EntityId, PriceLevel>,
+    item_groups: &'a BTreeMap<EntityId, ItemGroup>,
+    tax_groups: &'a BTreeMap<EntityId, TaxGroup>,
+    security_levels: &'a BTreeMap<EntityId, SecurityLevel>,
+    revenue_categories: &'a BTreeMap<EntityId, RevenueCategory>,
+    report_categories: &'a BTreeMap<EntityId, ReportCategory>,
+    product_classes: &'a BTreeMap<EntityId, ProductClass>,
+    choice_groups: &'a BTreeMap<EntityId, ChoiceGroup>,
+    printer_logicals: &'a BTreeMap<EntityId, PrinterLogical>,
+    price_levels: &'a BTreeMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
     let header = row![
         horizontal_space().width(10),
