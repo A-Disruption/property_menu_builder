@@ -94,3 +94,41 @@ pub enum PriceLevelType {
     Item,     // Valid range: 1-999
     Store,    // Valid range: 1-99999
 }
+
+
+
+
+/// A badge button; denoting a complementary action.
+pub fn badge(theme: &iced::Theme, status: iced::widget::button::Status) -> iced::widget::button::Style {
+    let palette = theme.extended_palette();
+    let base = styled(palette.secondary.base);
+
+    match status {
+        iced::widget::button::Status::Active | iced::widget::button::Status::Pressed => base,
+        iced::widget::button::Status::Hovered => iced::widget::button::Style {
+            background: Some(iced::Background::Color(palette.secondary.strong.color)),
+            ..base
+        },
+        iced::widget::button::Status::Disabled => disabled(base),
+    }
+}
+
+fn styled(pair: iced::theme::palette::Pair) -> iced::widget::button::Style {
+    iced::widget::button::Style {
+        background: Some(iced::Background::Color(pair.color)),
+        text_color: pair.text,
+        border: iced::border::rounded(8),
+        ..iced::widget::button::Style::default()
+    }
+}
+
+fn disabled(style: iced::widget::button::Style) -> iced::widget::button::Style {
+    iced::widget::button::Style {
+        background: style
+            .background
+            .map(|background| background.scale_alpha(0.5)),
+        text_color: style.text_color.scale_alpha(0.5),
+        border: iced::border::rounded(8),
+        ..style
+    }
+}

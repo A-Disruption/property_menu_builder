@@ -3,7 +3,7 @@ use iced::widget::{
     horizontal_space,
 };
 use iced::{Alignment, Element, Length};
-
+use crate::icon;
 use crate::HotKey;
 
 #[derive(Debug, Clone)]
@@ -14,10 +14,10 @@ pub enum Message {
 
 pub fn view<'a>(product_class: &'a super::ProductClass) -> Element<'a, Message> {
     let header = row![
-        button("←").width(40).on_press(Message::Back),
+        horizontal_space().width(40),
         text(&product_class.name).size(16),
         horizontal_space(),
-        button("Edit").on_press(Message::Edit)
+        button(icon::edit().shaping(text::Shaping::Advanced)).on_press(Message::Edit)
     ]
     .spacing(10)
     .align_y(Alignment::Center);

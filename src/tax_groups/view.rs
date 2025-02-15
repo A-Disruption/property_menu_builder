@@ -4,6 +4,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Element, Length};
 use crate::HotKey;
+use crate::icon;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -13,10 +14,10 @@ pub enum Message {
 
 pub fn view<'a>(tax_group: &'a super::TaxGroup) -> Element<'a, Message> {
     let header = row![
-        button("←").width(40).on_press(Message::Back),
+        horizontal_space().width(40),
         text(&tax_group.name).size(16),
         horizontal_space(),
-        button("Edit").on_press(Message::Edit)
+        button(icon::edit().shaping(text::Shaping::Advanced)).on_press(Message::Edit)
     ]
     .spacing(10)
     .align_y(Alignment::Center);

@@ -7,6 +7,7 @@ use crate::data_types::{
     ValidationError,
 };
 use crate::Action;
+use crate::icon;
 use serde::{Serialize, Deserialize};
 use iced::Element;
 use iced::widget::{button, container, column, row, text};
@@ -213,10 +214,13 @@ pub fn view<'a>(
     row![
         container(
             column![
-                text("Revenue Categories").size(24),
-                button("Create New")
-                    .on_press(Message::CreateNew)
-                    .style(button::primary),
+                row![
+                    text("Revenue Categories").size(18),
+                    iced::widget::horizontal_space(),
+                    button(icon::new().shaping(text::Shaping::Advanced))
+                        .on_press(Message::CreateNew)
+                        .style(button::primary),
+                ].width(200),
                 category_list,
             ]
             .spacing(10)

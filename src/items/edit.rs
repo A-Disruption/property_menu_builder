@@ -1,10 +1,11 @@
 use iced::widget::{
-    button, checkbox, column, container, pick_list, row, 
+    button, checkbox, column, combo_box, container, pick_list, row, 
     text, text_input, horizontal_space, vertical_space, scrollable
 };
 use iced::{Element, Length};
 use std::collections::HashMap;
 use crate::data_types::EntityId;
+use crate::data_types;
 use crate::{
     choice_groups::ChoiceGroup,
     item_groups::ItemGroup,
@@ -15,6 +16,7 @@ use crate::{
     revenue_categories::RevenueCategory,
     security_levels::SecurityLevel,
     tax_groups::TaxGroup,
+    icon,
 };
 use crate::HotKey;
 use super::{Item, Action, Operation, EditState};
@@ -34,6 +36,9 @@ pub enum Message {
     SelectTaxGroup(Option<EntityId>),
     SelectSecurityLevel(Option<EntityId>),
     SelectReportCategory(Option<EntityId>),
+    ChoiceGroupSelected(EntityId),
+    PriceLevelSelected(EntityId),
+    PrinterLogicalSelected(EntityId),
 
     // Pricing
     UpdateCostAmount(String),
@@ -84,7 +89,7 @@ pub enum Message {
     Cancel,
 }
 
-pub fn update(item: &mut Item, msg: Message, state: &mut super::EditState) -> super::Action<super::Operation, Message> {
+pub fn update<'a>(item: &mut Item, msg: Message, state: &mut super::EditState) -> super::Action<super::Operation, Message> {
     match msg {
         // Basic Info
         Message::UpdateName(name) => {
@@ -141,7 +146,43 @@ pub fn update(item: &mut Item, msg: Message, state: &mut super::EditState) -> su
             item.report_category = category_id;
             super::Action::none()
         }
-
+        Message::ChoiceGroupSelected(group_id) => {
+            if let Some(groups) = &mut item.choice_groups {
+                if groups.contains(&group_id) {
+                    groups.retain(|&id| id != group_id);
+                } else {
+                    groups.push(group_id);
+                }
+            } else {
+                item.choice_groups = Some(vec![group_id]);
+            }
+            println!("Selected Choice Groups: {:?}", item.choice_groups);
+            super::Action::none()
+        }
+        Message::PrinterLogicalSelected(printer_id) => {
+            if let Some(printers) = &mut item.printer_logicals {
+                if printers.contains(&printer_id) {
+                    printers.retain(|&id| id != printer_id);
+                } else {
+                    printers.push(printer_id);
+                }
+            } else {
+                item.printer_logicals = Some(vec![printer_id]);
+            }
+            super::Action::none()
+        }
+        Message::PriceLevelSelected(price_id) => {
+            if let Some(prices) = &mut item.price_levels {
+                if prices.contains(&price_id) {
+                    prices.retain(|&id| id != price_id);
+                } else {
+                    prices.push(price_id);
+                }
+            } else {
+                item.price_levels = Some(vec![price_id]);
+            }
+            super::Action::none()
+        }
         // Pricing
         Message::UpdateCostAmount(amount) => {
             item.cost_amount = if amount.is_empty() {
@@ -352,6 +393,7 @@ pub fn update(item: &mut Item, msg: Message, state: &mut super::EditState) -> su
             super::Action::none()
         }
         Message::RemoveChoiceGroup(group_id) => {
+            println!("Remove Choice Group ID: {}", group_id);
             if let Some(ref mut groups) = item.choice_groups {
                 groups.retain(|&id| id != group_id);
                 if groups.is_empty() {
@@ -387,7 +429,7 @@ pub fn update(item: &mut Item, msg: Message, state: &mut super::EditState) -> su
 
 pub fn view<'a>(
     item: &'a Item,
-    state: EditState,
+    state: &'a EditState,
     item_groups: &'a HashMap<EntityId, ItemGroup>,
     tax_groups: &'a HashMap<EntityId, TaxGroup>,
     security_levels: &'a HashMap<EntityId, SecurityLevel>,
@@ -398,6 +440,17 @@ pub fn view<'a>(
     printer_logicals: &'a HashMap<EntityId, PrinterLogical>,
     price_levels: &'a HashMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
+    let header = row![
+        horizontal_space().width(10),
+        text(&item.name).size(18).style(text::primary),
+        horizontal_space(),
+        button(icon::save().shaping(text::Shaping::Advanced)).on_press(Message::Save).width(40).style(button::primary),
+        button(icon::cancel().shaping(text::Shaping::Advanced)).on_press(Message::Cancel).style(button::danger),
+        horizontal_space().width(4),
+    ]
+    .spacing(10)
+    .padding(20)
+    .align_y(iced::Alignment::Center);
 
     let validation_error = &state.validation_error;
 
@@ -408,29 +461,35 @@ pub fn view<'a>(
                 column![
                     text("Basic Information").size(16).style(iced::widget::text::primary),
                     row![
-                        text("Name").width(Length::Fixed(150.0)),
-                        text_input("Item Name", &item.name)
-                            .on_input(Message::UpdateName)
-                            .padding(5)
-                    ],
-                    row![
-                        text("Button 1").width(Length::Fixed(150.0)),
-                        text_input("Button Text 1", &item.button1)
-                            .on_input(Message::UpdateButton1)
-                            .padding(5)
-                    ],
-                    row![
-                        text("Button 2").width(Length::Fixed(150.0)),
-                        text_input("Button Text 2", &item.button2.clone().unwrap_or_default())
-                            .on_input(Message::UpdateButton2)
-                            .padding(5)
-                    ],
-                    row![
-                        text("Printer Text").width(Length::Fixed(150.0)),
-                        text_input("Printer Text", &item.printer_text)
-                            .on_input(Message::UpdatePrinterText)
-                            .padding(5)
-                    ],
+                        row![
+                            text("Name").width(Length::Fixed(150.0)),
+                            text_input("Item Name", &item.name)
+                                .on_input(Message::UpdateName)
+                                .width(200)
+                                .padding(5)
+                        ],
+                        row![
+                            text("Button 1").width(Length::Fixed(150.0)),
+                            text_input("Button Text 1", &item.button1)
+                                .on_input(Message::UpdateButton1)
+                                .width(200)
+                                .padding(5)
+                        ],
+                        row![
+                            text("Button 2").width(Length::Fixed(150.0)),
+                            text_input("Button Text 2", &item.button2.clone().unwrap_or_default())
+                                .on_input(Message::UpdateButton2)
+                                .width(200)
+                                .padding(5)
+                        ],
+                        row![
+                            text("Printer Text").width(Length::Fixed(150.0)),
+                            text_input("Printer Text", &item.printer_text)
+                                .on_input(Message::UpdatePrinterText)
+                                .width(200)
+                                .padding(5)
+                        ],
+                    ].wrap(),
                 ]
                 .spacing(10)
             )
@@ -478,7 +537,7 @@ pub fn view<'a>(
                         pick_list(
                             security_levels.values().collect::<Vec<_>>(),
                             item.security_level.and_then(|id| security_levels.get(&id)),
-                            |secureity_level| Message::SelectSecurityLevel(Some(secureity_level.id))
+                            |security_level| Message::SelectSecurityLevel(Some(security_level.id))
                         ).width(200)
                     ],
                     row![
@@ -488,6 +547,108 @@ pub fn view<'a>(
                             item.report_category.and_then(|id| report_categories.get(&id)),
                             |report_category: &ReportCategory| Message::SelectReportCategory(Some(report_category.id))
                         ).width(200)
+                    ],
+                    row![
+                        text("Choice Groups").width(Length::Fixed(150.0)),
+                        combo_box(
+                            &state.choice_groups_combo,
+                            "Add Choice Group",
+                            state.choice_group_selection.as_ref(),
+                            |choice_group: ChoiceGroup| Message::ChoiceGroupSelected(choice_group.id)
+                        )
+                        .width(200),
+                    ],
+                    row![ // Display Selected Choice Groups
+                        if let Some(selected_groups) = &item.choice_groups {
+                            row(
+                                selected_groups
+                                    .iter()
+                                    .filter_map(|id| choice_groups.get(id))
+                                    .map(|group| {
+                                        container(
+                                            button(
+                                                row![
+                                                    text(&group.name),
+                                                ].spacing(10)
+                                            )
+                                            .on_press(Message::RemoveChoiceGroup(group.id))
+                                            .style(data_types::badge)
+                                            .width(Length::Shrink)
+                                        ).padding(5).into()
+                                    })
+                                    .collect::<Vec<_>>()
+                            ).wrap()
+                        } else {
+                            row![].wrap()
+                        }
+                    ],
+                    row![
+                        text("Printer Logicals").width(Length::Fixed(150.0)),
+                        combo_box(
+                            &state.printer_logicals_combo,
+                            "Add Printer Logical",
+                            state.printer_logicals_selection.as_ref(),
+                            |printer_logical: PrinterLogical| Message::PrinterLogicalSelected(printer_logical.id)
+                        )
+                        .width(200),
+                    ],
+                    row![ // Display Selected Printer Logicals
+                    if let Some(selected_logicals) = &item.printer_logicals {
+                        row(
+                            selected_logicals
+                                .iter()
+                                .filter_map(|id| printer_logicals.get(id))
+                                .map(|logical| {
+                                    container(
+                                        button(
+                                            row![
+                                                text(&logical.name),
+                                            ].spacing(10)
+                                        )
+                                        .on_press(Message::RemovePrinterLogical(logical.id))
+                                        .style(data_types::badge)
+                                        .width(Length::Shrink)
+                                    ).padding(5).into()
+                                })
+                                .collect::<Vec<_>>()
+                        ).wrap()
+                    } else {
+                        row![].wrap()
+                    }
+                    ],
+                    row![
+                        text("Price Levels").width(Length::Fixed(150.0)),
+                        combo_box(
+                            &state.price_levels_combo,
+                            "Add Price Level",
+                            state.price_levels_selection.as_ref(),
+                            |price_level: PriceLevel| Message::PriceLevelSelected(price_level.id)
+                        )
+                        .width(200),
+                    ],
+                    row![ // Display Selected Price Levels
+                    if let Some(selected_prices) = &item.price_levels {
+                        row(
+                            selected_prices
+                                .iter()
+                                .filter_map(|id| price_levels.get(id))
+                                .map(|price| {
+                                    container(
+                                        button(
+                                            row![
+                                                text(&price.name),
+                                            ].spacing(10)
+                                        )
+                                        .on_press(Message::RemovePrinterLogical(price.id))
+                                        .style(data_types::badge)
+                                        .width(Length::Shrink)
+                                    ).padding(5).into()
+                                })
+                                .collect::<Vec<_>>()
+                        ).wrap()
+                    } else {
+                        row![].wrap()
+                    }
                     ],
                 ]
                 .width(Length::Fill)
@@ -658,26 +819,13 @@ pub fn view<'a>(
                 )
                 .padding(10)
             } else {
-                container(text("error".to_string()).style(text::danger))
+                container(text("".to_string()))
             },
-
-            // Action Buttons
-            row![
-                horizontal_space(),
-                button("Cancel")
-                    .on_press(Message::Cancel)
-                    .style(button::danger),
-                button("Save")
-                    .on_press(Message::Save)
-                    .style(button::success),
-            ]
-            .spacing(10)
-            .padding(20),
         ]
         .spacing(20)
     ).spacing(10);
 
-    container(content).into()
+    container(column![header, content]).padding(10).into()
 }
 
 pub fn handle_hotkey(hotkey: HotKey) -> Action<Operation, Message> {

@@ -16,6 +16,7 @@ use crate::{
     report_categories::ReportCategory,
     choice_groups::ChoiceGroup,
     printer_logicals::PrinterLogical,
+    icon,
 };
 
 
@@ -39,23 +40,27 @@ pub fn view<'a>(
     price_levels: &'a HashMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
     let header = row![
-        button("←").width(40).on_press(Message::Back),
-        text(&item.name).size(16),
+        horizontal_space().width(10),
+        text(&item.name).size(18).style(text::primary),
         horizontal_space(),
-        button("Edit").on_press(Message::Edit)
+        button(icon::edit().shaping(text::Shaping::Advanced)).on_press(Message::Edit),
+        horizontal_space().width(4),
     ]
     .spacing(10)
-    .align_y(Alignment::Center);
+    .padding(20)
+    .align_y(iced::Alignment::Center);
 
     let basic_info = container(
         column![
             text("Basic Information").size(16).style(iced::widget::text::primary),
-            info_row("Button 1:".to_string(), item.button1.clone()),
-            info_row(
-                "Button 2:".to_string(), 
-                item.button2.clone().unwrap_or_default()
-            ),
-            info_row("Printer Text:".to_string(), item.printer_text.clone()),
+            row![
+                info_row("Button 1:".to_string(), item.button1.clone()),
+                info_row(
+                    "Button 2:".to_string(), 
+                    item.button2.clone().unwrap_or_default()
+                ),
+                info_row("Printer Text:".to_string(), item.printer_text.clone()),
+            ].wrap(),
         ]
     )
     .style(container::rounded_box)
@@ -65,42 +70,46 @@ pub fn view<'a>(
     let classifications = container(
         column![
             text("Classifications").size(16).style(iced::widget::text::primary),
-            info_row(
-                "Item Group:".to_string(), 
-                item.item_group
-                    .and_then(|id| item_groups.get(&id))
-                    .map_or("None".to_string(), |g| g.name.clone())
-            ),
-            info_row(
-                "Product Class:".to_string(), 
-                item.product_class
-                    .and_then(|id| product_classes.get(&id))
-                    .map_or("None".to_string(), |c| c.name.clone())
-            ),
-            info_row(
-                "Revenue Category:".to_string(), 
-                item.revenue_category
-                    .and_then(|id| revenue_categories.get(&id))
-                    .map_or("None".to_string(), |c| c.name.clone())
-            ),
-            info_row(
-                "Tax Group:".to_string(), 
-                item.tax_group
-                    .and_then(|id| tax_groups.get(&id))
-                    .map_or("None".to_string(), |g| g.name.clone())
-            ),
-            info_row(
-                "Security Level:".to_string(), 
-                item.security_level
-                    .and_then(|id| security_levels.get(&id))
-                    .map_or("None".to_string(), |l| l.name.clone())
-            ),
-            info_row(
-                "Report Category:".to_string(), 
-                item.report_category
-                    .and_then(|id| report_categories.get(&id))
-                    .map_or("None".to_string(), |c| c.name.clone())
-            ),
+            row![
+                info_row(
+                    "Item Group:".to_string(), 
+                    item.item_group
+                        .and_then(|id| item_groups.get(&id))
+                        .map_or("None".to_string(), |g| g.name.clone())
+                ),
+                info_row(
+                    "Product Class:".to_string(), 
+                    item.product_class
+                        .and_then(|id| product_classes.get(&id))
+                        .map_or("None".to_string(), |c| c.name.clone())
+                ),
+                info_row(
+                    "Rev Category:".to_string(), 
+                    item.revenue_category
+                        .and_then(|id| revenue_categories.get(&id))
+                        .map_or("None".to_string(), |c| c.name.clone())
+                ),
+            ].wrap(),
+            row![
+                info_row(
+                    "Tax Group:".to_string(), 
+                    item.tax_group
+                        .and_then(|id| tax_groups.get(&id))
+                        .map_or("None".to_string(), |g| g.name.clone())
+                ),
+                info_row(
+                    "Security Level:".to_string(), 
+                    item.security_level
+                        .and_then(|id| security_levels.get(&id))
+                        .map_or("None".to_string(), |l| l.name.clone())
+                ),
+                info_row(
+                    "Report Category:".to_string(), 
+                    item.report_category
+                        .and_then(|id| report_categories.get(&id))
+                        .map_or("None".to_string(), |c| c.name.clone())
+                ),
+            ].wrap(),
         ]
         .width(Length::Fill)
         .spacing(10)
@@ -112,24 +121,26 @@ pub fn view<'a>(
     let pricing = container(
         column![
             text("Pricing").size(16).style(iced::widget::text::primary),
-            info_row(
-                "Cost Amount:".to_string(), 
-                item.cost_amount.map_or("Not Set".to_string(), |c| format!("${:.2}", c))
-            ),
-            info_row(
-                "Ask Price:".to_string(), 
-                (if item.ask_price { "Yes" } else { "No" }).to_string()
-            ),
-            info_row(
-                "Allow Price Override:".to_string(), 
-                (if item.allow_price_override { "Yes" } else { "No" }).to_string()
-            ),
+            row![
+                info_row(
+                    "Default Price:".to_string(), 
+                    item.cost_amount.map_or("Not Set".to_string(), |c| format!("${:.2}", c))
+                ),
+                info_row(
+                    "Ask Price:".to_string(), 
+                    (if item.ask_price { "Yes" } else { "No" }).to_string()
+                ),
+                info_row(
+                    "Allow Price Override:".to_string(), 
+                    (if item.allow_price_override { "Yes" } else { "No" }).to_string()
+                ),
+            ],
             if let Some(ref levels) = item.price_levels {
                 column(
                     levels.iter()
                         .filter_map(|id| price_levels.get(id))
                         .map(|level| info_row(
-                            level.name.clone(), 
+                            "Price Level: ".to_string() + level.name.clone().as_str(), 
                             format!("${:.2}", level.price)
                         ))
                         .collect::<Vec<_>>()
@@ -300,11 +311,14 @@ pub fn view<'a>(
 }
 
 fn info_row(label: String, value: String) -> Element<'static, Message> {
-    row![
-        text(label).width(Length::Fixed(150.0)),
-        text(value)
-    ]
-    .spacing(10)
+    container(
+        row![
+            text(label).width(Length::Shrink).style(text::secondary),
+            text(value)
+        ]
+        .spacing(10)
+        .padding(10)
+    )
     .into()
 }
 

@@ -14,7 +14,7 @@ use crate::{
     report_categories::ReportCategory,
     choice_groups::ChoiceGroup,
     printer_logicals::PrinterLogical,
-    settings::Settings,
+    settings::AppSettings,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -29,7 +29,7 @@ pub struct AppState {
     pub report_categories: Vec<ReportCategory>,
     pub choice_groups: Vec<ChoiceGroup>,
     pub printer_logicals: Vec<PrinterLogical>,
-    pub settings: Settings,
+    pub settings: AppSettings,
 }
 
 pub fn save_to_file(state: &AppState, path: &str) -> Result<(), String> {
@@ -69,7 +69,7 @@ impl Default for AppState {
             report_categories: Vec::new(),
             choice_groups: Vec::new(),
             printer_logicals: Vec::new(),
-            settings: Settings::default(),
+            settings: AppSettings::default(),
         }
     }
 }
@@ -80,7 +80,7 @@ pub struct FileManager {
 
 impl FileManager {
     pub fn new() -> Option<Self> {
-        ProjectDirs::from("com", "MenBuilder", "menu_builder").map(|dirs| Self { project_dirs: dirs })
+        ProjectDirs::from("com", "MenuBuilder", "menu_builder").map(|dirs| Self { project_dirs: dirs })
     }
 
     pub fn get_default_path(&self) -> PathBuf {

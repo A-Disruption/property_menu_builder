@@ -1,3 +1,4 @@
+use iced::advanced::graphics::core::window;
 use iced::event;
 use iced::keyboard::{self, Key, Modifiers};
 use iced::widget::{
@@ -5,6 +6,7 @@ use iced::widget::{
     button, column, container, row, scrollable, text, vertical_space
 };
 use iced::{Element, Length, Size, Subscription, Task};
+//use iced_fontello;
 use persistence::FileManager;
 use std::collections::HashMap;
 
@@ -22,6 +24,7 @@ mod choice_groups;
 mod printer_logicals;
 mod data_types;
 mod persistence;
+mod icon;
 
 use crate::{
     items::{Item, ViewContext},
@@ -41,6 +44,7 @@ pub use action::Action;
 
 fn main() -> iced::Result {
     iced::application(MenuBuilder::title, MenuBuilder::update, MenuBuilder::view)
+        .window(settings::settings())
         .window_size(Size::new(900.0, 700.0))
         .theme(MenuBuilder::theme)
         .antialiasing(true)
@@ -51,7 +55,7 @@ fn main() -> iced::Result {
 
 #[derive(Debug, Clone)]
 pub enum Screen {
-    Settings(settings::Settings),
+    Settings(settings::AppSettings),
     Items(items::Mode),
     ItemGroups(item_groups::Mode),
     PriceLevels(price_levels::Mode),
@@ -78,7 +82,7 @@ pub enum Message {
     ReportCategories(EntityId, report_categories::Message),
     ChoiceGroups(EntityId, choice_groups::Message),
     Navigate(Screen),
-    HotKey(HotKey)
+    HotKey(HotKey),
 }
 
 #[derive(Debug)]
@@ -98,7 +102,8 @@ pub enum Operation {
 
 pub struct MenuBuilder {
     screen: Screen,
-    settings: settings::Settings,
+    settings: settings::AppSettings,
+    theme: iced::Theme,
     file_manager: persistence::FileManager,
     error_message: Option<String>,
     // Items
@@ -185,7 +190,8 @@ pub struct MenuBuilder {
 
         Self {
             screen: Screen::Items(items::Mode::View),
-            settings: settings::Settings::default(),
+            settings: settings::AppSettings::default(),
+            theme: iced::Theme::SolarizedDark,
             error_message: None,
             file_manager: file_manager,
 
@@ -265,7 +271,7 @@ pub struct MenuBuilder {
 impl MenuBuilder {
 
     fn theme(&self) -> iced::Theme {
-        iced::Theme::SolarizedDark
+        self.theme.clone()
     }
 
     fn title(&self) -> String {
@@ -276,10 +282,20 @@ impl MenuBuilder {
         
         let mut menu_builder = MenuBuilder::default();
 
+        let available_choice_groups: Vec<ChoiceGroup> = menu_builder.choice_groups.values().cloned().collect();
+        let available_printer_logicals: Vec<PrinterLogical> = menu_builder.printer_logicals.values().cloned().collect();
+        let available_price_levels: Vec<PriceLevel> = menu_builder.price_levels.values().cloned().collect();
         // Try to load state from file
         match menu_builder.load_state() {
             Ok(()) => {
                 println!("Successfully loaded saved data");
+                menu_builder.item_edit_state = items::EditState::new(
+                    &menu_builder.draft_item,
+                    available_choice_groups,
+                    available_printer_logicals,
+                    available_price_levels,
+                );
+
                 menu_builder.error_message = None;
             }
             Err(e) => {
@@ -294,8 +310,23 @@ impl MenuBuilder {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Settings(msg) => {
-                Message::Settings(msg);
-                Task::none()
+                //Message::Settings(msg);
+                let action = settings::update(
+                    &mut self.settings,
+                    msg,
+                    &self.file_manager
+                )
+                .map_operation(move |o| Operation::Settings(o))
+                .map(move |m| Message::Settings(m));
+
+                let operation_task = if let Some(operation) = action.operation {
+                    self.perform(operation)
+                } else {
+                    Task::none()
+                };
+
+                operation_task.chain(action.task)
+                //Task::none()
             }
             Message::Items(id, msg) => {
                 let cloned_items = self.items.clone();
@@ -314,6 +345,17 @@ impl MenuBuilder {
                         available_security_levels: self.security_levels.clone(),
                         available_tax_groups: self.tax_groups.clone(),
                     };
+
+                    let available_choice_groups: Vec<ChoiceGroup> = self.choice_groups.values().cloned().collect();
+                    let available_printer_logicals: Vec<PrinterLogical> = self.printer_logicals.values().cloned().collect();
+                    let available_price_levels: Vec<PriceLevel> = self.price_levels.values().cloned().collect();
+
+                    self.item_edit_state = items::EditState::new(
+                        &mut self.draft_item,
+                        available_choice_groups,
+                        available_printer_logicals,
+                        available_price_levels,
+                    );
 
                     let action = items::update(
                         &mut self.draft_item,
@@ -341,6 +383,17 @@ impl MenuBuilder {
                     } else {
                         self.items.get_mut(&id).expect("Item should exist")
                     };
+
+                    let available_choice_groups: Vec<ChoiceGroup> = self.choice_groups.values().cloned().collect();
+                    let available_printer_logicals: Vec<PrinterLogical> = self.printer_logicals.values().cloned().collect();
+                    let available_price_levels: Vec<PriceLevel> = self.price_levels.values().cloned().collect();
+
+                    self.item_edit_state = items::EditState::new(
+                        item,
+                        available_choice_groups,
+                        available_printer_logicals,
+                        available_price_levels,
+                    );
 
                     let other_items: HashMap<EntityId, &Item> = cloned_items
                         .iter()
@@ -927,7 +980,7 @@ impl MenuBuilder {
             Message::Navigate(screen) => {
                 self.screen = screen;
                 Task::none()
-            },   
+            },
             Message::HotKey(hotkey) => {
                 match hotkey {
                     HotKey::Tab(modifiers) => {
@@ -944,7 +997,6 @@ impl MenuBuilder {
     }
 
     fn view(&self) -> Element<Message> {
-
         let sidebar = container(
             column![
                 button("Items")
@@ -991,7 +1043,7 @@ impl MenuBuilder {
                 vertical_space(),
                 row![
                     iced::widget::horizontal_space(),
-                    button(text("\u{2699}"))  // Cog icon using Unicode
+                    button(icon::settings().shaping(text::Shaping::Advanced)) 
                         .on_press(Message::Navigate(Screen::Settings(self.settings.clone())))
                         .width(Length::Fixed(40.0))
                         .style(button::secondary),
@@ -1029,6 +1081,7 @@ impl MenuBuilder {
                         item,
                         mode,
                         &self.items,
+                        &self.item_edit_state,
                         &self.item_groups,
                         &self.tax_groups,
                         &self.security_levels,
@@ -1046,6 +1099,7 @@ impl MenuBuilder {
                         first_item,
                         mode,
                         &self.items,
+                        &self.item_edit_state,
                         &self.item_groups,
                         &self.tax_groups,
                         &self.security_levels,
@@ -1494,6 +1548,10 @@ impl MenuBuilder {
                         self.error_message = Some(error);
                         Task::none()
                     }
+                    settings::Operation::UpdateTheme(theme) => {
+                        self.theme = theme;
+                        Task::none()
+                    }
                 }
             }
             Operation::Items(id, op) => {
@@ -1521,6 +1579,12 @@ impl MenuBuilder {
                             if let Err(e) = self.save_state() {
                                 self.handle_save_error(e);
                             }
+                        }
+
+                        if let Err(e) = self.save_state() {
+                            self.error_message = Some(e);
+                        } else {
+                            self.error_message = None;
                         }
 
                         Task::none()
@@ -1589,6 +1653,13 @@ impl MenuBuilder {
                             self.selected_item_group_id = Some(group.id);
                         }
                         self.screen = Screen::ItemGroups(item_groups::Mode::View);
+
+                        if let Err(e) = self.save_state() {
+                            self.error_message = Some(e);
+                        } else {
+                            self.error_message = None;
+                        }
+
                         Task::none()
                     }
                     item_groups::Operation::StartEdit(id) => {
@@ -1652,6 +1723,13 @@ impl MenuBuilder {
                             self.selected_tax_group_id = Some(group.id);
                         }
                         self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+
+                        if let Err(e) = self.save_state() {
+                            self.error_message = Some(e);
+                        } else {
+                            self.error_message = None;
+                        }
+                        
                         Task::none()
                     }
                     tax_groups::Operation::StartEdit(id) => {
@@ -1714,6 +1792,13 @@ impl MenuBuilder {
                             self.selected_security_level_id = Some(level.id);
                         }
                         self.screen = Screen::SecurityLevels(security_levels::Mode::View);
+
+                        if let Err(e) = self.save_state() {
+                            self.error_message = Some(e);
+                        } else {
+                            self.error_message = None;
+                        }
+
                         Task::none()
                     }
                     security_levels::Operation::StartEdit(id) => {
@@ -1776,6 +1861,13 @@ impl MenuBuilder {
                             self.selected_revenue_category_id = Some(category.id);
                         }
                         self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
+
+                        if let Err(e) = self.save_state() {
+                            self.error_message = Some(e);
+                        } else {
+                            self.error_message = None;
+                        }
+
                         Task::none()
                     }
                     revenue_categories::Operation::StartEdit(id) => {
@@ -1838,6 +1930,13 @@ impl MenuBuilder {
                             self.selected_report_category_id = Some(category.id);
                         }
                         self.screen = Screen::ReportCategories(report_categories::Mode::View);
+
+                        if let Err(e) = self.save_state() {
+                            self.error_message = Some(e);
+                        } else {
+                            self.error_message = None;
+                        }
+
                         Task::none()
                     }
                     report_categories::Operation::StartEdit(id) => {
@@ -1899,6 +1998,13 @@ impl MenuBuilder {
                             self.selected_product_class_id = Some(class.id);
                         }
                         self.screen = Screen::ProductClasses(product_classes::Mode::View);
+
+                        if let Err(e) = self.save_state() {
+                            self.error_message = Some(e);
+                        } else {
+                            self.error_message = None;
+                        }
+
                         Task::none()
                     }
                     product_classes::Operation::StartEdit(id) => {
@@ -1962,6 +2068,13 @@ impl MenuBuilder {
                         self.selected_choice_group_id = Some(choice_group.id); // Keep selection
                     }
                     self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+
+                    if let Err(e) = self.save_state() {
+                        self.error_message = Some(e);
+                    } else {
+                        self.error_message = None;
+                    }
+
                     Task::none()
                 }
                 choice_groups::Operation::StartEdit(choice_group_id) => {
@@ -2024,6 +2137,13 @@ impl MenuBuilder {
                         self.selected_printer_id = Some(printer.id);
                     }
                     self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
+
+                    if let Err(e) = self.save_state() {
+                        self.error_message = Some(e);
+                    } else {
+                        self.error_message = None;
+                    }
+
                     Task::none()
                 }
                 printer_logicals::Operation::StartEdit(printer_id) => {
@@ -2083,6 +2203,13 @@ impl MenuBuilder {
                         self.selected_price_level_id = Some(level.id);
                     }
                     self.screen = Screen::PriceLevels(price_levels::Mode::View);
+
+                    if let Err(e) = self.save_state() {
+                        self.error_message = Some(e);
+                    } else {
+                        self.error_message = None;
+                    }
+                    
                     Task::none()
                 }
                 price_levels::Operation::StartEdit(id) => {
@@ -2129,6 +2256,7 @@ impl MenuBuilder {
     }
 
     pub fn save_state(&self) -> Result<(), String> {
+        println!("Save State Triggered!");
         let state = persistence::AppState {
             items: self.items.values().cloned().collect(),
             item_groups: self.item_groups.values().cloned().collect(),
@@ -2142,6 +2270,7 @@ impl MenuBuilder {
             printer_logicals: self.printer_logicals.values().cloned().collect(),
             settings: self.settings.clone(),
         };
+        println!("State Information: {:?}", state);
 
         if self.settings.create_backups {
             self.file_manager.create_backup(std::path::Path::new(&self.settings.file_path))?;
@@ -2210,6 +2339,9 @@ fn handle_event(event: event::Event, _: event::Status, _: iced::window::Id) -> O
                 _ => None,
             }
         }
+/*         event::Event::Window_size(window::redraw_request) => {
+
+        }, */
         _ => None,
     }
 }

@@ -1,0 +1,12 @@
+# fonts/menu-builder.toml
+module = "icon"
+
+[glyphs]
+edit = "fontawesome-pencil"
+save = "fontawesome-floppy"
+trash = "fontawesome-trash"
+search = "fontawesome-search"
+cancel = "fontawesome-cancel"
+settings = "fontawesome-cog"
+home = "fontawesome-home"
+new = "fontawesome-plus"

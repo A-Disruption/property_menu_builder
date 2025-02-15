@@ -5,6 +5,7 @@ use iced::widget::{
 use iced::{Alignment, Element, Length};
 
 use crate::HotKey;
+use crate::icon;
 use super::PrinterLogical;
 
 
@@ -15,14 +16,14 @@ pub enum Message {
 }
 
 pub fn view<'a>(printer: &'a PrinterLogical) -> Element<'a, Message> {
-   let header = row![
-       button("←").width(40).on_press(Message::Back),
-       text(&printer.name).size(16),
-       horizontal_space(),
-       button("Edit").on_press(Message::Edit)
-   ]
-   .spacing(10)
-   .align_y(Alignment::Center);
+    let header = row![
+        horizontal_space().width(40),
+        text(&printer.name).size(16),
+        horizontal_space(),
+        button(icon::edit().shaping(text::Shaping::Advanced)).on_press(Message::Edit)
+    ]
+    .spacing(10)
+    .align_y(Alignment::Center);
 
    let content = container(
        column![

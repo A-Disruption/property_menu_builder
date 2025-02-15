@@ -9,7 +9,7 @@ use crate::data_types::{
 use crate::Action;
 use iced::Element;
 use serde::{Serialize, Deserialize};
-use iced::widget::{button, container, column, row, text};
+use iced::widget::{button, combo_box, container, column, row, text};
 use rust_decimal::Decimal;
 use crate::{
     tax_groups::TaxGroup,
@@ -21,6 +21,7 @@ use crate::{
     choice_groups::ChoiceGroup,
     printer_logicals::PrinterLogical,
     price_levels::PriceLevel,
+    icon,
 };
 
 #[derive(Debug, Clone)]
@@ -70,6 +71,8 @@ pub struct EditState {
     pub ask_price: bool,
     pub allow_price_override: bool,
     pub price_levels: Vec<EntityId>,
+    pub price_levels_combo: combo_box::State<PriceLevel>,
+    pub price_levels_selection: Option<PriceLevel>,
     pub store_price_level: Vec<EntityId>,
 
     // Weight
@@ -105,14 +108,18 @@ pub struct EditState {
 
     // Related Items
     pub choice_groups: Vec<EntityId>,
+    pub choice_groups_combo: combo_box::State<ChoiceGroup>,
+    pub choice_group_selection: Option<ChoiceGroup>,
     pub printer_logicals: Vec<EntityId>,
+    pub printer_logicals_combo: combo_box::State<PrinterLogical>,
+    pub printer_logicals_selection: Option<PrinterLogical>,
 
     // Validation
     pub validation_error: Option<String>,
 }
 
 impl EditState {
-    pub fn new(item: &Item) -> Self {
+    pub fn new(item: &Item, choice_group_list: Vec<ChoiceGroup>, printer_logical_list: Vec<PrinterLogical>, price_level_list: Vec<PriceLevel>) -> Self {
         Self {
             name: item.name.clone(),
             id: item.id.to_string(),
@@ -129,6 +136,8 @@ impl EditState {
             ask_price: item.ask_price,
             allow_price_override: item.allow_price_override,
             price_levels: item.price_levels.clone().unwrap_or_default(),
+            price_levels_combo: combo_box::State::with_selection(price_level_list.clone(), None),
+            price_levels_selection: None,
             store_price_level: item.store_price_level.clone().unwrap_or_default(),
             use_weight: item.use_weight,
             weight_amount: item.weight_amount.to_string(),
@@ -152,7 +161,11 @@ impl EditState {
             image_id: item.image_id.to_string(),
             language_iso_code: item.language_iso_code.clone(),
             choice_groups: item.choice_groups.clone().unwrap_or_default(),
+            choice_groups_combo: combo_box::State::with_selection(choice_group_list.clone(), None),
+            choice_group_selection: None,
             printer_logicals: item.printer_logicals.clone().unwrap_or_default(),
+            printer_logicals_combo: combo_box::State::with_selection(printer_logical_list.clone(), None),
+            printer_logicals_selection: None,
             validation_error: None,
         }
     }
@@ -458,7 +471,7 @@ pub fn update(
     item: &mut Item,
     message: Message,
     state: &mut EditState,
-    context: &ViewContext,
+    _context: &ViewContext,
 ) -> Action<Operation, Message> {
     match message {
         Message::Edit(msg) => match msg  {
@@ -515,6 +528,36 @@ pub fn update(
             }
             edit::Message::SelectReportCategory(category_id) => {
                 item.report_category = category_id;
+                Action::none()
+            }
+            edit::Message::ChoiceGroupSelected(group_id) => {
+                println!("Add a Choice Group: {}", group_id.clone());
+                match &mut item.choice_groups {
+                    Some(groups) => {
+                        if groups.contains(&group_id) {}else {
+                            groups.push(group_id);
+                        }
+                    }
+                    None => item.choice_groups = Some(vec![group_id]),
+                }
+                Action::none()
+            }
+            edit::Message::PriceLevelSelected(level_id) => {
+                match &mut item.price_levels {
+                    Some(levels) => levels.push(level_id),
+                    None => item.price_levels = Some(vec![level_id]),
+                }
+                Action::none()
+            }
+            edit::Message::PrinterLogicalSelected(printer_id) => {
+                match &mut item.printer_logicals {
+                    Some(printers) => {
+                        if printers.contains(&printer_id){}else{
+                            printers.push(printer_id);
+                        }
+                    }
+                    None => item.printer_logicals = Some(vec![printer_id]),
+                }
                 Action::none()
             }
 
@@ -728,6 +771,7 @@ pub fn update(
                 Action::none()
             }
             edit::Message::RemoveChoiceGroup(group_id) => {
+                println!("Remove a Choice Group: {}", group_id.clone());
                 if let Some(ref mut groups) = item.choice_groups {
                     groups.retain(|&id| id != group_id);
                     if groups.is_empty() {
@@ -778,6 +822,7 @@ pub fn view<'a>(
     item: &'a Item, 
     mode: &'a Mode,
     items: &'a HashMap<EntityId, Item>,
+    item_edit_state: &'a EditState,
     item_groups: &'a HashMap<EntityId, ItemGroup>,
     tax_groups: &'a HashMap<EntityId, TaxGroup>,
     security_levels: &'a HashMap<EntityId, SecurityLevel>,
@@ -824,7 +869,7 @@ pub fn view<'a>(
         Mode::Edit => {
             edit::view(
                 item,
-                EditState::new(item),
+                item_edit_state,
                 item_groups,
                 tax_groups,
                 security_levels,
@@ -841,10 +886,13 @@ pub fn view<'a>(
     row![
         container(
             column![
-                text("Items").size(24),
-                button("Create New")
-                    .on_press(Message::CreateNew)
-                    .style(button::primary),
+                row![
+                    text("Items").size(18),
+                    iced::widget::horizontal_space(),
+                    button(icon::new().shaping(text::Shaping::Advanced))
+                        .on_press(Message::CreateNew)
+                        .style(button::primary),
+                ].width(200),
                 items_list,
             ]
             .spacing(10)

@@ -6,6 +6,7 @@ use iced::{Element, Length};
 use std::collections::HashMap;
 
 use crate::HotKey;
+use crate::icon;
 use super::PrinterLogical;
 use crate::data_types::EntityId;
 
@@ -23,6 +24,18 @@ pub fn view<'a>(
     state: super::EditState,
     all_printers: &'a HashMap<EntityId, PrinterLogical>
 ) -> Element<'a, Message> {
+
+    let header = row![
+        horizontal_space().width(10),
+        text(&printer.name).size(18).style(text::primary),
+        horizontal_space(),
+        button(icon::save().shaping(text::Shaping::Advanced)).on_press(Message::Save).width(40).style(button::primary),
+        button(icon::cancel().shaping(text::Shaping::Advanced)).on_press(Message::Cancel).style(button::danger),
+        horizontal_space().width(4),
+    ]
+    .spacing(10)
+    .padding(20)
+    .align_y(iced::Alignment::Center);
 
     let validation_error = &state.validation_error;
 
@@ -50,21 +63,12 @@ pub fn view<'a>(
             } else {
                 text("".to_string())
             },
-            row![
-                horizontal_space(),
-                button("Cancel")
-                    .on_press(Message::Cancel)
-                    .style(button::danger),
-                button("Save")
-                    .on_press(Message::Save)
-                    .style(button::success)
-            ].spacing(10)
         ]
         .spacing(10)
     )
     .padding(20);
 
-    container(content).into()
+    container(column![header, content].padding(10)).into()
 }
 
 

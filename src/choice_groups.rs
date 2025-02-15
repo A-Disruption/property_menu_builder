@@ -6,6 +6,7 @@ use crate::data_types::{
     Validatable,
 };
 use crate::Action;
+use crate::icon;
 use serde::{Serialize, Deserialize};
 use iced::widget::{button, row, column, container, text};
 use iced::Element;
@@ -222,10 +223,13 @@ pub fn view<'a>(
     row![
         container(
             column![
-                text("Choice Groups").size(24),
-                button("Create New")
-                    .on_press(Message::CreateNew)
-                    .style(button::primary),
+                row![
+                    text("Choice Groups").size(18),
+                    iced::widget::horizontal_space(),
+                    button(icon::new().shaping(text::Shaping::Advanced))
+                        .on_press(Message::CreateNew)
+                        .style(button::primary),
+                ].width(200),
                 groups_list,
             ]
             .spacing(10)

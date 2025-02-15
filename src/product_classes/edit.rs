@@ -4,7 +4,7 @@ use iced::widget::{
 };
 use iced::{Element, Length};
 use std::collections::HashMap;
-
+use crate::icon;
 use crate::HotKey;
 use super::ProductClass;
 use crate::data_types::EntityId;
@@ -23,6 +23,18 @@ pub fn view<'a>(
     state: super::EditState,
     all_classes: &'a HashMap<EntityId, ProductClass>
 ) -> Element<'a, Message> {
+
+    let header = row![
+        horizontal_space().width(10),
+        text(&product_class.name).size(18).style(text::primary),
+        horizontal_space(),
+        button(icon::save().shaping(text::Shaping::Advanced)).on_press(Message::Save).width(40).style(button::primary),
+        button(icon::cancel().shaping(text::Shaping::Advanced)).on_press(Message::Cancel).style(button::danger),
+        horizontal_space().width(4),
+    ]
+    .spacing(10)
+    .padding(20)
+    .align_y(iced::Alignment::Center);
 
     let validation_error = &state.validation_error;
 
@@ -50,21 +62,12 @@ pub fn view<'a>(
             } else {
                 text("".to_string())
             },
-            row![
-                horizontal_space(),
-                button("Cancel")
-                    .on_press(Message::Cancel)
-                    .style(button::danger),
-                button("Save")
-                    .on_press(Message::Save)
-                    .style(button::success)
-            ].spacing(10)
         ]
         .spacing(10)
     )
     .padding(20);
 
-    container(content).into()
+    container(column![header, content].padding(10)).into()
 }
 
 pub fn handle_hotkey(hotkey: HotKey) -> crate::Action<super::Operation, Message> {

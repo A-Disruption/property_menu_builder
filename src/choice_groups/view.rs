@@ -4,6 +4,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Element, Length};
 use crate::HotKey;
+use crate::icon;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -13,10 +14,10 @@ pub enum Message {
 
 pub fn view<'a>(choice_group: &'a super::ChoiceGroup) -> Element<'a, Message> {
     let header = row![
-        button("←").width(40).on_press(Message::Back),
-        text("Choice Group: ".to_string() + &choice_group.name).size(16),
+        horizontal_space().width(40),
+        text(&choice_group.name).size(16),
         horizontal_space(),
-        button("Edit").on_press(Message::Edit)
+        button(icon::edit().shaping(text::Shaping::Advanced)).on_press(Message::Edit)
     ]
     .spacing(10)
     .align_y(Alignment::Center);
@@ -37,13 +38,13 @@ pub fn view<'a>(choice_group: &'a super::ChoiceGroup) -> Element<'a, Message> {
         .spacing(10)
     )
     .style(container::rounded_box)
-    .padding(10);
+    .padding(20);
 
     container(
         column![header, content]
             .spacing(20)
     )
-    .padding(5)
+    .padding(20)
     .into()
 }
 
