@@ -3,8 +3,7 @@ pub mod view;
 
 use std::collections::BTreeMap;
 use crate::data_types::{
-    EntityId,
-    ValidationError,
+    self, EntityId, ValidationError
 };
 use crate::Action;
 use iced::Element;
@@ -30,6 +29,11 @@ pub enum Message {
     View(view::Message),
     CreateNew,
     Select(EntityId),
+    SearchItems(String),
+    RequestDelete(EntityId),
+    CopyItem(EntityId),
+    HideModal,
+    ShowModal,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +45,11 @@ pub enum Operation {
     ExportToCsv,
     CreateNew(Item),
     Select(EntityId),
+    UpdateSearchQuery(String),
+    RequestDelete(EntityId),
+    CopyItem(EntityId),
+    HideModal,
+    ShowModal,
 }
 
 #[derive(Debug, Clone)]
@@ -305,9 +314,9 @@ impl Default for Item {
             cost_amount: None,
             reserved1: false,
             ask_price: false,
-            print_on_check: false,
-            discountable: true,  // Most items are discountable by default
-            voidable: true,      // Most items are voidable by default
+            print_on_check: true,
+            discountable: true,
+            voidable: true,
             not_active: false,
             tax_included: false,
             item_group: None,
@@ -531,7 +540,6 @@ pub fn update(
                 Action::none()
             }
             edit::Message::ChoiceGroupSelected(group_id) => {
-                println!("Add a Choice Group: {}", group_id.clone());
                 match &mut item.choice_groups {
                     Some(groups) => {
                         if groups.contains(&group_id) {}else {
@@ -815,6 +823,21 @@ pub fn update(
         Message::Select(id) => {
             Action::operation(Operation::Select(id))
         },
+        Message::SearchItems(query) => {
+            Action::operation(Operation::UpdateSearchQuery(query)) //need to implement search
+        }
+        Message::RequestDelete(id) => {
+            Action::operation(Operation::RequestDelete(id))
+        }
+        Message::CopyItem(id) => {
+            Action::operation(Operation::CopyItem(id))
+        }
+        Message::HideModal => {
+            Action::operation(Operation::HideModal)
+        }
+        Message::ShowModal => {
+            Action::operation(Operation::ShowModal)
+        }
     }
 }
 
@@ -822,6 +845,7 @@ pub fn view<'a>(
     item: &'a Item, 
     mode: &'a Mode,
     items: &'a BTreeMap<EntityId, Item>,
+    item_search: &'a String,
     item_edit_state: &'a EditState,
     item_groups: &'a BTreeMap<EntityId, ItemGroup>,
     tax_groups: &'a BTreeMap<EntityId, TaxGroup>,
@@ -834,11 +858,41 @@ pub fn view<'a>(
     price_levels: &'a BTreeMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
 
+    let search_bar = iced::widget::text_input(
+        "Search Items...",
+        &item_search
+    )
+    .width(iced::Length::Fixed(200.0))
+    .on_input(Message::SearchItems);
+
+    let filtered_items = items.values()
+        .filter(|item| matches_search(
+            item, 
+            &item_search,
+            item_groups,
+            tax_groups,
+            security_levels,
+            revenue_categories,
+            report_categories,
+            product_classes,
+            choice_groups,
+            printer_logicals,
+            price_levels,
+        ))
+        .collect::<Vec<_>>();
+
     let items_list = column(
-        items
-            .values()
+        filtered_items
+            .iter()
             .map(|an_item| {
-                button(text(&an_item.name))
+                //button(text(&an_item.name))
+                button(
+                    list_item(
+                        an_item.name.as_str(),
+                        button(icon::copy()).on_press(Message::CopyItem(an_item.id)),
+                        button(icon::trash()).on_press(Message::RequestDelete(an_item.id)),
+                    )
+                    )
                     .width(iced::Length::Fill)
                     .on_press(Message::Select(an_item.id))
                     .style(if an_item.id == item.id {
@@ -883,16 +937,17 @@ pub fn view<'a>(
         }
     };
 
-    row![
+    let full_view = row![
         container(
             column![
                 row![
                     text("Items").size(18),
                     iced::widget::horizontal_space(),
-                    button(icon::new().shaping(text::Shaping::Advanced))
+                    button(icon::new().shaping(text::Shaping::Advanced).center())
                         .on_press(Message::CreateNew)
                         .style(button::primary),
                 ].width(200),
+                search_bar,   
                 items_list,
             ]
             .spacing(10)
@@ -904,7 +959,11 @@ pub fn view<'a>(
             .style(container::rounded_box)
     ]
     .spacing(20)
-    .into()
+    .into();
+    
+    full_view
+
+
 }
 
 pub struct ViewContext {
@@ -918,4 +977,125 @@ pub struct ViewContext {
     pub available_choice_groups: BTreeMap<EntityId, ChoiceGroup>,
     pub available_printer_logicals: BTreeMap<EntityId, PrinterLogical>,
     pub available_price_levels: BTreeMap<EntityId, PriceLevel>,
+}
+
+fn matches_search(
+    item: &Item, 
+    query: &str,
+    item_groups: &BTreeMap<EntityId, ItemGroup>,
+    tax_groups: &BTreeMap<EntityId, TaxGroup>,
+    security_levels: &BTreeMap<EntityId, SecurityLevel>,
+    revenue_categories: &BTreeMap<EntityId, RevenueCategory>,
+    report_categories: &BTreeMap<EntityId, ReportCategory>,
+    product_classes: &BTreeMap<EntityId, ProductClass>,
+    choice_groups: &BTreeMap<EntityId, ChoiceGroup>,
+    printer_logicals: &BTreeMap<EntityId, PrinterLogical>,
+    price_levels: &BTreeMap<EntityId, PriceLevel>,
+) -> bool {
+
+    // If the search bar is empty, show all items
+    if query.trim().is_empty() {
+        return true;
+    }
+
+    // Convert everything to lowercase for case-insensitive matching
+    let query_lower = query.to_lowercase();
+
+    if item.name.to_lowercase().contains(&query_lower) {
+        return true;
+    }
+
+    //Match on the item's item_group name
+    if let Some(ig_id) = &item.item_group {
+        if let Some(ig) = item_groups.get(ig_id) {
+            if ig.name.to_lowercase().contains(&query_lower) {
+                return true;
+            }
+        }
+    } false;
+
+    //Match on the item's tax_group name
+    if let Some(tg_id) = &item.tax_group {
+        if let Some(tg) = tax_groups.get(tg_id) {
+            if tg.name.to_lowercase().contains(&query_lower) {
+                return true;
+            }
+        }
+    } false;
+
+    //Match on the item's security_level name
+    if let Some(sl_id) = &item.security_level {
+        if let Some(sl) = security_levels.get(sl_id) {
+            if sl.name.to_lowercase().contains(&query_lower) {
+                return true;
+            }
+        }
+    } false;
+
+    //Match on the item's report_category name
+    if let Some(rc_id) = &item.report_category {
+        if let Some(rc) = report_categories.get(rc_id) {
+            if rc.name.to_lowercase().contains(&query_lower) {
+                return true;
+            }
+        }
+    } false;
+
+    //Match on the item's security_level name
+    if let Some(sl_id) = &item.security_level {
+        if let Some(sl) = security_levels.get(sl_id) {
+            if sl.name.to_lowercase().contains(&query_lower) {
+                return true;
+            }
+        }
+    } false;
+
+    //Match on each choice_group's name
+    if let Some(cg_ids) = &item.choice_groups {
+        for cg_id in cg_ids {
+            if let Some(cg) = choice_groups.get(cg_id) {
+                if cg.name.to_lowercase().contains(&query_lower) {
+                    return true;
+                }
+            }
+        }
+    } false;
+
+    //Match on each printer_logical's name
+    if let Some(pl_ids) = &item.printer_logicals {
+        for pl_id in pl_ids {
+            if let Some(pl) = printer_logicals.get(pl_id) {
+                if pl.name.to_lowercase().contains(&query_lower) {
+                    return true;
+                }
+            }
+        }
+    } false;
+
+    
+    //Match on each price_level's name
+    if let Some(pl_ids) = &item.price_levels {
+        for pl_id in pl_ids {
+            if let Some(pl) = price_levels.get(pl_id) {
+                if pl.name.to_lowercase().contains(&query_lower) {
+                    return true;
+                }
+            }
+        }
+    } false
+
+}
+
+
+fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
+    let button_text = container (
+        row![
+            text(list_text),
+            iced::widget::horizontal_space(),
+            copy_button.style(button::secondary),
+            delete_button.style(button::danger)
+        ],
+    );
+    
+    button_text.into()
 }

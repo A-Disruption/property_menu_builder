@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-iced = { version = "0.13.1", features = ["advanced"] }
+iced = { version = "0.13.1", features = ["advanced", "debug"] }
 rust_decimal = "1.36"
 strsim = "0.11.1"
 rangemap = "1.5"

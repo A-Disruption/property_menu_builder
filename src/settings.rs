@@ -187,7 +187,7 @@ fn theme_to_string(theme: Theme) -> String {
     }
 }
 
-fn string_to_theme(s: &str) -> Theme {
+pub fn string_to_theme(s: &str) -> Theme {
     match s {
         "Light" => Theme::Light,
         "Dark" => Theme::Dark,
@@ -244,6 +244,7 @@ pub fn load_icon() -> Option<iced::window::icon::Icon> {
 pub fn settings() -> Settings {
     Settings {
         icon: load_icon(),
+        min_size: Some(iced::Size::new( 1201_f32, 700_f32)),
         ..Default::default()
     }
 }

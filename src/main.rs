@@ -1,9 +1,9 @@
 use iced::advanced::graphics::core::window;
-use iced::event;
+use iced::{event, Alignment};
 use iced::keyboard::{self, Key, Modifiers};
 use iced::widget::{
     focus_next, focus_previous,
-    button, column, container, row, scrollable, text, vertical_space
+    button, column, container, row, scrollable, text, vertical_space, opaque, stack
 };
 use iced::{Element, Length, Size, Subscription, Task};
 //use iced_fontello;
@@ -39,16 +39,17 @@ use crate::{
     printer_logicals::PrinterLogical,
 };
 
-use data_types::EntityId;
+use data_types::{DeletionInfo, EntityId};
 pub use action::Action;
 
 fn main() -> iced::Result {
     iced::application(MenuBuilder::title, MenuBuilder::update, MenuBuilder::view)
         .window(settings::settings())
-        .window_size(Size::new(900.0, 700.0))
+        .window_size(Size::new(1201.0, 700.0))
         .theme(MenuBuilder::theme)
         .antialiasing(true)
         .centered()
+        .font(icon::FONT)
         .subscription(MenuBuilder::subscription)
         .run_with(MenuBuilder::new)
 }
@@ -83,6 +84,8 @@ pub enum Message {
     ChoiceGroups(EntityId, choice_groups::Message),
     Navigate(Screen),
     HotKey(HotKey),
+    ConfirmDelete(data_types::DeletionInfo),
+    CancelDelete,
 }
 
 #[derive(Debug)]
@@ -105,13 +108,17 @@ pub struct MenuBuilder {
     settings: settings::AppSettings,
     theme: iced::Theme,
     file_manager: persistence::FileManager,
+    deletion_info: data_types::DeletionInfo,
+    show_modal: bool,
     error_message: Option<String>,
+
     // Items
     items: BTreeMap<EntityId, Item>,
     draft_item: Item,
     draft_item_id: Option<EntityId>,
     selected_item_id: Option<EntityId>,
     item_edit_state: items::EditState,
+    item_search: String,
  
     // Item Groups 
     item_groups: BTreeMap<EntityId, ItemGroup>,
@@ -192,8 +199,11 @@ pub struct MenuBuilder {
             screen: Screen::Items(items::Mode::View),
             settings: settings::AppSettings::default(),
             theme: iced::Theme::SolarizedDark,
-            error_message: None,
             file_manager: file_manager,
+            show_modal: false,
+            deletion_info: data_types::DeletionInfo::new(),
+            error_message: None,
+            
 
             // Items
             items: BTreeMap::new(),
@@ -201,6 +211,7 @@ pub struct MenuBuilder {
             draft_item_id: None,
             selected_item_id: None,
             item_edit_state: items::EditState::default(),
+            item_search: String::new(),
  
             // Item Groups
             item_groups: BTreeMap::new(),
@@ -993,6 +1004,26 @@ impl MenuBuilder {
                     HotKey::Escape => Task::none(),
                 }
             }
+            Message::ConfirmDelete(deletion_info) => {
+                println!("Deleting Type: {}, id: {}", deletion_info.entity_type, deletion_info.entity_id);
+
+                match deletion_info.entity_type.as_str() {
+                    "Item" => {
+                        if self.items.contains_key(&deletion_info.entity_id) { self.items.remove(&deletion_info.entity_id); }
+                    }
+                    _ => {}
+                }
+
+                self.deletion_info = data_types::DeletionInfo::new();
+                self.show_modal = false;
+                Task::none()
+            }
+            Message::CancelDelete => {
+                println!("Canceling Delete Request");
+                self.deletion_info = data_types::DeletionInfo::new();
+                self.show_modal = false;
+                Task::none()
+            }
         }
     }
 
@@ -1081,6 +1112,7 @@ impl MenuBuilder {
                         item,
                         mode,
                         &self.items,
+                        &self.item_search,
                         &self.item_edit_state,
                         &self.item_groups,
                         &self.tax_groups,
@@ -1099,6 +1131,7 @@ impl MenuBuilder {
                         first_item,
                         mode,
                         &self.items,
+                        &self.item_search,
                         &self.item_edit_state,
                         &self.item_groups,
                         &self.tax_groups,
@@ -1513,13 +1546,43 @@ impl MenuBuilder {
             }
         };
 
-        row![
+        let delete_confirmation_popup = container(
+            container(
+                column![
+                    row![
+                        iced::widget::horizontal_space().width(6),
+                        text("Are you sure you want to delete this ".to_string() + &self.deletion_info.entity_type).style(text::default).size(16),
+                        iced::widget::horizontal_space().width(6),
+                    ],
+                    
+                    iced::widget::vertical_space().height(15),
+                    row![
+                        iced::widget::horizontal_space().width(6),
+                        button("Delete").on_press(Message::ConfirmDelete(self.deletion_info.clone())).style(button::danger),
+                        iced::widget::horizontal_space(),
+                        button("Cancel").on_press(Message::CancelDelete).style(button::secondary),
+                        iced::widget::horizontal_space().width(6),
+                    ]
+                ].width(275).height(100)
+            ).style(container::bordered_box)
+        ).padding(250);
+
+        //iced::widget::stack
+        let app_view = row![
             sidebar,
             container(content)
                 .width(Length::Fill)
-                .padding(20)
-        ]
-        .into()
+                .padding(20),
+        ];
+        
+        if self.show_modal {
+            stack![
+                app_view,
+                opaque(delete_confirmation_popup)
+            ].into()
+        } else {
+            app_view.into()
+        }
      }
 
 
@@ -1630,6 +1693,38 @@ impl MenuBuilder {
                         self.screen = Screen::Items(items::Mode::View);
                         Task::none()
                     },
+                    items::Operation::UpdateSearchQuery(query) => {
+                        self.item_search = query;
+                        Task::none()
+                    }
+                     items::Operation::RequestDelete(id) => {
+                        println!("Deleting id: {}", id);
+                        self.deletion_info = data_types::DeletionInfo { 
+                            entity_type: "Item".to_string(),
+                            entity_id: id,
+                            affected_items: Vec::new()
+                        };
+                        self.show_modal = true;
+                        Task::none()
+                    }
+                    items::Operation::CopyItem(id) => {
+                        println!("Copying Item: {}", id);
+                        Task::none()
+                    }
+/*                    items::Operation::ConfirmDelete(id) => {
+                        Task::none()
+                    }
+                    items::Operation::CancelDelete(id) => {
+                        Task::none()
+                    } */
+                    items::Operation::HideModal => {
+                        self.show_modal = false;
+                        Task::none()
+                    }
+                    items::Operation::ShowModal => {
+                        self.show_modal = true;
+                        Task::none()
+                    }
                 }
             }
     
@@ -2111,6 +2206,66 @@ impl MenuBuilder {
                     self.screen = Screen::ChoiceGroups(choice_groups::Mode::Edit);
                     Task::none()
                 },
+                choice_groups::Operation::RequestDelete(id) => {
+                    // First, find all items using this choice group
+                    let affected_items: Vec<(&EntityId, &Item)> = self.items
+                        .iter()
+                        .filter(|(_, item)| {
+                            item.choice_groups
+                                .as_ref()
+                                .map_or(false, |groups| groups.contains(&id))
+                        })
+                        .collect();
+            
+                    if !affected_items.is_empty() {
+                        // Create list of affected items for the confirmation dialog
+                        let items_list: Vec<String> = affected_items
+                            .iter()
+                            .map(|(_, item)| item.name.clone())
+                            .collect();
+            
+                        // Store affected items and choice group info for confirmation
+                        self.deletion_info = data_types::DeletionInfo {
+                            entity_type: "choice_group".to_string(),
+                            entity_id: id,
+                            affected_items: items_list,
+                        };
+            
+                        // Show confirmation dialog
+                        //self.screen = Screen::ChoiceGroups(choice_groups::Mode::ConfirmDelete);
+                    } else {
+                        // No dependencies, safe to delete directly
+                        self.choice_groups.remove(&id);
+                        self.selected_choice_group_id = None;
+                        self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    }
+                    Task::none()
+                },
+                choice_groups::Operation::ConfirmDelete(id) => {
+                    // Remove the choice group from all items that use it
+                    for (_, item) in self.items.iter_mut() {
+                        if let Some(groups) = &mut item.choice_groups {
+                            groups.retain(|&group_id| group_id != id);
+                            
+                            // If no choice groups left, set to None
+                            if groups.is_empty() {
+                                item.choice_groups = None;
+                            }
+                        }
+                    }
+            
+                    // Delete the choice group
+                    self.choice_groups.remove(&id);
+                    self.selected_choice_group_id = None;
+                    self.deletion_info = DeletionInfo::new();
+                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    Task::none()
+                },
+                choice_groups::Operation::CancelDelete => {
+                    self.deletion_info = DeletionInfo::new();
+                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    Task::none()
+                },
                 choice_groups::Operation::Select(choice_group_id) => {
                     self.selected_choice_group_id = Some(choice_group_id);
                     self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
@@ -2313,6 +2468,7 @@ impl MenuBuilder {
             // Keep current settings if none in file
             println!("No settings found in save file, keeping current settings");
         } else {
+            self.theme = settings::string_to_theme(&state.settings.app_theme.clone());
             self.settings = state.settings;
         }
 
@@ -2339,9 +2495,10 @@ fn handle_event(event: event::Event, _: event::Status, _: iced::window::Id) -> O
                 _ => None,
             }
         }
-/*         event::Event::Window_size(window::redraw_request) => {
-
+/*         event::Event::Window(window::Event::Resized(size)) => {
+            Some(Message::AppResized(size))
         }, */
         _ => None,
     }
 }
+

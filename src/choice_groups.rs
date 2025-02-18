@@ -17,6 +17,9 @@ pub enum Message {
     Edit(edit::Message),
     View(view::Message),
     CreateNew,
+    RequestDelete(EntityId),
+    ConfirmDelete(EntityId),
+    CancelDelete,
     Select(EntityId),
 }
 
@@ -27,6 +30,9 @@ pub enum Operation {
     Cancel,
     Back,
     CreateNew(ChoiceGroup),
+    RequestDelete(EntityId),
+    ConfirmDelete(EntityId),
+    CancelDelete,
     Select(EntityId),
 }
 
@@ -177,6 +183,15 @@ pub fn update(
         Message::CreateNew => {
             let new_choice_group = ChoiceGroup::default();
             Action::operation(Operation::CreateNew(new_choice_group))
+        },
+        Message::RequestDelete(id) => {
+            Action::operation(Operation::RequestDelete(id))
+        },
+        Message::ConfirmDelete(id) => {
+            Action::operation(Operation::ConfirmDelete(id))
+        },
+        Message::CancelDelete => {
+            Action::operation(Operation::CancelDelete)
         },
         Message::Select(id) => {
             Action::operation(Operation::Select(id))

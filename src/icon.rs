@@ -1,6 +1,6 @@
 // Generated automatically by iced_fontello at build time.
 // Do not edit manually. Source: ../fonts/menu-builder.toml
-// 534e1dada7e281c7bec95c6fba7fbc12bb27db597420517eec37b7c5e2468845
+// 82e861212cc72e79c6ae20f8da94bf6c26bf7d28633feb0f80ca45d2e901f85c
 use iced::widget::{text, Text};
 use iced::Font;
 
@@ -8,6 +8,10 @@ pub const FONT: &[u8] = include_bytes!("../fonts/menu-builder.ttf");
 
 pub fn cancel<'a>() -> Text<'a> {
     icon("\u{2715}")
+}
+
+pub fn copy<'a>() -> Text<'a> {
+    icon("\u{F24D}")
 }
 
 pub fn edit<'a>() -> Text<'a> {
@@ -35,7 +39,7 @@ pub fn settings<'a>() -> Text<'a> {
 }
 
 pub fn trash<'a>() -> Text<'a> {
-    icon("\u{F1F8}")
+    icon("\u{E006}")
 }
 
 fn icon(codepoint: &str) -> Text<'_> {

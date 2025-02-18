@@ -1,5 +1,7 @@
 use std::ops::Range;
 use rust_decimal::Decimal;
+use iced::{Element, Color};
+use iced::widget::{stack, opaque, mouse_area, center, container,};
 
 // Custom type for IDs to make it easier to change the underlying type if needed
 pub type EntityId = i32;
@@ -130,5 +132,22 @@ fn disabled(style: iced::widget::button::Style) -> iced::widget::button::Style {
         text_color: style.text_color.scale_alpha(0.5),
         border: iced::border::rounded(8),
         ..style
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeletionInfo {
+    pub entity_type: String,
+    pub entity_id: EntityId,
+    pub affected_items: Vec<String>,
+}
+
+impl DeletionInfo {
+    pub fn new() -> Self {
+        Self {
+            entity_type: String::new(),
+            entity_id: 1,
+            affected_items: Vec::new(),
+        }
     }
 }
