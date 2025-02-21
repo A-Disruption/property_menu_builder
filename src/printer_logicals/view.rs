@@ -20,7 +20,7 @@ pub fn view<'a>(printer: &'a PrinterLogical) -> Element<'a, Message> {
         horizontal_space().width(40),
         text(&printer.name).size(16),
         horizontal_space(),
-        button(icon::edit().shaping(text::Shaping::Advanced)).on_press(Message::Edit)
+        button(icon::edit()).on_press(Message::Edit)
     ]
     .spacing(10)
     .align_y(Alignment::Center);

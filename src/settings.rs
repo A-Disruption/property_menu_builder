@@ -244,7 +244,7 @@ pub fn load_icon() -> Option<iced::window::icon::Icon> {
 pub fn settings() -> Settings {
     Settings {
         icon: load_icon(),
-        min_size: Some(iced::Size::new( 1201_f32, 700_f32)),
+        min_size: Some(iced::Size::new( 1250_f32, 700_f32)),
         ..Default::default()
     }
 }

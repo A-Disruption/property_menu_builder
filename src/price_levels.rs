@@ -20,6 +20,8 @@ pub enum Message {
     Edit(edit::Message),
     View(view::Message),
     CreateNew,
+    RequestDelete(EntityId),
+    CopyPriceLevel(EntityId),
     Select(EntityId),
 }
 
@@ -30,6 +32,8 @@ pub enum Operation {
     Cancel,
     Back,
     CreateNew(PriceLevel),
+    RequestDelete(EntityId),
+    CopyPriceLevel(EntityId),
     Select(EntityId),
 }
 
@@ -42,6 +46,7 @@ pub enum Mode {
 #[derive(Default, Clone)]
 pub struct EditState {
     pub name: String,
+    pub original_name: String,
     pub id: String,
     pub price: String,
     pub level_type: PriceLevelType,
@@ -52,11 +57,17 @@ impl EditState {
     pub fn new(price_level: &PriceLevel) -> Self {
         Self {
             name: price_level.name.clone(),
+            original_name: price_level.name.clone(),
             id: price_level.id.to_string(),
             price: price_level.price.to_string(),
             level_type: price_level.level_type.clone(),
             validation_error: None,
         }
+    }
+
+    pub fn reset(&mut self){
+        self.name = self.original_name.clone();
+        self.validation_error = None;
     }
 
     pub fn validate(&self) -> Result<(), ValidationError> {
@@ -229,6 +240,12 @@ pub fn update(
             let new_price_level = PriceLevel::default();
             Action::operation(Operation::CreateNew(new_price_level))
         },
+        Message::RequestDelete(id) => {
+            Action::operation(Operation::RequestDelete(id))
+        },
+        Message::CopyPriceLevel(id) => {
+            Action::operation(Operation::CopyPriceLevel(id))
+        },
         Message::Select(id) => {
             Action::operation(Operation::Select(id))
         },
@@ -245,20 +262,34 @@ pub fn view<'a>(
         all_levels
             .values()
             .map(|level| {
-                button(text(&level.name))
-                    .width(iced::Length::Fill)
-                    .on_press(Message::Select(level.id))
-                    .style(if level.id == price_level.id {
-                        button::primary
-                    } else {
-                        button::secondary
-                    })
-                    .into()
+                button(
+                    list_item(
+                        &level.name.as_str(), 
+                        button(icon::copy())
+                            .on_press(Message::CopyPriceLevel(level.id))
+                            .style(
+                                if level.id == price_level.id {
+                                    button::secondary
+                                } else {
+                                    button::primary
+                                }
+                            ), 
+                        button(icon::trash()).on_press(Message::RequestDelete(level.id)),
+                    )
+                )
+                .width(iced::Length::Fill)
+                .on_press(Message::Select(level.id))
+                .style(if level.id == price_level.id {
+                    button::primary
+                } else {
+                    button::secondary
+                })
+                .into()
             })
             .collect::<Vec<_>>()
     )
     .spacing(5)
-    .width(iced::Length::Fixed(200.0));
+    .width(iced::Length::Fixed(250.0));
 
     let content = match mode {
         Mode::View => view::view(price_level).map(Message::View),
@@ -280,7 +311,7 @@ pub fn view<'a>(
                     button(icon::new().shaping(text::Shaping::Advanced))
                         .on_press(Message::CreateNew)
                         .style(button::primary),
-                ].width(200),
+                ].width(250),
                 levels_list,
             ]
             .spacing(10)
@@ -294,4 +325,17 @@ pub fn view<'a>(
     .spacing(20)
     .into()
 
+}
+
+pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
+    let button_content = container (
+        row![
+            text(list_text),
+            iced::widget::horizontal_space(),
+            copy_button,
+            delete_button.style(button::danger)
+        ].align_y(iced::Alignment::Center),
+    );
+    
+    button_content.into()
 }

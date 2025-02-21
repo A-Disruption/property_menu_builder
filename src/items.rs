@@ -6,7 +6,7 @@ use crate::data_types::{
     self, EntityId, ValidationError
 };
 use crate::Action;
-use iced::Element;
+use iced::{Alignment, Element};
 use serde::{Serialize, Deserialize};
 use iced::widget::{button, combo_box, container, column, row, text};
 use rust_decimal::Decimal;
@@ -22,6 +22,7 @@ use crate::{
     price_levels::PriceLevel,
     icon,
 };
+
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -862,7 +863,7 @@ pub fn view<'a>(
         "Search Items...",
         &item_search
     )
-    .width(iced::Length::Fixed(200.0))
+    .width(iced::Length::Fixed(250.0))
     .on_input(Message::SearchItems);
 
     let filtered_items = items.values()
@@ -889,7 +890,14 @@ pub fn view<'a>(
                 button(
                     list_item(
                         an_item.name.as_str(),
-                        button(icon::copy()).on_press(Message::CopyItem(an_item.id)),
+                        button(icon::copy())
+                            .on_press(Message::CopyItem(an_item.id))
+                            .style(
+                                if an_item.id == item.id {
+                                    button::secondary
+                                } else {
+                                    button::primary
+                                }),
                         button(icon::trash()).on_press(Message::RequestDelete(an_item.id)),
                     )
                     )
@@ -905,7 +913,7 @@ pub fn view<'a>(
             .collect::<Vec<_>>()
     )
     .spacing(5)
-    .width(iced::Length::Fixed(200.0));
+    .width(iced::Length::Fixed(250.0));
 
     let content = match mode {
         Mode::View => view::view(
@@ -946,7 +954,7 @@ pub fn view<'a>(
                     button(icon::new().shaping(text::Shaping::Advanced).center())
                         .on_press(Message::CreateNew)
                         .style(button::primary),
-                ].width(200),
+                ].width(250),
                 search_bar,   
                 items_list,
             ]
@@ -1087,15 +1095,15 @@ fn matches_search(
 }
 
 
-fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
-    let button_text = container (
+pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
+    let button_content = container (
         row![
-            text(list_text),
+            text(list_text).center(),
             iced::widget::horizontal_space(),
-            copy_button.style(button::secondary),
+            copy_button,
             delete_button.style(button::danger)
-        ],
+        ].align_y(Alignment::Center),
     );
     
-    button_text.into()
+    button_content.into()
 }

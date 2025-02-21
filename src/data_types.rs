@@ -2,12 +2,20 @@ use std::ops::Range;
 use rust_decimal::Decimal;
 use iced::{Element, Color};
 use iced::widget::{stack, opaque, mouse_area, center, container,};
+use serde::{Deserialize, Serialize};
 
 // Custom type for IDs to make it easier to change the underlying type if needed
 pub type EntityId = i32;
 
 // Custom type for currency values
 pub type Currency = Decimal;
+
+//Struct to handle PriceLevel: Price pairs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemPrice {
+    pub price_level_id: EntityId,
+    pub price: Decimal,
+}
 
 // Common validation error type for all modules
 #[derive(Debug, Clone)]
@@ -97,9 +105,28 @@ pub enum PriceLevelType {
     Store,    // Valid range: 1-99999
 }
 
+#[derive(Debug, Clone)]
+pub struct DeletionInfo {
+    pub entity_type: String,
+    pub entity_id: EntityId,
+    pub affected_items: Vec<String>,
+}
+
+impl DeletionInfo {
+    pub fn new() -> Self {
+        Self {
+            entity_type: String::new(),
+            entity_id: 1,
+            affected_items: Vec::new(),
+        }
+    }
+}
 
 
 
+// Custom Styles
+
+//Button styles
 /// A badge button; denoting a complementary action.
 pub fn badge(theme: &iced::Theme, status: iced::widget::button::Status) -> iced::widget::button::Style {
     let palette = theme.extended_palette();
@@ -135,19 +162,48 @@ fn disabled(style: iced::widget::button::Style) -> iced::widget::button::Style {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct DeletionInfo {
-    pub entity_type: String,
-    pub entity_id: EntityId,
-    pub affected_items: Vec<String>,
-}
 
-impl DeletionInfo {
-    pub fn new() -> Self {
-        Self {
-            entity_type: String::new(),
-            entity_id: 1,
-            affected_items: Vec::new(),
-        }
+
+
+
+//Text_input styles
+///
+pub fn validated_error(theme: &iced::Theme, status: iced::widget::text_input::Status) -> iced::widget::text_input::Style {
+    let palette = theme.extended_palette();
+
+    let active = iced::widget::text_input::Style {
+        background: iced::Background::Color(palette.danger.weak.color),
+        border: iced::Border {
+            radius: 2.0.into(),
+            width: 1.0,
+            color: palette.danger.strong.color,
+        },
+        icon: palette.danger.weak.text,
+        placeholder: palette.danger.strong.color,
+        value: palette.background.base.text,
+        selection: palette.primary.weak.color,
+    };
+
+    match status {
+        iced::widget::text_input::Status::Active => active,
+        iced::widget::text_input::Status::Hovered => iced::widget::text_input::Style {
+            border: iced::Border {
+                color: palette.background.base.text,
+                ..active.border
+            },
+            ..active
+        },
+        iced::widget::text_input::Status::Focused => iced::widget::text_input::Style {
+            border: iced::Border {
+                color: palette.primary.strong.color,
+                ..active.border
+            },
+            ..active
+        },
+        iced::widget::text_input::Status::Disabled => iced::widget::text_input::Style {
+            background: iced::Background::Color(palette.background.weak.color),
+            value: active.placeholder,
+            ..active
+        },
     }
 }

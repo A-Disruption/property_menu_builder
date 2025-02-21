@@ -103,8 +103,8 @@ pub fn view<'a>(
     price_levels: &'a BTreeMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
     let header = row![
-        button(icon::save().shaping(text::Shaping::Advanced)).on_press(Message::Save).width(40).style(button::primary),
-        button(icon::cancel().shaping(text::Shaping::Advanced)).on_press(Message::Cancel).style(button::danger),
+        button(icon::save()).on_press(Message::Save).style(button::primary),
+        button(icon::cancel()).on_press(Message::Cancel).style(button::danger),
         horizontal_space().width(4),
     ]
     .spacing(10)
@@ -440,6 +440,20 @@ pub fn view<'a>(
     let choice_groups = container(
         column![
             column![
+/*                 row![ // trying to switch to using a button for a drop down selection of choice groups instead of a combo box
+                    text("Choice Groups").size(14).style(text::primary),
+                    column![
+                        button(icon::new()).on_press(
+                            pick_list(
+                                choice_groups.values().collect::<Vec<_>>,
+                                item.choice_groups.and_then(|id| choice_groups.get(&id)),
+                                |choice_group: ChoiceGroup| Message::ChoiceGroupSelected(choice_group.id)
+                            )
+                        ),
+
+                    ],
+                    
+                    ], */
                 text("Choice Groups").size(14).style(text::primary),
                 combo_box(
                     &state.choice_groups_combo,

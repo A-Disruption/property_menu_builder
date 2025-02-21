@@ -19,6 +19,8 @@ pub enum Message {
     Edit(edit::Message),
     View(view::Message),
     CreateNew,
+    RequestDelete(EntityId),
+    CopyItemGroup(EntityId),
     Select(EntityId),
 }
 
@@ -29,6 +31,8 @@ pub enum Operation {
     Cancel,
     Back,
     CreateNew(ItemGroup),
+    RequestDelete(EntityId),
+    CopyItemGroup(EntityId),
     Select(EntityId),
 }
 
@@ -227,6 +231,12 @@ pub fn update(
             let new_item_group = ItemGroup::default();
             Action::operation(Operation::CreateNew(new_item_group))
         },
+        Message::RequestDelete(id) => {
+            Action::operation(Operation::RequestDelete(id))
+        },
+        Message::CopyItemGroup(id) => {
+            Action::operation(Operation::CopyItemGroup(id))
+        },
         Message::Select(id) => {
             Action::operation(Operation::Select(id))
         },
@@ -243,20 +253,34 @@ pub fn update(
         all_groups
             .values()
             .map(|group| {
-                button(text(&group.name))
-                    .width(iced::Length::Fill)
-                    .on_press(Message::Select(group.id))
-                    .style(if group.id == item_group.id {
-                        button::primary
-                    } else {
-                        button::secondary
-                    })
-                    .into()
+                button(
+                    list_item(
+                        &group.name.as_str(), 
+                        button(icon::copy())
+                            .on_press(Message::CopyItemGroup(group.id))
+                            .style(
+                                if group.id == item_group.id {
+                                    button::secondary
+                                } else {
+                                    button::primary
+                                }
+                            ), 
+                        button(icon::trash()).on_press(Message::RequestDelete(group.id)),
+                    )
+                )
+                .width(iced::Length::Fill)
+                .on_press(Message::Select(group.id))
+                .style(if group.id == item_group.id {
+                    button::primary
+                } else {
+                    button::secondary
+                })
+                .into()
             })
             .collect::<Vec<_>>()
     )
     .spacing(5)
-    .width(iced::Length::Fixed(200.0));
+    .width(iced::Length::Fixed(250.0));
 
     let content = match mode {
         Mode::View => view::view(item_group).map(Message::View),
@@ -278,7 +302,7 @@ pub fn update(
                     button(icon::new().shaping(text::Shaping::Advanced))
                         .on_press(Message::CreateNew)
                         .style(button::primary),
-                ].width(200),
+                ].width(250),
                 groups_list,
             ]
             .spacing(10)
@@ -293,24 +317,15 @@ pub fn update(
     .into()
 }
 
-
-/*  
-// Update Display implementation for ValidationError
-impl std::fmt::Display for ValidationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ValidationError::InvalidRange(msg) => write!(f, "Invalid range: {}", msg),
-            ValidationError::RangeOverlap(msg) => write!(f, "Range overlap: {}", msg),
-            ValidationError::InvalidId(msg) => write!(f, "Invalid ID: {}", msg),
-            ValidationError::DuplicateId(msg) => write!(f, "Duplicate ID: {}", msg),
-            ValidationError::EmptyName(msg) => write!(f, "Empty name: {}", msg),
-            ValidationError::InvalidValue(msg) => write!(f, "Invalid value: {}", msg),
-            ValidationError::InvalidReference(msg) => write!(f, "Invalid refernce: {}", msg),
-            ValidationError::InvalidRate(msg) => write!(f, "Invalid rate: {}", msg),
-            ValidationError::InvalidPrice(msg)=> write!(f, "Invalid Price: {}", msg),
-            ValidationError::MissingItemGroup(msg)=> write!(f, "Missing Item Group: {}", msg),
-            ValidationError::MissingRevenueCategory(msg)=> write!(f, "Missing Revenue Group: {}", msg),
-        }
-    }
+pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
+    let button_content = container (
+        row![
+            text(list_text),
+            iced::widget::horizontal_space(),
+            copy_button,
+            delete_button.style(button::danger)
+        ].align_y(iced::Alignment::Center),
+    );
+    
+    button_content.into()
 }
- */

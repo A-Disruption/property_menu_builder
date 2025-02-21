@@ -163,7 +163,7 @@ pub fn view<'a>(
                             .collect::<Vec<_>>()
                     ).wrap()
                 } else {
-                    row![info_row("Price Levels:".to_string(), "None".to_string())].wrap()
+                    row![text_input("", "None")].width(250).wrap()
                 }
             ],
         ]
@@ -248,7 +248,7 @@ pub fn view<'a>(
                         .collect::<Vec<_>>()
                 ).spacing(10).wrap()
             } else {
-                row![info_row("Printer Logicals:".to_string(), "None".to_string())].wrap()
+                row![text_input("", "None")].width(250).wrap()
             }
         ]
     )
@@ -295,7 +295,7 @@ pub fn view<'a>(
                         .collect::<Vec<_>>()
                 ).spacing(10).wrap()
             } else {
-                row![text_input("", "None")].wrap()
+                row![text_input("", "None")].width(250).wrap()
             }
         ]
     )

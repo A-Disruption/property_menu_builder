@@ -8,6 +8,7 @@ use iced::widget::{
 use iced::{Element, Length, Size, Subscription, Task};
 //use iced_fontello;
 use persistence::FileManager;
+use printer_logicals::EditState;
 use std::collections::BTreeMap;
 
 mod action;
@@ -86,6 +87,7 @@ pub enum Message {
     HotKey(HotKey),
     ConfirmDelete(data_types::DeletionInfo),
     CancelDelete,
+    ToggleQuickView(bool),
 }
 
 #[derive(Debug)]
@@ -111,6 +113,8 @@ pub struct MenuBuilder {
     deletion_info: data_types::DeletionInfo,
     show_modal: bool,
     error_message: Option<String>,
+    toggle_quickview: bool,
+    printer_logical_edit_state_vec: Vec<printer_logicals::EditState>,
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -203,6 +207,8 @@ pub struct MenuBuilder {
             show_modal: false,
             deletion_info: data_types::DeletionInfo::new(),
             error_message: None,
+            toggle_quickview: true,
+            printer_logical_edit_state_vec: Vec::new(),
             
 
             // Items
@@ -954,7 +960,7 @@ impl MenuBuilder {
                 
                     operation_task.chain(action.task)
                 } else {
-                    let printer = if let Some(draft_id) = self.draft_printer_id {
+                        let printer = if let Some(draft_id) = self.draft_printer_id {
                         if draft_id == id {
                             &mut self.draft_printer
                         } else {
@@ -1008,10 +1014,164 @@ impl MenuBuilder {
                 println!("Deleting Type: {}, id: {}", deletion_info.entity_type, deletion_info.entity_id);
 
                 match deletion_info.entity_type.as_str() {
+                    "ChoiceGroup" => {
+                        // Clean up references in all items
+                        for (_, item) in self.items.iter_mut() {
+                            if let Some(groups) = &mut item.choice_groups {
+                                // Remove this specific choice group ID from the Item.choice_groups vec
+                                groups.retain(|&group_id| group_id != deletion_info.entity_id);
+                                
+                                // If vec is empty after removal, set to None
+                                if groups.is_empty() {
+                                    item.choice_groups = None;
+                                }
+                            }
+                        }
+
+                        // Delete the choice group
+                        self.choice_groups.remove(&deletion_info.entity_id);
+                        self.selected_choice_group_id = None;
+                        self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    }
+                    "ItemGroup" => {
+                        // Find all items using this item group
+                        for (_, item) in self.items.iter_mut() {
+                            if let Some(group_id) = item.item_group {
+                                if group_id == deletion_info.entity_id {
+                                    // This item has this item group, set it to None
+                                    item.item_group = None;
+                                }
+                            }
+                        }
+
+                        // Delete the item group
+                        self.item_groups.remove(&deletion_info.entity_id);
+                        self.selected_item_group_id = None;
+                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                    }
                     "Item" => {
+                        //Delete the item
                         if self.items.contains_key(&deletion_info.entity_id) { self.items.remove(&deletion_info.entity_id); }
                     }
-                    _ => {}
+                    "PriceLevel" => {
+                        // Clean up references in all items
+                        for (_, item) in self.items.iter_mut() {
+                            if let Some(price_levels) = &mut item.price_levels {
+                                // Remove this specific price level ID from the Item.price_levels vec
+                                price_levels.retain(|&price_id| price_id != deletion_info.entity_id);
+                                
+                                // If vec is empty after removal, set to None
+                                if price_levels.is_empty() {
+                                    item.price_levels = None;
+                                }
+                            }
+                        }
+
+                        // Delete the price level
+                        self.price_levels.remove(&deletion_info.entity_id);
+                        self.selected_price_level_id = None;
+                        self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    }
+                    "PrinterLogical" => {
+                        // Clean up references in all items
+                        for (_, item) in self.items.iter_mut() {
+                            if let Some(printers) = &mut item.printer_logicals {
+                                // Remove this specific printer logical ID from the Item.printer_logicals vec
+                                printers.retain(|&printer_id| printer_id != deletion_info.entity_id);
+                                
+                                // If vec is empty after removal, set to None
+                                if printers.is_empty() {
+                                    item.printer_logicals = None;
+                                }
+                            }
+                        }
+
+                        // Delete the printer logical
+                        self.printer_logicals.remove(&deletion_info.entity_id);
+                        self.selected_printer_id = None;
+                        self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
+                    }
+                    "ProductClass" => {
+                        // Find all items using this product class
+                        for (_, item) in self.items.iter_mut() {
+                            if let Some(pc_id) = item.product_class {
+                                if pc_id == deletion_info.entity_id {
+                                    // This item has this product class, set it to None
+                                    item.product_class = None;
+                                }
+                            }
+                        }
+
+                        // Delete the product class
+                        self.product_classes.remove(&deletion_info.entity_id);
+                        self.selected_product_class_id = None;
+                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
+                    }
+                    "ReportCategory" => {
+                        // Find all items using this report category
+                        for (_, item) in self.items.iter_mut() {
+                            if let Some(rc_id) = item.report_category {
+                                if rc_id == deletion_info.entity_id {
+                                    // This item has this report category, set it to None
+                                    item.report_category = None;
+                                }
+                            }
+                        }
+
+                        // Delete the report category
+                        self.report_categories.remove(&deletion_info.entity_id);
+                        self.selected_report_category_id = None;
+                        self.screen = Screen::ReportCategories(report_categories::Mode::View);
+                    }
+                    "RevenueCategory" => {
+                        // Find all items using this revenue category
+                        for (_, item) in self.items.iter_mut() {
+                            if let Some(rc_id) = item.revenue_category {
+                                if rc_id == deletion_info.entity_id {
+                                    // This item has this revenue category, set it to None
+                                    item.revenue_category = None;
+                                }
+                            }
+                        }
+
+                        // Delete the revenue category
+                        self.revenue_categories.remove(&deletion_info.entity_id);
+                        self.selected_revenue_category_id = None;
+                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
+                    }
+                    "SecurityLevel" => {
+                        // Find all items using this security level
+                        for (_, item) in self.items.iter_mut() {
+                            if let Some(sl_id) = item.security_level {
+                                if sl_id == deletion_info.entity_id {
+                                    // This item has this security level, set it to None
+                                    item.security_level = None;
+                                }
+                            }
+                        }
+
+                        // Delete the security level
+                        self.security_levels.remove(&deletion_info.entity_id);
+                        self.selected_security_level_id = None;
+                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
+                    }
+                    "TaxGroup" => {
+                        // Find all items using this tax group
+                        for (_, item) in self.items.iter_mut() {
+                            if let Some(tg_id) = item.tax_group {
+                                if tg_id == deletion_info.entity_id {
+                                    // This item has this tax group, set it to None
+                                    item.tax_group = None;
+                                }
+                            }
+                        }
+
+                        // Delete the tax group
+                        self.tax_groups.remove(&deletion_info.entity_id);
+                        self.selected_tax_group_id = None;
+                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                    }
+                    _ => {println!("Oh No! You've tried to delete an unknown type: {}", deletion_info.entity_type);}
                 }
 
                 self.deletion_info = data_types::DeletionInfo::new();
@@ -1022,6 +1182,10 @@ impl MenuBuilder {
                 println!("Canceling Delete Request");
                 self.deletion_info = data_types::DeletionInfo::new();
                 self.show_modal = false;
+                Task::none()
+            }
+            Message::ToggleQuickView(bool) => {
+                self.toggle_quickview = !self.toggle_quickview;
                 Task::none()
             }
         }
@@ -1073,10 +1237,15 @@ impl MenuBuilder {
 
                 vertical_space(),
                 row![
+                    column![
+                        text("Toggle Quick Edit").size(10),
+                        iced::widget::vertical_space().height(2),
+                        iced::widget::toggler(self.toggle_quickview).on_toggle(Message::ToggleQuickView),
+                    ],
                     iced::widget::horizontal_space(),
                     button(icon::settings().shaping(text::Shaping::Advanced)) 
                         .on_press(Message::Navigate(Screen::Settings(self.settings.clone())))
-                        .width(Length::Fixed(40.0))
+                        //.width(Length::Fixed(40.0))
                         .style(button::secondary),
                 ]
             ]
@@ -1509,11 +1678,21 @@ impl MenuBuilder {
                         &self.printer_logicals[&id]
                     };
                 
-                    printer_logicals::view(printer, mode, &self.printer_logicals)
+                    printer_logicals::view(
+                        printer, 
+                        mode, 
+                        &self.printer_logicals, 
+                        &self.toggle_quickview, 
+                        &self.printer_logical_edit_state_vec)
                         .map(move |msg| Message::PrinterLogicals(id, msg))
                 } else if let Some((&first_id, first_printer)) = self.printer_logicals.iter().next() {
                     // No selected printer, but there is at least one available: show its view.
-                    printer_logicals::view(first_printer, mode, &self.printer_logicals)
+                    printer_logicals::view(
+                        first_printer, 
+                        mode, 
+                        &self.printer_logicals, 
+                        &self.toggle_quickview, 
+                        &self.printer_logical_edit_state_vec)
                         .map(move |msg| Message::PrinterLogicals(first_id.clone(), msg))
                 } else {
                     // No selected printer and no printer logicals available: show the empty state.
@@ -1698,7 +1877,7 @@ impl MenuBuilder {
                         Task::none()
                     }
                      items::Operation::RequestDelete(id) => {
-                        println!("Deleting id: {}", id);
+                        println!("Deleting Item id: {}", id);
                         self.deletion_info = data_types::DeletionInfo { 
                             entity_type: "Item".to_string(),
                             entity_id: id,
@@ -1709,14 +1888,26 @@ impl MenuBuilder {
                     }
                     items::Operation::CopyItem(id) => {
                         println!("Copying Item: {}", id);
+                        let copy_item = self.items.get(&id).unwrap();
+                        let next_id = self.items
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                        
+                        let new_item = Item {
+                            id: next_id,
+                            name: copy_item.name.clone() + "(" + next_id.to_string().as_str() + ")",
+                            ..copy_item.clone()
+                        };
+
+                        self.items.insert(next_id, new_item.clone());
+                        self.draft_item_id = Some(next_id);
+                        self.draft_item = new_item;
+                        self.selected_item_id = Some(next_id);
+                        self.screen = Screen::Items(items::Mode::Edit);
+
                         Task::none()
                     }
-/*                    items::Operation::ConfirmDelete(id) => {
-                        Task::none()
-                    }
-                    items::Operation::CancelDelete(id) => {
-                        Task::none()
-                    } */
                     items::Operation::HideModal => {
                         self.show_modal = false;
                         Task::none()
@@ -1790,6 +1981,38 @@ impl MenuBuilder {
                         self.screen = Screen::ItemGroups(item_groups::Mode::Edit);
                         Task::none()
                     },
+                    item_groups::Operation::RequestDelete(id) => {
+                         println!("Deleting ItemGroup id: {}", id);
+                        self.deletion_info = data_types::DeletionInfo { 
+                            entity_type: "ItemGroup".to_string(),
+                            entity_id: id,
+                            affected_items: Vec::new()
+                        };
+                        self.show_modal = true;
+                        Task::none()
+                    }
+                    item_groups::Operation::CopyItemGroup(id) => {
+                        println!("Copying ItemGroup: {}", id);
+                        let copy_item = self.item_groups.get(&id).unwrap();
+                        let next_id = self.item_groups
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                        
+                        let new_item = ItemGroup {
+                            id: next_id,
+                            name: copy_item.name.clone() + "(" + next_id.to_string().as_str() + ")",
+                            ..copy_item.clone()
+                        };
+
+                        self.item_groups.insert(next_id, new_item.clone());
+                        self.draft_item_group_id = Some(next_id);
+                        self.draft_item_group = new_item;
+                        self.selected_item_group_id = Some(next_id);
+                        self.screen = Screen::ItemGroups(item_groups::Mode::Edit);
+
+                        Task::none()
+                    }
                     item_groups::Operation::Select(item_group_id) => {
                         self.selected_item_group_id = Some(item_group_id);
                         self.screen = Screen::ItemGroups(item_groups::Mode::View);
@@ -1859,6 +2082,38 @@ impl MenuBuilder {
                         self.screen = Screen::TaxGroups(tax_groups::Mode::Edit);
                         Task::none()
                     },
+                    tax_groups::Operation::RequestDelete(id) => {
+                        println!("Deleting TaxGroup id: {}", id);
+                        self.deletion_info = data_types::DeletionInfo { 
+                           entity_type: "TaxGroup".to_string(),
+                           entity_id: id,
+                           affected_items: Vec::new()
+                       };
+                        self.show_modal = true;
+                       Task::none()
+                   }
+                   tax_groups::Operation::CopyTaxGroup(id) => {
+                       println!("Copying TaxGroup: {}", id);
+                        let copy_item = self.tax_groups.get(&id).unwrap();
+                        let next_id = self.tax_groups
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                       
+                        let new_item = TaxGroup {
+                            id: next_id,
+                            name: copy_item.name.clone() + "(" + next_id.to_string().as_str() + ")",
+                            ..copy_item.clone()
+                        };
+
+                       self.tax_groups.insert(next_id, new_item.clone());
+                       self.draft_tax_group_id = Some(next_id);
+                       self.draft_tax_group = new_item;
+                       self.selected_tax_group_id = Some(next_id);
+                       self.screen = Screen::TaxGroups(tax_groups::Mode::Edit);
+
+                       Task::none()
+                   }
                     tax_groups::Operation::Select(id) => {
                         self.selected_tax_group_id = Some(id);
                         self.screen = Screen::TaxGroups(tax_groups::Mode::View);
@@ -1929,6 +2184,38 @@ impl MenuBuilder {
                         self.screen = Screen::SecurityLevels(security_levels::Mode::Edit);
                         Task::none()
                     },
+                    security_levels::Operation::RequestDelete(id) => {
+                        println!("Deleting SecurityLevel id: {}", id);
+                        self.deletion_info = data_types::DeletionInfo { 
+                           entity_type: "SecurityLevel".to_string(),
+                           entity_id: id,
+                           affected_items: Vec::new()
+                       };
+                        self.show_modal = true;
+                       Task::none()
+                   }
+                   security_levels::Operation::CopySecurityLevel(id) => {
+                       println!("Copying SecurityLevel: {}", id);
+                        let copy_item = self.security_levels.get(&id).unwrap();
+                       let next_id = self.security_levels
+                           .keys()
+                           .max()
+                           .map_or(1, |max_id| max_id + 1);
+                       
+                       let new_item = SecurityLevel {
+                           id: next_id,
+                           name: copy_item.name.clone() + "(" + next_id.to_string().as_str() + ")",
+                           ..copy_item.clone()
+                       };
+
+                       self.security_levels.insert(next_id, new_item.clone());
+                       self.draft_security_level_id = Some(next_id);
+                       self.draft_security_level = new_item;
+                       self.selected_security_level_id = Some(next_id);
+                       self.screen = Screen::SecurityLevels(security_levels::Mode::Edit);
+
+                       Task::none()
+                   }
                     security_levels::Operation::Select(id) => {
                         self.selected_security_level_id = Some(id);
                         self.screen = Screen::SecurityLevels(security_levels::Mode::View);
@@ -1997,6 +2284,38 @@ impl MenuBuilder {
                         self.screen = Screen::RevenueCategories(revenue_categories::Mode::Edit);
                         Task::none()
                     },
+                    revenue_categories::Operation::RequestDelete(id) => {
+                        println!("Deleting RevenueCategory id: {}", id);
+                        self.deletion_info = data_types::DeletionInfo { 
+                           entity_type: "RevenueCategory".to_string(),
+                           entity_id: id,
+                           affected_items: Vec::new()
+                       };
+                        self.show_modal = true;
+                       Task::none()
+                   }
+                   revenue_categories::Operation::CopyRevenueCategory(id) => {
+                       println!("Copying RevenueCategory: {}", id);
+                        let copy_item = self.revenue_categories.get(&id).unwrap();
+                       let next_id = self.revenue_categories
+                           .keys()
+                           .max()
+                           .map_or(1, |max_id| max_id + 1);
+                       
+                       let new_item = RevenueCategory {
+                           id: next_id,
+                           name: copy_item.name.clone() + "(" + next_id.to_string().as_str() + ")",
+                           ..copy_item.clone()
+                       };
+
+                       self.revenue_categories.insert(next_id, new_item.clone());
+                       self.draft_revenue_category_id = Some(next_id);
+                       self.draft_revenue_category = new_item;
+                       self.selected_revenue_category_id = Some(next_id);
+                       self.screen = Screen::RevenueCategories(revenue_categories::Mode::Edit);
+
+                       Task::none()
+                   }
                     revenue_categories::Operation::Select(id) => {
                         self.selected_revenue_category_id = Some(id);
                         self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
@@ -2066,6 +2385,38 @@ impl MenuBuilder {
                         self.screen = Screen::ReportCategories(report_categories::Mode::Edit);
                         Task::none()
                     },
+                    report_categories::Operation::RequestDelete(id) => {
+                        println!("Deleting ReportCategory id: {}", id);
+                        self.deletion_info = data_types::DeletionInfo { 
+                           entity_type: "ReportCategory".to_string(),
+                           entity_id: id,
+                           affected_items: Vec::new()
+                       };
+                        self.show_modal = true;
+                       Task::none()
+                   }
+                   report_categories::Operation::CopyReportCategory(id) => {
+                       println!("Copying ReportCategory: {}", id);
+                        let copy_item = self.report_categories.get(&id).unwrap();
+                       let next_id = self.report_categories
+                           .keys()
+                           .max()
+                           .map_or(1, |max_id| max_id + 1);
+                       
+                       let new_item = ReportCategory {
+                           id: next_id,
+                           name: copy_item.name.clone() + "(" + next_id.to_string().as_str() + ")",
+                           ..copy_item.clone()
+                       };
+
+                       self.report_categories.insert(next_id, new_item.clone());
+                       self.draft_report_category_id = Some(next_id);
+                       self.draft_report_category = new_item;
+                       self.selected_report_category_id = Some(next_id);
+                       self.screen = Screen::ReportCategories(report_categories::Mode::Edit);
+
+                       Task::none()
+                   }
                     report_categories::Operation::Select(id) => {
                         self.selected_report_category_id = Some(id);
                         self.screen = Screen::ReportCategories(report_categories::Mode::View);
@@ -2134,6 +2485,38 @@ impl MenuBuilder {
                         self.screen = Screen::ProductClasses(product_classes::Mode::Edit);
                         Task::none()
                     },
+                    product_classes::Operation::RequestDelete(id) => {
+                        println!("Deleting ProductClass id: {}", id);
+                        self.deletion_info = data_types::DeletionInfo { 
+                           entity_type: "ProductClass".to_string(),
+                           entity_id: id,
+                           affected_items: Vec::new()
+                       };
+                        self.show_modal = true;
+                       Task::none()
+                   }
+                   product_classes::Operation::CopyProductClass(id) => {
+                       println!("Copying ProductClass: {}", id);
+                        let copy_item = self.product_classes.get(&id).unwrap();
+                        let next_id = self.product_classes
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+                       
+                        let new_item = ProductClass {
+                            id: next_id,
+                            name: copy_item.name.clone() + "(" + next_id.to_string().as_str() + ")",
+                            ..copy_item.clone()
+                        };
+
+                       self.product_classes.insert(next_id, new_item.clone());
+                       self.draft_product_class_id = Some(next_id);
+                       self.draft_product_class = new_item;
+                       self.selected_product_class_id = Some(next_id);
+                       self.screen = Screen::ProductClasses(product_classes::Mode::Edit);
+
+                       Task::none()
+                   }
                     product_classes::Operation::Select(id) => {
                         self.selected_product_class_id = Some(id);
                         self.screen = Screen::ProductClasses(product_classes::Mode::View);
@@ -2197,75 +2580,44 @@ impl MenuBuilder {
                                 .max()
                                 .map_or(1, |max_id| max_id + 1);
                             choice_group.id = next_id;
-                    //let new_id = ChoiceGroup::new_draft();
                     self.draft_choice_group = choice_group;
                     self.draft_choice_group_id = Some(-1);
                     self.selected_choice_group_id = Some(-1);
-                    //self.draft_choice_group_id = Some(next_id);
-                    //self.selected_choice_group_id = Some(next_id);
                     self.screen = Screen::ChoiceGroups(choice_groups::Mode::Edit);
                     Task::none()
                 },
                 choice_groups::Operation::RequestDelete(id) => {
-                    // First, find all items using this choice group
-                    let affected_items: Vec<(&EntityId, &Item)> = self.items
-                        .iter()
-                        .filter(|(_, item)| {
-                            item.choice_groups
-                                .as_ref()
-                                .map_or(false, |groups| groups.contains(&id))
-                        })
-                        .collect();
-            
-                    if !affected_items.is_empty() {
-                        // Create list of affected items for the confirmation dialog
-                        let items_list: Vec<String> = affected_items
-                            .iter()
-                            .map(|(_, item)| item.name.clone())
-                            .collect();
-            
-                        // Store affected items and choice group info for confirmation
-                        self.deletion_info = data_types::DeletionInfo {
-                            entity_type: "choice_group".to_string(),
-                            entity_id: id,
-                            affected_items: items_list,
-                        };
-            
-                        // Show confirmation dialog
-                        //self.screen = Screen::ChoiceGroups(choice_groups::Mode::ConfirmDelete);
-                    } else {
-                        // No dependencies, safe to delete directly
-                        self.choice_groups.remove(&id);
-                        self.selected_choice_group_id = None;
-                        self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
-                    }
+
+                    self.deletion_info = data_types::DeletionInfo { 
+                        entity_type: "ChoiceGroup".to_string(),
+                        entity_id: id,
+                        affected_items: Vec::new()
+                    };
+                     self.show_modal = true;
                     Task::none()
                 },
-                choice_groups::Operation::ConfirmDelete(id) => {
-                    // Remove the choice group from all items that use it
-                    for (_, item) in self.items.iter_mut() {
-                        if let Some(groups) = &mut item.choice_groups {
-                            groups.retain(|&group_id| group_id != id);
-                            
-                            // If no choice groups left, set to None
-                            if groups.is_empty() {
-                                item.choice_groups = None;
-                            }
-                        }
-                    }
-            
-                    // Delete the choice group
-                    self.choice_groups.remove(&id);
-                    self.selected_choice_group_id = None;
-                    self.deletion_info = DeletionInfo::new();
-                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                choice_groups::Operation::CopyChoiceGroup(id) => {
+                    println!("Copying ChoiceGroup: {}", id);
+                    let copy_item = self.choice_groups.get(&id).unwrap();
+                    let next_id = self.choice_groups
+                        .keys()
+                        .max()
+                        .map_or(1, |max_id| max_id + 1);
+                    
+                    let new_item = ChoiceGroup {
+                        id: next_id,
+                        name: copy_item.name.clone() + "(" + next_id.to_string().as_str() + ")",
+                        ..copy_item.clone()
+                    };
+
+                    self.choice_groups.insert(next_id, new_item.clone());
+                    self.draft_choice_group_id = Some(next_id);
+                    self.draft_choice_group = new_item;
+                    self.selected_choice_group_id = Some(next_id);
+                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::Edit);
+
                     Task::none()
-                },
-                choice_groups::Operation::CancelDelete => {
-                    self.deletion_info = DeletionInfo::new();
-                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
-                    Task::none()
-                },
+                }
                 choice_groups::Operation::Select(choice_group_id) => {
                     self.selected_choice_group_id = Some(choice_group_id);
                     self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
@@ -2300,27 +2652,27 @@ impl MenuBuilder {
                     }
 
                     Task::none()
-                }
-                printer_logicals::Operation::StartEdit(printer_id) => {
+                 }
+                 printer_logicals::Operation::StartEdit(printer_id) => {
                     // Start editing existing printer
                     self.draft_printer_id = Some(printer_id);
                     self.draft_printer = self.printer_logicals[&printer_id].clone();
                     self.screen = Screen::PrinterLogicals(printer_logicals::Mode::Edit);
                     Task::none()
-                }
-                printer_logicals::Operation::Cancel => {
+                 }
+                 printer_logicals::Operation::Cancel => {
                     if self.draft_printer_id.is_some() {
                         self.draft_printer_id = None;
                         self.draft_printer = PrinterLogical::default();
                     }
                     self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
                     Task::none()
-                }
-                printer_logicals::Operation::Back => {
+                 }
+                 printer_logicals::Operation::Back => {
                     self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
                     Task::none()
-                }
-                printer_logicals::Operation::CreateNew(mut printer_logical) => {
+                 }
+                 printer_logicals::Operation::CreateNew(mut printer_logical) => {
                     let next_id = self.printer_logicals
                             .keys()
                             .max()
@@ -2328,16 +2680,153 @@ impl MenuBuilder {
                     printer_logical.id = next_id;
                     
                     self.draft_printer = printer_logical;
-                    self.draft_printer_id = Some(-1);
-                    self.selected_printer_id = Some(-1);
+                    self.draft_printer_id = Some(next_id);
+                    self.selected_printer_id = Some(next_id);
                     self.screen = Screen::PrinterLogicals(printer_logicals::Mode::Edit);
                     Task::none()
-                },
+                 },
+                 printer_logicals::Operation::RequestDelete(id) => {
+                    println!("Deleting PrinterLogical id: {}", id);
+                        self.deletion_info = data_types::DeletionInfo { 
+                       entity_type: "PrinterLogical".to_string(),
+                       entity_id: id,
+                       affected_items: Vec::new()
+                   };
+                        self.show_modal = true;
+                   Task::none()
+                }
+                printer_logicals::Operation::CopyPrinterLogical(id) => {
+                   println!("Copying PrinterLogical: {}", id);
+                    let copy_item = self.printer_logicals.get(&id).unwrap();
+                    let next_id = self.printer_logicals
+                        .keys()
+                        .max()
+                        .map_or(1, |max_id| max_id + 1);
+                   
+                    let new_item = PrinterLogical {
+                        id: next_id,
+                        name: copy_item.name.clone() + "(" + next_id.to_string().as_str() + ")",
+                        ..copy_item.clone()
+                    };
+
+                   self.printer_logicals.insert(next_id, new_item.clone());
+                   self.draft_printer_id = Some(next_id);
+                   self.draft_printer = new_item;
+                   self.selected_printer_id = Some(next_id);
+                   self.screen = Screen::PrinterLogicals(printer_logicals::Mode::Edit);
+
+                   Task::none()
+                }
+                printer_logicals::Operation::EditPrinterLogical(id) => {
+                    println!("Edit Printer Operation on id: {}", id);
+                    // First check if we already have an edit state for this printer
+                    let already_editing = self.printer_logical_edit_state_vec
+                        .iter()
+                        .any(|state| state.id.parse::<i32>().unwrap() == id);
+
+                    // Only create new edit state if we're not already editing this printer
+                    if !already_editing {
+                        if let Some(printer) = self.printer_logicals.get(&id) {
+                            let edit_state = printer_logicals::EditState {
+                                name: printer.name.clone(),
+                                original_name: printer.name.clone(),
+                                id: printer.id.to_string(),
+                                validation_error: None,
+                            };
+                            
+                            self.printer_logical_edit_state_vec.push(edit_state);
+                        }
+                    }
+
+                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
+                    Task::none()
+                }
+                printer_logicals::Operation::CreateNewMulti => {
+                    let next_id = self.printer_logicals
+                        .keys()
+                        .max()
+                        .map_or(1, |max_id| max_id + 1);
+
+                    //Create a new PrinterLogical
+                    let printer = PrinterLogical {
+                        id: next_id,
+                        name: String::new()
+                    };
+
+                    //Add new PrinterLogical to the app state
+                    self.printer_logicals.insert(next_id, printer.clone());
+
+                    //Create a new edit_state for the new printer
+                    let edit_state = printer_logicals::EditState {
+                        name: printer.name.clone(),
+                        original_name: printer.name.clone(),
+                        id: printer.id.to_string(),
+                        validation_error: None,
+                    };
+                    
+                    //Add new printer edit_state to app state
+                    self.printer_logical_edit_state_vec.push(edit_state);
+
+                    Task::none()
+                }
                 printer_logicals::Operation::Select(printer_logical_id) => {
                     self.selected_printer_id = Some(printer_logical_id);
                     self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
                     Task::none()
                 },
+                printer_logicals::Operation::SaveMultiTest(id, edit_state) => {
+
+                    // First, find the edit state for this printer
+                    if let Some(edit_state) = self.printer_logical_edit_state_vec
+                        .iter()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id)
+                    {
+                        // Clone the edit state name since we'll need it after removing the edit state
+                        let new_name = edit_state.name.clone();
+                        
+                        // Get a mutable reference to the printer and update it
+                        if let Some(printer) = self.printer_logicals.get_mut(&id) {
+                            printer.name = new_name;
+                        }
+                    }
+
+                    self.printer_logical_edit_state_vec.retain(|edit| {
+                        edit.id.parse::<i32>().unwrap() != id
+                    });
+
+                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
+                    Task::none()
+                }
+                printer_logicals::Operation::CancelEdit(id) => {
+                    // Find the edit state and reset it before removing
+                    if let Some(edit_state) = self.printer_logical_edit_state_vec
+                    .iter_mut()
+                    .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                    {
+                    // Reset the data to original values if needed
+                    edit_state.reset();
+                    }
+
+                    // Remove the edit state from the vec
+                    self.printer_logical_edit_state_vec.retain(|state| {
+                    state.id.parse::<i32>().unwrap() != id
+                    });
+
+                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
+                    Task::none()
+                }
+                printer_logicals::Operation::UpdateMultiName(id, new_name) => {
+                    println!("MultinameEdit on id: {}", id);
+                    if let Some(edit_state) = self.printer_logical_edit_state_vec
+                    .iter_mut()
+                    .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                    { // Update the name
+                        edit_state.name = new_name;
+                    }
+
+                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
+                    Task::none()
+                }
             },
 
             Operation::PriceLevels(id, op) => match op {
@@ -2400,6 +2889,38 @@ impl MenuBuilder {
                     self.screen = Screen::PriceLevels(price_levels::Mode::Edit);
                     Task::none()
                 },
+                price_levels::Operation::RequestDelete(id) => {
+                    println!("Deleting PriceLevel id: {}", id);
+                        self.deletion_info = data_types::DeletionInfo { 
+                       entity_type: "PriceLevel".to_string(),
+                       entity_id: id,
+                       affected_items: Vec::new()
+                   };
+                        self.show_modal = true;
+                   Task::none()
+               }
+               price_levels::Operation::CopyPriceLevel(id) => {
+                    println!("Copying PriceLevel: {}", id);
+                    let copy_item = self.price_levels.get(&id).unwrap();
+                    let next_id = self.price_levels
+                        .keys()
+                        .max()
+                        .map_or(1, |max_id| max_id + 1);
+                   
+                    let new_item = PriceLevel {
+                        id: next_id,
+                        name: copy_item.name.clone() + "(" + next_id.to_string().as_str() + ")",
+                        ..copy_item.clone()
+                    };
+
+                   self.price_levels.insert(next_id, new_item.clone());
+                   self.draft_price_level_id = Some(next_id);
+                   self.draft_price_level = new_item;
+                   self.selected_price_level_id = Some(next_id);
+                   self.screen = Screen::PriceLevels(price_levels::Mode::Edit);
+
+                   Task::none()
+               }
                 price_levels::Operation::Select(price_level_id) => {
                     self.selected_price_level_id = Some(price_level_id);
                     self.screen = Screen::PriceLevels(price_levels::Mode::View);
