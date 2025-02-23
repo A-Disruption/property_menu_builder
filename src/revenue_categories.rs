@@ -198,7 +198,7 @@ pub fn view<'a>(
                 button(
                     list_item(
                         &category.name.as_str(), 
-                        button(icon::copy())
+                        button(icon::copy().size(14))
                             .on_press(Message::CopyRevenueCategory(category.id))
                             .style(
                                 if category.id == revenue_category.id {
@@ -207,7 +207,7 @@ pub fn view<'a>(
                                     button::primary
                                 }
                             ), 
-                        button(icon::trash()).on_press(Message::RequestDelete(category.id)),
+                        button(icon::trash().size(14)).on_press(Message::RequestDelete(category.id)),
                     )
                 )
                 .width(iced::Length::Fill)
@@ -241,7 +241,7 @@ pub fn view<'a>(
                 row![
                     text("Revenue Categories").size(18),
                     iced::widget::horizontal_space(),
-                    button(icon::new().shaping(text::Shaping::Advanced))
+                    button(icon::new().size(14))
                         .on_press(Message::CreateNew)
                         .style(button::primary),
                 ].width(250),

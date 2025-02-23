@@ -41,7 +41,7 @@ pub fn view<'a>(
     price_levels: &'a BTreeMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
     let header = row![
-        button(icon::edit().shaping(text::Shaping::Advanced)).on_press(Message::Edit),
+        button(icon::edit().size(14)).on_press(Message::Edit),
         horizontal_space().width(4),
     ]
     .spacing(10)
@@ -155,6 +155,26 @@ pub fn view<'a>(
         column![
             text("Price Levels").size(14).style(iced::widget::text::primary),
             row![
+                if let Some(ref prices) = item.item_prices {
+                    row(
+                        prices.iter()
+                            .filter_map(|item_price| {
+                                price_levels.get(&item_price.price_level_id).map(|price_level|{
+                                    //let label = format!("{}: ${}", price_level.name, item_price.price);
+                                    let label2 = row![
+                                        text(price_level.name.clone() + ": ").style(text::secondary),
+                                        text("$".to_string() + item_price.price.to_string().as_str()),
+                                        ];
+
+                                    button(label2).style(data_types::badge).into()
+                                })
+                            }).collect::<Vec<_>>()
+                    ).spacing(10).wrap()
+                } else {
+                    row![button(text("No Price Level Assigned")).style(data_types::badge)].wrap()
+                }
+            ],
+/*             row![
                 if let Some(ref levels) = item.price_levels {
                     row(
                         levels.iter()
@@ -165,7 +185,7 @@ pub fn view<'a>(
                 } else {
                     row![text_input("", "None")].width(250).wrap()
                 }
-            ],
+            ], */
         ]
     )
     .style(container::rounded_box)

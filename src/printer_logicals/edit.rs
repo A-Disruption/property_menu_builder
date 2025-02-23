@@ -29,8 +29,8 @@ pub fn view<'a>(
         horizontal_space().width(10),
         text(&printer.name).size(18).style(text::primary),
         horizontal_space(),
-        button(icon::save()).on_press(Message::Save).style(button::primary),
-        button(icon::cancel()).on_press(Message::Cancel).style(button::danger),
+        button(icon::save().size(14)).on_press(Message::Save).style(button::primary),
+        button(icon::cancel().size(14)).on_press(Message::Cancel).style(button::danger),
         horizontal_space().width(4),
     ]
     .spacing(10)

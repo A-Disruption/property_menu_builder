@@ -16,7 +16,7 @@ pub fn view<'a>(price_level: &'a super::PriceLevel) -> Element<'a, Message> {
         horizontal_space().width(40),
         text(&price_level.name).size(16),
         horizontal_space(),
-        button(icon::edit().shaping(text::Shaping::Advanced)).on_press(Message::Edit)
+        button(icon::edit().size(14)).on_press(Message::Edit)
     ]
     .spacing(10)
     .align_y(Alignment::Center);

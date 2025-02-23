@@ -17,7 +17,7 @@ pub fn view<'a>(revenue_category: &'a super::RevenueCategory) -> Element<'a, Mes
         horizontal_space().width(40),
         text(&revenue_category.name).size(16),
         horizontal_space(),
-        button(icon::edit().shaping(text::Shaping::Advanced)).on_press(Message::Edit)
+        button(icon::edit().size(14)).on_press(Message::Edit)
     ]
     .spacing(10)
     .align_y(Alignment::Center);

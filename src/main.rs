@@ -6,10 +6,9 @@ use iced::widget::{
     button, column, container, row, scrollable, text, vertical_space, opaque, stack
 };
 use iced::{Element, Length, Size, Subscription, Task};
-//use iced_fontello;
 use persistence::FileManager;
-use printer_logicals::EditState;
 use std::collections::BTreeMap;
+use rust_decimal::Decimal;
 
 mod action;
 mod settings;
@@ -40,7 +39,7 @@ use crate::{
     printer_logicals::PrinterLogical,
 };
 
-use data_types::{DeletionInfo, EntityId};
+use data_types::{DeletionInfo, EntityId, ItemPrice};
 pub use action::Action;
 
 fn main() -> iced::Result {
@@ -363,17 +362,6 @@ impl MenuBuilder {
                         available_tax_groups: self.tax_groups.clone(),
                     };
 
-                    let available_choice_groups: Vec<ChoiceGroup> = self.choice_groups.values().cloned().collect();
-                    let available_printer_logicals: Vec<PrinterLogical> = self.printer_logicals.values().cloned().collect();
-                    let available_price_levels: Vec<PriceLevel> = self.price_levels.values().cloned().collect();
-
-                    self.item_edit_state = items::EditState::new(
-                        &mut self.draft_item,
-                        available_choice_groups,
-                        available_printer_logicals,
-                        available_price_levels,
-                    );
-
                     let action = items::update(
                         &mut self.draft_item,
                         msg,
@@ -400,17 +388,6 @@ impl MenuBuilder {
                     } else {
                         self.items.get_mut(&id).expect("Item should exist")
                     };
-
-                    let available_choice_groups: Vec<ChoiceGroup> = self.choice_groups.values().cloned().collect();
-                    let available_printer_logicals: Vec<PrinterLogical> = self.printer_logicals.values().cloned().collect();
-                    let available_price_levels: Vec<PriceLevel> = self.price_levels.values().cloned().collect();
-
-                    self.item_edit_state = items::EditState::new(
-                        item,
-                        available_choice_groups,
-                        available_printer_logicals,
-                        available_price_levels,
-                    );
 
                     let other_items: BTreeMap<EntityId, &Item> = cloned_items
                         .iter()
@@ -1243,7 +1220,7 @@ impl MenuBuilder {
                         iced::widget::toggler(self.toggle_quickview).on_toggle(Message::ToggleQuickView),
                     ],
                     iced::widget::horizontal_space(),
-                    button(icon::settings().shaping(text::Shaping::Advanced)) 
+                    button(icon::settings().size(14)) 
                         .on_press(Message::Navigate(Screen::Settings(self.settings.clone())))
                         //.width(Length::Fixed(40.0))
                         .style(button::secondary),
@@ -1799,6 +1776,19 @@ impl MenuBuilder {
             Operation::Items(id, op) => {
                 match op {
                     items::Operation::Save(mut item) => {
+                        println!("Saving Item ID: {}, with prices: {:?}", item.id, item.item_prices);
+                        println!("EditState information: {:?}", self.item_edit_state.prices);
+
+                        let edit_state_prices = self.item_edit_state.prices.clone();
+                        //Copy prices from edit_state,to item
+                        let item_prices = edit_state_prices.unwrap_or(Vec::new()).iter().map(
+                            |price| ItemPrice {
+                                price_level_id: price.0,
+                                price: price.1.parse::<Decimal>().unwrap_or(Decimal::new(0, 2))
+                            }
+                        ).collect::<Vec<_>>();
+
+                        item.item_prices = Some(item_prices);
 
                         if item.id < 0 {
                             let next_id = self.items
@@ -1835,6 +1825,21 @@ impl MenuBuilder {
                         // Start editing an existing Item
                         self.draft_item_id = Some(id);
                         self.draft_item = self.items[&id].clone();
+
+                        let item = self.items.get_mut(&id).expect("Item should exist");
+                        let available_choice_groups: Vec<ChoiceGroup> = self.choice_groups.values().cloned().collect();
+                        let available_printer_logicals: Vec<PrinterLogical> = self.printer_logicals.values().cloned().collect();
+                        let available_price_levels: Vec<PriceLevel> = self.price_levels.values().cloned().collect();
+
+                        // We only do this once, when the user explicitly begins editing:
+                        self.item_edit_state = items::EditState::new(
+                            item,
+                            available_choice_groups,
+                            available_printer_logicals,
+                            available_price_levels,
+                        );
+
+                        println!("Prices: {:?}", item.item_prices);
                         self.screen = Screen::Items(items::Mode::Edit);
                         Task::none()
                     }
@@ -1914,6 +1919,23 @@ impl MenuBuilder {
                     }
                     items::Operation::ShowModal => {
                         self.show_modal = true;
+                        Task::none()
+                    }
+                    items::Operation::UpdatePrice(item_id, price_level_id, item_price) => {
+                        // Use a mutable reference instead of cloning:
+                        let state = &mut self.item_edit_state;
+                
+                        // Update the persistent edit state directly:
+                        if let Some(prices) = &mut state.prices {
+                            if let Some((_, price_str)) = prices.iter_mut().find(|(id, _)| *id == price_level_id) {
+                                *price_str = item_price;
+                            } else {
+                                prices.push((price_level_id, item_price));
+                            }
+                        } else {
+                            state.prices = Some(vec![(price_level_id, item_price)]);
+                        }
+
                         Task::none()
                     }
                 }
@@ -2932,7 +2954,7 @@ impl MenuBuilder {
     }
 
     pub fn save_state(&self) -> Result<(), String> {
-        println!("Save State Triggered!");
+        //println!("Save State Triggered!");
         let state = persistence::AppState {
             items: self.items.values().cloned().collect(),
             item_groups: self.item_groups.values().cloned().collect(),
@@ -2946,7 +2968,7 @@ impl MenuBuilder {
             printer_logicals: self.printer_logicals.values().cloned().collect(),
             settings: self.settings.clone(),
         };
-        println!("State Information: {:?}", state);
+        //println!("State Information: {:?}", state);
 
         if self.settings.create_backups {
             self.file_manager.create_backup(std::path::Path::new(&self.settings.file_path))?;

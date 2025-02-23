@@ -256,7 +256,7 @@ pub fn view<'a>(
                     button(
                         list_item(
                             &printer_logical.name.as_str(), 
-                            button(icon::copy())
+                            button(icon::copy().size(14))
                                 .on_press(Message::CopyPrinterLogical(printer_logical.id))
                                 .style(
                                     if printer_logical.id == printer.id {
@@ -265,7 +265,7 @@ pub fn view<'a>(
                                         button::primary
                                     }
                                 ), 
-                            button(icon::trash()).on_press(Message::RequestDelete(printer_logical.id)),
+                            button(icon::trash().size(14)).on_press(Message::RequestDelete(printer_logical.id)),
                         )
                     )
                     .width(iced::Length::Fill)
@@ -299,7 +299,7 @@ pub fn view<'a>(
                     row![
                         text("Printer Logicals").size(18),
                         iced::widget::horizontal_space(),
-                        button(icon::new().shaping(text::Shaping::Advanced))
+                        button(icon::new().size(14))
                             .on_press(Message::CreateNew)
                             .style(button::primary),
                     ].width(250),
@@ -321,7 +321,7 @@ pub fn view<'a>(
                 row![
                     text("Printer Logicals").size(18).style(text::primary),
                     iced::widget::horizontal_space(),
-                    button(icon::new())
+                    button(icon::new().size(14))
                         .on_press(Message::CreateNewMulti)
                         .style(button::primary),
                 ]
@@ -429,7 +429,7 @@ fn logical_quick_edit_view<'a>(
 
                     row![
 
-                        button( if editing { icon::save() } else { icon::edit() })
+                        button( if editing { icon::save().size(14) } else { icon::edit().size(14) })
                         .on_press( if editing { Message::SaveMultiTest(printer.id, edit_state.unwrap().clone()) } else { Message::EditPrinterLogical(printer.id) })
                         .style(
                             button::primary // delete if going back to switching style based on selected printer
@@ -440,7 +440,7 @@ fn logical_quick_edit_view<'a>(
                             } */
                     ),
                         iced::widget::horizontal_space().width(2),
-                    button(icon::copy())
+                    button(icon::copy().size(14))
                         .on_press(Message::CopyPrinterLogical(printer.id))
                         .style(
                             button::primary // delete if going back to switching style based on selected printer
@@ -451,7 +451,7 @@ fn logical_quick_edit_view<'a>(
                             } */
                     ),
                     iced::widget::horizontal_space().width(2),
-                    button(if editing { icon::cancel() } else { icon::trash() })
+                    button(if editing { icon::cancel().size(14) } else { icon::trash().size(14) })
                         .on_press( if editing { Message::CancelEdit(printer.id) } else { Message::RequestDelete(printer.id) })
                         .style(button::danger),
                     ].width(150),

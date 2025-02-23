@@ -256,7 +256,7 @@ pub fn update(
                 button(
                     list_item(
                         &group.name.as_str(), 
-                        button(icon::copy())
+                        button(icon::copy().size(14))
                             .on_press(Message::CopyItemGroup(group.id))
                             .style(
                                 if group.id == item_group.id {
@@ -265,7 +265,7 @@ pub fn update(
                                     button::primary
                                 }
                             ), 
-                        button(icon::trash()).on_press(Message::RequestDelete(group.id)),
+                        button(icon::trash().size(14)).on_press(Message::RequestDelete(group.id)),
                     )
                 )
                 .width(iced::Length::Fill)
@@ -299,7 +299,7 @@ pub fn update(
                 row![
                     text("Item Groups").size(18),
                     iced::widget::horizontal_space(),
-                    button(icon::new().shaping(text::Shaping::Advanced))
+                    button(icon::new().size(14))
                         .on_press(Message::CreateNew)
                         .style(button::primary),
                 ].width(250),

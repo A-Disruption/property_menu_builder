@@ -1,10 +1,11 @@
+use iced::widget::text::LineHeight;
 use iced::widget::{
     button, checkbox, column, combo_box, container, pick_list, row, 
     text, text_input, horizontal_space, scrollable
 };
 use iced::{Element, Length};
 use std::collections::BTreeMap;
-use crate::data_types::EntityId;
+use crate::data_types::{EntityId, ItemPrice};
 use crate::data_types;
 use crate::{
     choice_groups::ChoiceGroup,
@@ -47,6 +48,7 @@ pub enum Message {
     AddPriceLevel(EntityId),
     RemovePriceLevel(EntityId),
     UpdateStorePriceLevel(Option<EntityId>),
+    UpdatePrice(EntityId, String),
 
     // Weight
     ToggleUseWeight(bool),
@@ -103,8 +105,8 @@ pub fn view<'a>(
     price_levels: &'a BTreeMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
     let header = row![
-        button(icon::save()).on_press(Message::Save).style(button::primary),
-        button(icon::cancel()).on_press(Message::Cancel).style(button::danger),
+        button(icon::save().size(14)).on_press(Message::Save).style(button::primary),
+        button(icon::cancel().size(14)).on_press(Message::Cancel).style(button::danger),
         horizontal_space().width(4),
     ]
     .spacing(10)
@@ -440,20 +442,6 @@ pub fn view<'a>(
     let choice_groups = container(
         column![
             column![
-/*                 row![ // trying to switch to using a button for a drop down selection of choice groups instead of a combo box
-                    text("Choice Groups").size(14).style(text::primary),
-                    column![
-                        button(icon::new()).on_press(
-                            pick_list(
-                                choice_groups.values().collect::<Vec<_>>,
-                                item.choice_groups.and_then(|id| choice_groups.get(&id)),
-                                |choice_group: ChoiceGroup| Message::ChoiceGroupSelected(choice_group.id)
-                            )
-                        ),
-
-                    ],
-                    
-                    ], */
                 text("Choice Groups").size(14).style(text::primary),
                 combo_box(
                     &state.choice_groups_combo,
@@ -535,42 +523,55 @@ pub fn view<'a>(
     .width(Length::Fill)
     .padding(10);
 
+    // temp variables for pricing,
+    let assigned_price_level_ids = item.price_levels.clone().unwrap_or_default();
+    let available_price_levels: Vec<PriceLevel> = price_levels.iter().filter(|(id, _)| !assigned_price_level_ids.contains(id) ).map(|(_, price_level)| price_level.clone()).collect();
+
     let pricing = container(
         column![
-            column![
-                text("Price Levels").size(14).style(text::primary),
-                combo_box(
-                    &state.price_levels_combo,
-                    "Add Price Level",
-                    state.price_levels_selection.as_ref(),
-                    |price_level: PriceLevel| Message::PriceLevelSelected(price_level.id)
-                )
-                .width(200),
-            ].spacing(5),
+            text("Price Levels").size(14).style(text::primary),
+
             row![ // Display Selected Price Levels
             if let Some(selected_prices) = &item.price_levels {
                 row(
                     selected_prices
                         .iter()
                         .filter_map(|id| price_levels.get(id))
-                        .map(|price| {
-                            container(
-                                button(
-                                    row![
-                                        text(&price.name),
-                                    ].spacing(10)
-                                )
-                                .on_press(Message::RemovePriceLevel(price.id))
-                                .style(data_types::badge)
-                                .width(Length::Shrink)
-                            ).padding(5).into()
+                        .map( |price_level| {
+                            // Look up the current price from state.prices using the price_level id.
+                            // If no matching price is found, default to an empty string.
+                            let current_price = state.prices.as_ref()
+                            .and_then(|all_prices| {
+                                all_prices.iter()
+                                    .find(|(id, _)| *id == price_level.id)
+                                    .map(|(_, price_str)| price_str.as_str())
+                            })
+                            .unwrap_or("");
+
+                            row![
+                                text(&price_level.name).width(75),
+                                text_input("Price", current_price)
+                                    .on_input( |price|
+                                        Message::UpdatePrice(price_level.id, price)
+                                    ).width(125),
+                                    horizontal_space().width(10),
+                                button(icon::trash().size(14)).on_press(Message::RemovePriceLevel(price_level.id)).style(button::danger),
+                                horizontal_space().width(10),
+                            ].align_y(iced::Alignment::Center).into()
                         })
                         .collect::<Vec<_>>()
-                ).wrap()
+                ).width(900).wrap()
             } else {
                 row![].wrap()
             }
             ],
+            row![
+                pick_list(
+                    available_price_levels,
+                    None::<PriceLevel>,
+                    |price_level: PriceLevel| Message::PriceLevelSelected(price_level.id)
+                ).width(75).placeholder("Add Price Levels")
+            ].spacing(5),
         ],
     )
     .style(container::rounded_box)

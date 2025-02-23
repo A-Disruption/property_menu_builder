@@ -243,7 +243,7 @@ pub fn view<'a>(
                 button(
                     list_item(
                         &group.name.as_str(),
-                        button(icon::copy())
+                        button(icon::copy().size(14))
                             .on_press(Message::CopyTaxGroup(group.id))
                             .style(
                                 if group.id == tax_group.id {
@@ -252,7 +252,7 @@ pub fn view<'a>(
                                     button::primary
                                 }
                             ),
-                        button(icon::trash()).on_press(Message::RequestDelete(group.id)),
+                        button(icon::trash().size(14)).on_press(Message::RequestDelete(group.id)),
 
                     )
                     
@@ -288,7 +288,7 @@ pub fn view<'a>(
                 row![
                     text("Tax Groups").size(18),
                     iced::widget::horizontal_space(),
-                    button(icon::new().shaping(text::Shaping::Advanced))
+                    button(icon::new().size(14))
                         .on_press(Message::CreateNew)
                         .style(button::primary),
                 ].width(250),

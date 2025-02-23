@@ -3,7 +3,7 @@ pub mod view;
 
 use std::collections::BTreeMap;
 use crate::data_types::{
-    self, EntityId, ValidationError
+    self, EntityId, ValidationError, ItemPrice
 };
 use crate::Action;
 use iced::{Alignment, Element};
@@ -51,6 +51,7 @@ pub enum Operation {
     CopyItem(EntityId),
     HideModal,
     ShowModal,
+    UpdatePrice(EntityId, EntityId, String),
 }
 
 #[derive(Debug, Clone)]
@@ -59,7 +60,7 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct EditState {
     // Basic info
     pub name: String,
@@ -83,6 +84,8 @@ pub struct EditState {
     pub price_levels: Vec<EntityId>,
     pub price_levels_combo: combo_box::State<PriceLevel>,
     pub price_levels_selection: Option<PriceLevel>,
+    pub price: String,
+    pub prices: Option<Vec<(EntityId, String)>>,
     pub store_price_level: Vec<EntityId>,
 
     // Weight
@@ -148,6 +151,15 @@ impl EditState {
             price_levels: item.price_levels.clone().unwrap_or_default(),
             price_levels_combo: combo_box::State::with_selection(price_level_list.clone(), None),
             price_levels_selection: None,
+            price: String::new(),
+            prices: item.item_prices.as_ref().map(|prices_vec| {
+                prices_vec.iter()
+                    .map(|item_price| {
+                        // Assuming price_level_id is the correct type here.
+                        (item_price.price_level_id, item_price.price.to_string())
+                    })
+                    .collect()
+            }),
             store_price_level: item.store_price_level.clone().unwrap_or_default(),
             use_weight: item.use_weight,
             weight_amount: item.weight_amount.to_string(),
@@ -259,6 +271,7 @@ pub struct Item {
     pub button2: Option<String>,
     pub printer_text: String,
     pub price_levels: Option<Vec<EntityId>>,
+    pub item_prices: Option<Vec<ItemPrice>>,
     pub product_class: Option<EntityId>,
     pub revenue_category: Option<EntityId>,
     pub tax_group: Option<EntityId>,
@@ -303,6 +316,7 @@ impl Default for Item {
             button2: None,
             printer_text: String::new(),
             price_levels: None,
+            item_prices: None,
             product_class: None,
             revenue_category: None,
             tax_group: None,
@@ -552,6 +566,7 @@ pub fn update(
                 Action::none()
             }
             edit::Message::PriceLevelSelected(level_id) => {
+                println!("Price level id selected: {}", level_id);
                 match &mut item.price_levels {
                     Some(levels) => levels.push(level_id),
                     None => item.price_levels = Some(vec![level_id]),
@@ -611,6 +626,9 @@ pub fn update(
                     }
                 }
                 Action::none()
+            }
+            edit::Message::UpdatePrice(price_level_id, item_price) => { // to update Price attached to a PriceLevel on an item
+                Action::operation(Operation::UpdatePrice(item.id, price_level_id, item_price))
             }
             edit::Message::UpdateStorePriceLevel(level_id) => {
                 if let Some(level_id) = level_id {
@@ -890,7 +908,7 @@ pub fn view<'a>(
                 button(
                     list_item(
                         an_item.name.as_str(),
-                        button(icon::copy())
+                        button(icon::copy().size(14))
                             .on_press(Message::CopyItem(an_item.id))
                             .style(
                                 if an_item.id == item.id {
@@ -898,7 +916,7 @@ pub fn view<'a>(
                                 } else {
                                     button::primary
                                 }),
-                        button(icon::trash()).on_press(Message::RequestDelete(an_item.id)),
+                        button(icon::trash().size(14)).on_press(Message::RequestDelete(an_item.id)),
                     )
                     )
                     .width(iced::Length::Fill)
@@ -951,7 +969,7 @@ pub fn view<'a>(
                 row![
                     text("Items").size(18),
                     iced::widget::horizontal_space(),
-                    button(icon::new().shaping(text::Shaping::Advanced).center())
+                    button(icon::new().size(14).center())
                         .on_press(Message::CreateNew)
                         .style(button::primary),
                 ].width(250),

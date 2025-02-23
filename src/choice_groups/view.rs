@@ -17,7 +17,7 @@ pub fn view<'a>(choice_group: &'a super::ChoiceGroup) -> Element<'a, Message> {
         horizontal_space().width(40),
         text(&choice_group.name).size(16),
         horizontal_space(),
-        button(icon::edit().shaping(text::Shaping::Advanced)).on_press(Message::Edit)
+        button(icon::edit().size(14)).on_press(Message::Edit)
     ]
     .spacing(10)
     .align_y(Alignment::Center);

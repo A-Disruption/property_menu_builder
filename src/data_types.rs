@@ -11,7 +11,7 @@ pub type EntityId = i32;
 pub type Currency = Decimal;
 
 //Struct to handle PriceLevel: Price pairs
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ItemPrice {
     pub price_level_id: EntityId,
     pub price: Decimal,
