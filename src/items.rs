@@ -1,10 +1,14 @@
 pub mod edit;
 pub mod view;
+pub mod prepare_export;
+pub mod prepare_exports2;
 
 use std::collections::BTreeMap;
 use crate::data_types::{
     self, EntityId, ValidationError, ItemPrice
 };
+pub use prepare_export::export_to_csv;
+pub use prepare_exports2::export_to_csv2;
 use crate::Action;
 use iced::{Alignment, Element};
 use serde::{Serialize, Deserialize};

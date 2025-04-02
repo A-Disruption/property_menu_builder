@@ -9,6 +9,8 @@ use iced::{Element, Length, Size, Subscription, Task};
 use persistence::FileManager;
 use std::collections::BTreeMap;
 use rust_decimal::Decimal;
+use rfd::AsyncFileDialog;
+use std::path::PathBuf;
 
 mod action;
 mod settings;
@@ -87,6 +89,12 @@ pub enum Message {
     ConfirmDelete(data_types::DeletionInfo),
     CancelDelete,
     ToggleQuickView(bool),
+    ExportCSVSelected(Option<String>),
+    ExportComplete(String),
+    ExportFailed(String),
+    ExportCSV(PathBuf),
+    ErrorExportingCSV(String),
+    PrepareExport,
 }
 
 #[derive(Debug)]
@@ -114,6 +122,7 @@ pub struct MenuBuilder {
     error_message: Option<String>,
     toggle_quickview: bool,
     printer_logical_edit_state_vec: Vec<printer_logicals::EditState>,
+    choice_group_edit_state_vec: Vec<choice_groups::EditState>,
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -208,6 +217,7 @@ pub struct MenuBuilder {
             error_message: None,
             toggle_quickview: true,
             printer_logical_edit_state_vec: Vec::new(),
+            choice_group_edit_state_vec: Vec::new(),
             
 
             // Items
@@ -1165,7 +1175,78 @@ impl MenuBuilder {
                 self.toggle_quickview = !self.toggle_quickview;
                 Task::none()
             }
-        }
+            Message::ExportCSVSelected(maybe_path) => {
+                println!("Handling ExportCSVSelected: {:?}", maybe_path);
+                
+                if let Some(path) = maybe_path {
+                    // User selected a file path, perform export
+                    match self.export_items_to_csv(&path) {
+                        Ok(_) => {
+                            println!("Successfully exported items to {}", path);
+                            self.error_message = None;
+                            // Return a message to handle success
+                            return Task::perform(async {}, move |_| Message::ExportComplete(path.clone()));
+                        }
+                        Err(e) => {
+                            println!("Export failed: {}", e);
+                            self.error_message = Some(format!("Export failed: {}", e));
+                            // Return a message to handle failure
+                            return Task::perform(async {}, move |_| Message::ExportFailed(e.clone()));
+                        }
+                    }
+                } else {
+                    println!("No path selected, export canceled");
+                }
+                Task::none()
+            },
+            Message::ExportComplete(path) => {
+                println!("Export completed: {}", path);
+                self.error_message = Some(format!("Export successful: {}", path));
+                Task::none()
+            },
+            
+            Message::ExportFailed(error) => {
+                println!("Export failed: {}", error);
+                self.error_message = Some(format!("Export failed: {}", error));
+                Task::none()
+            },
+
+            Message::ExportCSV(path) => {
+                match self.export_items_to_csv2(path.clone()) {
+                    Ok(_) => {
+                        println!("Successfully exported items to {:?}", path);
+                            self.error_message = None;
+                            // Return a message to handle success
+                            return Task::perform(async {}, move |_| Message::ExportComplete(path.display().to_string()));
+                    },
+                    Err(e) => {
+                        println!("Export failed: {}", e);
+                            self.error_message = Some(format!("Export failed: {}", e));
+                            // Return a message to handle failure
+                            return Task::perform(async {}, move |_| Message::ExportFailed(e.clone()));
+                    }
+                }
+                Task::none()
+            }
+            Message::ErrorExportingCSV(error) => {
+                println!("{}", error);
+                Task::none()
+            }
+            Message::PrepareExport => {
+                println!("Prepare Export");
+
+                let future = AsyncFileDialog::new()
+                .add_filter("csv", &["csv"])
+                .set_file_name("InfoGenesis_Items_Export.csv")
+                .save_file();
+
+                return Task::perform(
+                    future,
+                    |file_handler| 
+                    Message::ExportCSV(file_handler.unwrap().path().to_path_buf())
+                )
+            }
+        }   
     }
 
     fn view(&self) -> Element<Message> {
@@ -1614,12 +1695,18 @@ impl MenuBuilder {
                         &self.choice_groups[&id]
                     };
                 
-                    choice_groups::view(choice_group, mode, &self.choice_groups)
-                        .map(move |msg| Message::ChoiceGroups(id, msg))
+                    choice_groups::view(
+                        &self.choice_groups,
+                        &self.choice_group_edit_state_vec)
+                    .map(move |msg| Message::ChoiceGroups(id, msg))
+
                 } else if let Some((&first_id, first_choice_group)) = self.choice_groups.iter().next() {
                     // No selected choice group, but there is at least one available: show its view.
-                    choice_groups::view(first_choice_group, mode, &self.choice_groups)
-                        .map(move |msg| Message::ChoiceGroups(first_id.clone(), msg))
+                    choice_groups::view(
+                        &self.choice_groups,
+                        &self.choice_group_edit_state_vec)
+                    .map(move |msg| Message::ChoiceGroups(first_id.clone(), msg))
+
                 } else {
                     // No selected choice group and no choice groups available: show the empty state.
                     container(
@@ -1656,19 +1743,13 @@ impl MenuBuilder {
                     };
                 
                     printer_logicals::view(
-                        printer, 
-                        mode, 
                         &self.printer_logicals, 
-                        &self.toggle_quickview, 
                         &self.printer_logical_edit_state_vec)
                         .map(move |msg| Message::PrinterLogicals(id, msg))
                 } else if let Some((&first_id, first_printer)) = self.printer_logicals.iter().next() {
                     // No selected printer, but there is at least one available: show its view.
                     printer_logicals::view(
-                        first_printer, 
-                        mode, 
                         &self.printer_logicals, 
-                        &self.toggle_quickview, 
                         &self.printer_logical_edit_state_vec)
                         .map(move |msg| Message::PrinterLogicals(first_id.clone(), msg))
                 } else {
@@ -1765,11 +1846,88 @@ impl MenuBuilder {
                     }
                     settings::Operation::ShowError(error) => {
                         self.error_message = Some(error);
+                        self.screen = Screen::Settings(self.settings.clone());
                         Task::none()
                     }
                     settings::Operation::UpdateTheme(theme) => {
                         self.theme = theme;
+                        self.screen = Screen::Settings(self.settings.clone());
                         Task::none()
+                    }
+                    settings::Operation::ExportItemsToCSV => {
+                        println!("Team?");
+                        Task::done(Message::PrepareExport)
+                        // Spawn an async task that opens the save file dialog.
+/*                         return Task::perform(
+                            async move {
+
+                                // Log current thread info
+                                println!("Running on thread: {:?}", std::thread::current());
+                                println!("Thread ID: {:?}", std::thread::current().id());
+                                println!("Thread name: {:?}", std::thread::current().name());
+
+                                AsyncFileDialog::new()
+                                    .add_filter("csv", &["csv"])
+                                    .set_file_name("Infogenesis_Items_Import.csv")
+                                    .save_file()
+                                    .await
+                            },
+                            move |file_handle| {
+                                if let Some(file) = file_handle {
+                                    let path = file.path().to_path_buf();
+                                    // Use the cloned, thread-safe data to perform the export.
+                                    match items::export_to_csv2(&items, &path, Some(&item_groups)) {
+                                        Ok(()) => Message::ExportComplete(path.display().to_string()),
+                                        Err(e) => Message::ExportFailed(e),
+                                    }
+                                } else {
+                                    Message::ErrorExportingCSV("File Not Selected".into())
+                                }
+                            }
+                        ) */
+
+                        
+
+/*                         return Task::perform(  // somewhat working, but messages aren't being triggered
+                            //future
+                            AsyncFileDialog::new()
+                            .add_filter("csv", &["csv"])
+                            .set_file_name("Infogenesis_Items_Import.csv")
+                            .save_file(),
+
+                            //return message
+                            |filehandle| if let Some(path) = filehandle {
+                                let path1 = path.path();
+                                println!("Doing the ExportCSV");
+                                Message::ExportCSV(path1.to_path_buf())
+                            } else {
+                                println!("No Team :(");
+                                Message::ErrorExportingCSV("File Not Selected".to_string())
+                            }
+                        ); */
+                        
+                        
+/*                         return Task::perform(async  {//move {
+                            println!("Starting async dialog");
+                            
+                            if let Some(file) = AsyncFileDialog::new()
+                            .add_filter("csv", &["csv"])
+                            .set_file_name("Infogenesis_Items_Import.csv")
+                            .save_file()
+                            .await
+                                { 
+                                    println!("Team!!");
+                                    let path = file.path();
+                                    Message::ExportCSV(path.to_path_buf())
+                                }
+                            else {
+                                println!("No Team :(");
+                                Message::ErrorExportingCSV("File Not Selected".to_string())
+                            }
+                        },
+                        |message| message
+                    )
+                        .into() */
                     }
                 }
             }
@@ -1939,8 +2097,7 @@ impl MenuBuilder {
                         Task::none()
                     }
                 }
-            }
-    
+            } 
             Operation::ItemGroups(id, op) => {
                 match op {
                     item_groups::Operation::Save(mut group) => {
@@ -2042,7 +2199,6 @@ impl MenuBuilder {
                     },
                 }
             }
-    
             Operation::TaxGroups(id, op) => {
                 match op {
                     tax_groups::Operation::Save(mut group) => {
@@ -2142,8 +2298,7 @@ impl MenuBuilder {
                         Task::none()
                     },
                 }
-            }
-    
+            }    
             Operation::SecurityLevels(id, op) => {
                 match op {
                     security_levels::Operation::Save(mut level) => {
@@ -2244,8 +2399,7 @@ impl MenuBuilder {
                         Task::none()
                     },
                 }
-            }
-    
+            }    
             Operation::RevenueCategories(id, op) => {
                 match op {
                     revenue_categories::Operation::Save(mut category) => {
@@ -2344,8 +2498,7 @@ impl MenuBuilder {
                         Task::none()
                     },
                 }
-            }
-    
+            }    
             Operation::ReportCategories(id, op) => {
                 match op {
                     report_categories::Operation::Save(mut category) => {
@@ -2445,8 +2598,7 @@ impl MenuBuilder {
                         Task::none()
                     },
                 }
-            }
-    
+            }    
             Operation::ProductClasses(id, op) => {
                 match op {
                     product_classes::Operation::Save(mut class) => {
@@ -2545,8 +2697,7 @@ impl MenuBuilder {
                         Task::none()
                     },
                 }
-            }
-    
+            }    
             Operation::ChoiceGroups(id, op) => match op {
                 choice_groups::Operation::Save(mut choice_group) => {
                     if choice_group.id < 0 {
@@ -2640,13 +2791,119 @@ impl MenuBuilder {
 
                     Task::none()
                 }
+                choice_groups::Operation::EditChoiceGroup(id) => {
+                    println!("Edit Choice Group Operation on id: {}", id);
+                    // First check if we already have an edit state for this choice_group
+                    let already_editing = self.choice_group_edit_state_vec
+                        .iter()
+                        .any(|state| state.id.parse::<i32>().unwrap() == id);
+
+                    // Only create new edit state if we're not already editing this choice_group
+                    if !already_editing {
+                        if let Some(choice_group) = self.choice_groups.get(&id) {
+                            let edit_state = choice_groups::EditState {
+                                name: choice_group.name.clone(),
+                                original_name: choice_group.name.clone(),
+                                id: choice_group.id.to_string(),
+                                next_id: choice_group.id,
+                                validation_error: None,
+                            };
+                            
+                            self.choice_group_edit_state_vec.push(edit_state);
+                        }
+                    }
+
+                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    Task::none()
+
+                },
                 choice_groups::Operation::Select(choice_group_id) => {
                     self.selected_choice_group_id = Some(choice_group_id);
                     self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
                     Task::none()
                 },
-            },
-    
+                choice_groups::Operation::SaveAll(id, edit_state) => {
+                    // First, find the edit state for this choice_group
+                    if let Some(edit_state) = self.choice_group_edit_state_vec
+                        .iter()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id)
+                    {
+                        // Clone the edit state name since we'll need it after removing the edit state
+                        let new_name = edit_state.name.clone();
+                        
+                        // Get a mutable reference to the choice_group and update it
+                        if let Some(choice_group) = self.choice_groups.get_mut(&id) {
+                            choice_group.name = new_name;
+                        }
+                    }
+
+                    self.choice_group_edit_state_vec.retain(|edit| {
+                        edit.id.parse::<i32>().unwrap() != id
+                    });
+
+                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    Task::none()
+                },
+                choice_groups::Operation::UpdateMultiName(id, new_name) => {
+                    println!("MultinameEdit on id: {}", id);
+                    if let Some(edit_state) = self.choice_group_edit_state_vec
+                    .iter_mut()
+                    .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                    { // Update the name
+                        edit_state.name = new_name;
+                    }
+
+                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    Task::none()
+                },
+                choice_groups::Operation::CreateNewMulti => {
+                    let next_id = self.choice_groups
+                        .keys()
+                        .max()
+                        .map_or(1, |max_id| max_id + 1);
+
+                    //Create a new ChoiceGroup
+                    let choice_group = ChoiceGroup {
+                        id: next_id,
+                        name: String::new()
+                    };
+
+                    //Add new ChoiceGroup to the app state
+                    self.choice_groups.insert(next_id, choice_group.clone());
+
+                    //Create a new edit_state for the new choice_group
+                    let edit_state = choice_groups::EditState {
+                        name: choice_group.name.clone(),
+                        original_name: choice_group.name.clone(),
+                        id: choice_group.id.to_string(),
+                        next_id: choice_group.id,
+                        validation_error: None,
+                    };
+                    
+                    //Add new choice_group edit_state to app state
+                    self.choice_group_edit_state_vec.push(edit_state);
+
+                    Task::none()
+                },
+                choice_groups::Operation::CancelEdit(id) => {
+                    // Find the edit state and reset it before removing
+                    if let Some(edit_state) = self.choice_group_edit_state_vec
+                    .iter_mut()
+                    .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                    {
+                    // Reset the data to original values if needed
+                    edit_state.reset();
+                    }
+
+                    // Remove the edit state from the vec
+                    self.choice_group_edit_state_vec.retain(|state| {
+                    state.id.parse::<i32>().unwrap() != id
+                    });
+
+                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    Task::none()
+                },
+            },    
             Operation::PrinterLogicals(id, op) => match op {
                 printer_logicals::Operation::Save(mut printer) => {
 
@@ -2850,7 +3107,6 @@ impl MenuBuilder {
                     Task::none()
                 }
             },
-
             Operation::PriceLevels(id, op) => match op {
                 price_levels::Operation::Save(mut level) => {
                     if level.id < 0 {
@@ -2949,7 +3205,6 @@ impl MenuBuilder {
                     Task::none()
                 },
             },
-
         }
     }
 
@@ -3016,6 +3271,15 @@ impl MenuBuilder {
         }
 
         Ok(())
+    }
+
+    fn export_items_to_csv(&self, path: &str) -> Result<(), String> {
+        items::export_to_csv(&self.items, path)
+    }
+
+    fn export_items_to_csv2(&self, path: PathBuf) -> Result<(), String> {
+        println!("Exporting Items to {:?}", path);
+        items::export_to_csv2(&self.items, &path, Some(&self.item_groups))
     }
 
     fn subscription(&self) -> Subscription<Message> {

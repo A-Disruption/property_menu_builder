@@ -1,6 +1,3 @@
-pub mod edit;
-pub mod view;
-
 use crate::data_types::{
     self, EntityId, Validatable, ValidationError
 };
@@ -13,8 +10,6 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    Edit(edit::Message),
-    View(view::Message),
     CreateNew,
     RequestDelete(EntityId),
     CopyPrinterLogical(EntityId),
@@ -166,34 +161,6 @@ pub fn update(
     other_printers: &[&PrinterLogical]
 ) -> Action<Operation, Message> {
     match message {
-        Message::Edit(msg) => match msg {
-            edit::Message::UpdateName(name) => {
-                printer.name = name;
-                Action::none()
-            }
-            edit::Message::UpdateId(id) => {
-                if let Ok(id) = id.parse() {
-                    printer.id = id;
-                    Action::none()
-                } else {
-                    state.validation_error = Some("Invalid ID format".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::Save => {
-                if printer.validate(other_printers).is_ok() {
-                    Action::operation(Operation::Save(printer.clone()))
-                } else {
-                    state.validation_error = Some("Validation failed".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::Cancel => Action::operation(Operation::Cancel),
-        },
-        Message::View(msg) => match msg {
-            view::Message::Edit => Action::operation(Operation::StartEdit(printer.id)),
-            view::Message::Back => Action::operation(Operation::Back),
-        }
         Message::CreateNew => {
             let new_printer_logical = PrinterLogical::default();
             Action::operation(Operation::CreateNew(new_printer_logical))
@@ -241,139 +208,66 @@ pub fn update(
 }
 
 pub fn view<'a>(
-    printer: &'a PrinterLogical, 
-    mode: &'a Mode,
     all_printers: &'a BTreeMap<EntityId, PrinterLogical>,
-    quick_view: &'a bool,
     edit_states: &'a Vec<EditState>,
 ) -> Element<'a, Message> {
 
-    if !quick_view {
-        let printer_list = column(
-            all_printers
-                .values()
-                .map(|printer_logical| {
-                    button(
-                        list_item(
-                            &printer_logical.name.as_str(), 
-                            button(icon::copy().size(14))
-                                .on_press(Message::CopyPrinterLogical(printer_logical.id))
-                                .style(
-                                    if printer_logical.id == printer.id {
-                                        button::secondary
-                                    } else {
-                                        button::primary
-                                    }
-                                ), 
-                            button(icon::trash().size(14)).on_press(Message::RequestDelete(printer_logical.id)),
+    let title_row = container(
+        row![
+            text("Printer Logicals").size(18).style(text::primary),
+            iced::widget::horizontal_space(),
+            button(icon::new().size(14))
+                .on_press(Message::CreateNewMulti)
+                .style(button::primary),
+        ]
+        .width(Length::Fixed(505.0))
+        .padding(15)
+    )
+    .style(container::rounded_box);
+
+    // Header row for columns
+    let header_row = container(
+        row![
+            text("ID").width(Length::Fixed(75.0)),
+            text("Name").width(Length::Fixed(250.0)),
+            text("Actions").width(Length::Fixed(150.0)),
+        ]
+        .padding(15)
+    )
+    .style(container::rounded_box);
+
+    // List of printer logicals in a scrollable container
+    let printer_list = scrollable(
+        column(
+            all_printers.values()
+                .map(|a_printer| 
+                    container(
+                        logical_quick_edit_view(
+                            //printer.clone(), 
+                            a_printer,
+                            edit_states
                         )
                     )
-                    .width(iced::Length::Fill)
-                    .on_press(Message::Select(printer_logical.id))
-                    .style(if printer_logical.id == printer.id {
-                        button::primary
-                    } else {
-                        button::secondary
-                    })
+                    .style(container::bordered_box)
+                    .padding(5)
                     .into()
-                })
+                )
                 .collect::<Vec<_>>()
         )
-        .spacing(5)
-        .width(iced::Length::Fixed(250.0));
+    )
+    .height(Length::Fill);
 
-        let content = match mode {
-            Mode::View => view::view(printer).map(Message::View),
-            Mode::Edit => {
-                edit::view(
-                    printer,
-                    EditState::new(printer),
-                    all_printers
-                ).map(Message::Edit)
-            }
-        };
+    column![
+        title_row,
+        header_row,
+        container(printer_list)
+            .height(Length::Fill)
+            .style(container::rounded_box)
+    ]
+    //.spacing(10)
+    //.padding(10)
+    .into()
 
-        row![
-            container(
-                column![
-                    row![
-                        text("Printer Logicals").size(18),
-                        iced::widget::horizontal_space(),
-                        button(icon::new().size(14))
-                            .on_press(Message::CreateNew)
-                            .style(button::primary),
-                    ].width(250),
-                    printer_list,
-                ]
-                .spacing(10)
-                .padding(10)
-            )
-            .style(container::rounded_box),
-            container(content)
-                .width(iced::Length::Fill)
-                .style(container::rounded_box)
-        ]
-        .spacing(20)
-        .into()
-        } else { // Display quickview
-
-            let title_row = container(
-                row![
-                    text("Printer Logicals").size(18).style(text::primary),
-                    iced::widget::horizontal_space(),
-                    button(icon::new().size(14))
-                        .on_press(Message::CreateNewMulti)
-                        .style(button::primary),
-                ]
-                .width(Length::Fixed(505.0))
-                .padding(15)
-            )
-            .style(container::rounded_box);
-
-            // Header row for columns
-            let header_row = container(
-                row![
-                    text("ID").width(Length::Fixed(75.0)),
-                    text("Name").width(Length::Fixed(250.0)),
-                    text("Actions").width(Length::Fixed(150.0)),
-                ]
-                .padding(15)
-            )
-            .style(container::rounded_box);
-        
-            // List of printer logicals in a scrollable container
-            let printer_list = scrollable(
-                column(
-                    all_printers.values()
-                        .map(|a_printer| 
-                            container(
-                                logical_quick_edit_view(
-                                    //printer.clone(), 
-                                    a_printer,
-                                    edit_states
-                                )
-                            )
-                            .style(container::bordered_box)
-                            .padding(5)
-                            .into()
-                        )
-                        .collect::<Vec<_>>()
-                )
-            )
-            .height(Length::Fill);
-
-            column![
-                title_row,
-                header_row,
-                container(printer_list)
-                    .height(Length::Fill)
-                    .style(container::rounded_box)
-            ]
-            //.spacing(10)
-            //.padding(10)
-            .into()
-
-        }
 }
 
 pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
@@ -390,7 +284,6 @@ pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, M
 }
 
 fn logical_quick_edit_view<'a>(
-    //selected_printer: PrinterLogical,
     printer: &'a PrinterLogical,
     edit_states: &'a Vec<EditState>
     ) 
@@ -432,23 +325,13 @@ fn logical_quick_edit_view<'a>(
                         button( if editing { icon::save().size(14) } else { icon::edit().size(14) })
                         .on_press( if editing { Message::SaveMultiTest(printer.id, edit_state.unwrap().clone()) } else { Message::EditPrinterLogical(printer.id) })
                         .style(
-                            button::primary // delete if going back to switching style based on selected printer
-/*                             if selected_printer.id == printer.id {
-                                button::secondary
-                            } else {
-                                button::primary
-                            } */
+                            button::primary
                     ),
                         iced::widget::horizontal_space().width(2),
                     button(icon::copy().size(14))
                         .on_press(Message::CopyPrinterLogical(printer.id))
                         .style(
-                            button::primary // delete if going back to switching style based on selected printer
-/*                             if selected_printer.id == printer.id {
-                                button::secondary
-                            } else {
-                                button::primary
-                            } */
+                            button::primary
                     ),
                     iced::widget::horizontal_space().width(2),
                     button(if editing { icon::cancel().size(14) } else { icon::trash().size(14) })
@@ -462,12 +345,7 @@ fn logical_quick_edit_view<'a>(
         .width(iced::Length::Shrink)
         .on_press(Message::Select(printer.id))
         .style(
-            button::secondary // delete if going back to switching style based on selected printer
-/*             if printer.id == selected_printer.id {
-                button::primary
-            } else {
-             button::secondary
-            } */
+            button::secondary
         ).into();
 
 

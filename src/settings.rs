@@ -15,6 +15,7 @@ pub enum Message {
     Back,
     ShowError(String),
     UpdateTheme(String),
+    ExportItemsToCSV,
 }
 
 #[derive(Debug, Clone)]
@@ -23,6 +24,7 @@ pub enum Operation {
     Back,
     ShowError(String),
     UpdateTheme(Theme),
+    ExportItemsToCSV,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +85,9 @@ pub fn update(
             settings.app_theme = theme.clone();
             crate::Action::operation(Operation::UpdateTheme(string_to_theme(theme.as_str())))
         }
+        Message::ExportItemsToCSV => {
+            crate::Action::operation(Operation::ExportItemsToCSV)
+        }
     }
 }
 
@@ -90,13 +95,10 @@ pub fn view<'a>(
     settings: &'a AppSettings,
     error_message: Option<&'a str>,
 ) -> Element<'a, Message> {
-    println!("Theme: {:?}", settings.app_theme);
+    //println!("Theme: {:?}", settings.app_theme);
     container(
         column![
             row![
-//                button("←")
-//                    .width(40)
-//                    .on_press(Message::Back),
                 text("Settings").size(24),
             ].spacing(10),
             
@@ -122,7 +124,20 @@ pub fn view<'a>(
                     Theme::ALL,
                     Some(string_to_theme(&settings.app_theme)),
                     |m| Message::UpdateTheme(theme_to_string(m))
-                ), 
+                ),
+
+                // Add an export section
+                column![
+                    iced::widget::horizontal_rule(5),
+                    text("Data Export").size(18),
+                    row![
+                        button("Export Menu Items to CSV")
+                            .on_press(Message::ExportItemsToCSV)
+                            .style(button::secondary),
+                    ]
+                    .spacing(10)
+                ]
+                .spacing(10), 
                 
                 row![
                     button("Save Settings")
