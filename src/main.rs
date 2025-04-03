@@ -1620,11 +1620,17 @@ impl MenuBuilder {
                         &self.revenue_categories[&id]
                     };
                 
-                    revenue_categories::view(revenue_category, mode, &self.revenue_categories)
+                    revenue_categories::view(
+                        &self.revenue_categories,
+                        &self.revenue_category_edit_state_vec
+                    )
                         .map(move |msg| Message::RevenueCategories(id, msg))
                 } else if let Some((&first_id, first_revenue_category)) = self.revenue_categories.iter().next() {
                     // No selected revenue category, but there is at least one: show the view for the first one.
-                    revenue_categories::view(first_revenue_category, mode, &self.revenue_categories)
+                    revenue_categories::view(
+                        &self.revenue_categories,
+                        &self.revenue_category_edit_state_vec
+                    )
                         .map(move |msg| Message::RevenueCategories(first_id.clone(), msg))
                 } else {
                     // No selected revenue category and the collection is empty: show the empty state.
@@ -2506,8 +2512,112 @@ impl MenuBuilder {
 
                        Task::none()
                    }
+                   revenue_categories::Operation::EditRevenueCategory(id) => {
+                    println!("Edit Choice Group Operation on id: {}", id);
+                    // First check if we already have an edit state for this revenue_category
+                    let already_editing = self.revenue_category_edit_state_vec
+                        .iter()
+                        .any(|state| state.id.parse::<i32>().unwrap() == id);
+
+                    // Only create new edit state if we're not already editing this revenue_category
+                    if !already_editing {
+                        if let Some(revenue_category) = self.report_categories.get(&id) {
+                            let edit_state = revenue_categories::EditState {
+                                name: revenue_category.name.clone(),
+                                original_name: revenue_category.name.clone(),
+                                id: revenue_category.id.to_string(),
+                                validation_error: None,
+                            };
+                            
+                            self.revenue_category_edit_state_vec.push(edit_state);
+                        }
+                    }
+
+                    self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
+                    Task::none()
+                   },
                     revenue_categories::Operation::Select(id) => {
                         self.selected_revenue_category_id = Some(id);
+                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
+                        Task::none()
+                    },
+                    revenue_categories::Operation::SaveAll(id, edit_state) => {
+                        // First, find the edit state for this revenue_category
+                        if let Some(edit_state) = self.revenue_category_edit_state_vec
+                        .iter()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id)
+                        {
+                        // Clone the edit state name since we'll need it after removing the edit state
+                        let new_name = edit_state.name.clone();
+
+                        // Get a mutable reference to the revenue_category and update it
+                        if let Some(revenue_category) = self.revenue_categories.get_mut(&id) {
+                            revenue_category.name = new_name;
+                        }
+                        }
+
+                        self.revenue_category_edit_state_vec.retain(|edit| {
+                        edit.id.parse::<i32>().unwrap() != id
+                        });
+
+                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
+                        Task::none()
+                    },
+                    revenue_categories::Operation::UpdateMultiName(id, new_name) => {
+                        println!("MultinameEdit on id: {}", id);
+                        if let Some(edit_state) = self.revenue_category_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        { // Update the name
+                            edit_state.name = new_name;
+                        }
+    
+                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
+                        Task::none()
+                    },
+                    revenue_categories::Operation::CreateNewMulti => {
+                        let next_id = self.revenue_categories
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+
+                        //Create a new RevenueCategory
+                        let revenue_category = RevenueCategory {
+                            id: next_id,
+                            name: String::new()
+                        };
+
+                        //Add new RevenueCategory to the app state
+                        self.revenue_categories.insert(next_id, revenue_category.clone());
+
+                        //Create a new edit_state for the new revenue_category
+                        let edit_state = revenue_categories::EditState {
+                            name: revenue_category.name.clone(),
+                            original_name: revenue_category.name.clone(),
+                            id: revenue_category.id.to_string(),
+                            validation_error: None,
+                        };
+                        
+                        //Add new revenue_category edit_state to app state
+                        self.revenue_category_edit_state_vec.push(edit_state);
+
+                        Task::none()
+                    },
+                    revenue_categories::Operation::CancelEdit(id) => {
+                        // Find the edit state and reset it before removing
+                        if let Some(edit_state) = self.revenue_category_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        {
+                        // Reset the data to original values if needed
+                        edit_state.reset();
+                        }
+
+                        // Remove the edit state from the vec
+                        self.revenue_category_edit_state_vec.retain(|state| {
+                        state.id.parse::<i32>().unwrap() != id
+                        });
+
                         self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
                         Task::none()
                     },
