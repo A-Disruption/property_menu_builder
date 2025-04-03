@@ -1,7 +1,5 @@
-pub mod edit;
-pub mod view;
-
 use crate::data_types::{
+    self,
     EntityId,
     Validatable,
     ValidationError,
@@ -9,18 +7,23 @@ use crate::data_types::{
 use crate::Action;
 use crate::icon;
 use serde::{Serialize, Deserialize};
-use iced::Element;
-use iced::widget::{column, container, row, text, button};
+use iced::{Element, Length};
+use iced::widget::{column, container, row, text, button, text_input, scrollable};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    Edit(edit::Message),
-    View(view::Message),
     CreateNew,
     RequestDelete(EntityId),
     CopyProductClass(EntityId),
+    EditProductClass(EntityId),
+    UpdateId(String),
+    UpdateName(String),
     Select(EntityId),
+    SaveAll(EntityId, EditState),
+    UpdateMultiName(EntityId, String),
+    CreateNewMulti,
+    CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -32,7 +35,12 @@ pub enum Operation {
     CreateNew(ProductClass),
     RequestDelete(EntityId),
     CopyProductClass(EntityId),
+    EditProductClass(EntityId),
     Select(EntityId),
+    SaveAll(EntityId, EditState),
+    UpdateMultiName(EntityId, String),
+    CreateNewMulti,
+    CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -41,9 +49,10 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct EditState {
     pub name: String,
+    pub original_name: String,
     pub id: String,
     pub validation_error: Option<String>,
 }
@@ -52,9 +61,15 @@ impl EditState {
     pub fn new(product_class: &ProductClass) -> Self {
         Self {
             name: product_class.name.clone(),
+            original_name: product_class.name.clone(),
             id: product_class.id.to_string(),
             validation_error: None,
         }
+    }
+
+    pub fn reset(& mut self) {
+        self.name = self.original_name.clone();
+        self.validation_error = None;
     }
 
     pub fn validate(&self) -> Result<(), ValidationError> {
@@ -139,36 +154,6 @@ pub fn update(
     other_classes: &[&ProductClass]
 ) -> Action<Operation, Message> {
     match message {
-        Message::Edit(msg) => match msg {
-            edit::Message::UpdateName(name) => {
-                product_class.name = name;
-                Action::none()
-            }
-            edit::Message::UpdateId(id) => {
-                if let Ok(id) = id.parse() {
-                    if product_class.id < 0 {
-                        product_class.id = id;
-                    }
-                    Action::none()
-                } else {
-                    state.validation_error = Some("Invalid ID format".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::Save => {
-                if product_class.validate(other_classes).is_ok() {
-                    Action::operation(Operation::Save(product_class.clone()))
-                } else {
-                    state.validation_error = Some("Validation failed".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::Cancel => Action::operation(Operation::Cancel),
-        },
-        Message::View(msg) => match msg {
-            view::Message::Edit => Action::operation(Operation::StartEdit(product_class.id)),
-            view::Message::Back => Action::operation(Operation::Back),
-        }
         Message::CreateNew => {
             let new_product_classes = ProductClass::default();
             Action::operation(Operation::CreateNew(new_product_classes))
@@ -179,84 +164,95 @@ pub fn update(
         Message::CopyProductClass(id) => {
             Action::operation(Operation::CopyProductClass(id))
         },
+        Message::EditProductClass(id) => {
+            Action::operation(Operation::EditProductClass(id))
+        },
         Message::Select(id) => {
             Action::operation(Operation::Select(id))
         },
+        Message::UpdateId(id) => {
+            if let Ok(id) = id.parse() {
+                product_class.id = id;
+                Action::none()
+            } else {
+                state.validation_error = Some("Invalid ID format".to_string());
+                Action::none()
+            }
+        },
+        Message::UpdateName(name) => {
+            product_class.name = name;
+            Action::none()
+        },
+        Message::CreateNewMulti => {
+            Action::operation(Operation::CreateNewMulti)
+        },
+        Message::SaveAll(id, edit_state) => {
+            Action::operation(Operation::SaveAll(id, edit_state))
+        }
+        Message::UpdateMultiName(id, new_name) => {
+            Action::operation(Operation::UpdateMultiName(id, new_name))
+        }
+        Message::CancelEdit(id) => {
+            Action::operation(Operation::CancelEdit(id))
+        }
     }
 }
 
 pub fn view<'a>(
-    product_class: &'a ProductClass, 
-    mode: &'a Mode,
-    all_classes: &'a BTreeMap<EntityId, ProductClass>
+    all_classes: &'a BTreeMap<EntityId, ProductClass>,
+    edit_states: &'a Vec<EditState>,
 ) -> Element<'a, Message> {
 
-    let classes_list = column(
-        all_classes
-            .values()
-            .map(|class| {
-                button(
-                    list_item(
-                        &class.name.as_str(), 
-                        button(icon::copy().size(14))
-                            .on_press(Message::CopyProductClass(class.id))
-                            .style(
-                                if class.id == product_class.id {
-                                    button::secondary
-                                } else {
-                                    button::primary
-                                }
-                            ), 
-                        button(icon::trash().size(14)).on_press(Message::RequestDelete(class.id)),
-                    )
-                )
-                .width(iced::Length::Fill)
-                .on_press(Message::Select(class.id))
-                .style(if class.id == product_class.id {
-                    button::primary
-                } else {
-                    button::secondary
-                })
-                .into()
-            })
-            .collect::<Vec<_>>()
+    let title_row = container(
+        row![
+            text("Product Classes").size(18).style(text::primary),
+            iced::widget::horizontal_space(),
+            button(icon::new().size(14))
+                .on_press(Message::CreateNewMulti)
+                .style(button::primary),
+        ]
+        .width(Length::Fixed(505.0))
+        .padding(15)
     )
-    .spacing(5)
-    .width(iced::Length::Fixed(250.0));
+    .style(container::rounded_box);
 
-    let content = match mode {
-        Mode::View => view::view(product_class).map(Message::View),
-        Mode::Edit => {
-            edit::view(
-                product_class,
-                EditState::new(product_class),
-                all_classes
-            ).map(Message::Edit)
-        }
-    };
+    // Header row for columns
+    let header_row = container(
+        row![
+            text("ID").width(Length::Fixed(75.0)),
+            text("Name").width(Length::Fixed(250.0)),
+            text("Actions").width(Length::Fixed(150.0)),
+        ]
+        .padding(15)
+    )
+    .style(container::rounded_box);
 
-    row![
-        container(
-            column![
-                row![
-                    text("Product Classes").size(18),
-                    iced::widget::horizontal_space(),
-                    button(icon::new().size(14))
-                        .on_press(Message::CreateNew)
-                        .style(button::primary),
-                ].width(250),
-                classes_list,
-            ]
-            .spacing(10)
-            .padding(10)
+    let classes_list = scrollable(
+        column(
+            all_classes
+                .values()
+                .map(|class| 
+                    container(
+                        logical_quick_edit_view(
+                            class,
+                            edit_states
+                        )
+                    )
+                    .style(container::bordered_box)
+                    .padding(5)
+                    .into()
+                )
+                .collect::<Vec<_>>()
         )
-        .style(container::rounded_box),
-        container(content)
-            .width(iced::Length::Fill)
+    ).height(Length::Fill);
+
+    column![
+        title_row,
+        header_row,
+        container(classes_list)
+            .height(Length::Fill)
             .style(container::rounded_box)
-    ]
-    .spacing(20)
-    .into()
+    ].into()
 }
 
 
@@ -271,4 +267,74 @@ pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, M
     );
     
     button_content.into()
+}
+
+fn logical_quick_edit_view<'a>(
+    product_class: &'a ProductClass,
+    edit_states: &'a Vec<EditState>
+    ) 
+    -> Element<'a, Message> {
+
+        // Find edit state for this product_class if it exists
+        let edit_state = edit_states.iter()
+            .find(|state| state.id.parse::<i32>().unwrap() == product_class.id);
+
+        let editing = edit_state.is_some();
+
+        let display_name = edit_state
+            .map(|state| state.name.clone())
+            .unwrap_or_else(|| product_class.name.clone());
+
+        // Check for validation error
+        let validation_error = edit_state
+        .and_then(|state| state.validation_error.as_ref())
+        .cloned();
+
+        let button_content: iced::widget::Button<'a, Message> = button(
+            container(
+                row![
+                    text_input("ID (1-25)", &product_class.id.to_string())
+                        //.on_input(Message::UpdateId)
+                        .width(Length::Fixed(75.0)),
+                    text_input("Product Class Name", &display_name)
+                        .on_input_maybe(
+                            if editing {
+                               Some( |a_product_class| Message::UpdateMultiName(product_class.id, a_product_class) )
+                             } else {
+                                None 
+                             }
+                        ).style(if validation_error.is_some() { data_types::validated_error } else { text_input::default })
+                        .width(Length::Fixed(250.0)),
+
+                    row![
+
+                        button( if editing { icon::save().size(14) } else { icon::edit().size(14) })
+                        .on_press( if editing { Message::SaveAll(product_class.id, edit_state.unwrap().clone()) } else { Message::EditProductClass(product_class.id) })
+                        .style(
+                            button::primary
+                    ),
+                        iced::widget::horizontal_space().width(2),
+                    button(icon::copy().size(14))
+                        .on_press(Message::CopyProductClass(product_class.id))
+                        .style(
+                            button::primary
+                    ),
+                    iced::widget::horizontal_space().width(2),
+                    button(if editing { icon::cancel().size(14) } else { icon::trash().size(14) })
+                        .on_press( if editing { Message::CancelEdit(product_class.id) } else { Message::RequestDelete(product_class.id) })
+                        .style(button::danger),
+                    ].width(150),
+                ].align_y(iced::Alignment::Center),
+
+            )
+        )
+        .width(iced::Length::Shrink)
+        .on_press(Message::Select(product_class.id))
+        .style(
+            button::secondary
+        ).into();
+
+
+        
+        button_content.into()
 }

@@ -297,7 +297,7 @@ fn logical_quick_edit_view<'a>(
                     text_input("ID (1-25)", &report_category.id.to_string())
                         //.on_input(Message::UpdateId)
                         .width(Length::Fixed(75.0)),
-                    text_input("Choice Group Name", &display_name)
+                    text_input("Report Category Name", &display_name)
                         .on_input_maybe(
                             if editing {
                                Some( |a_report_category| Message::UpdateMultiName(report_category.id, a_report_category) )

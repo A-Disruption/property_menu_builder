@@ -1496,12 +1496,18 @@ impl MenuBuilder {
                         &self.product_classes[&id]
                     };
                 
-                    product_classes::view(product_class, mode, &self.product_classes)
+                    product_classes::view(
+                        &self.product_classes,
+                        &self.product_class_edit_state_vec
+                    )
                         .map(move |msg| Message::ProductClasses(id, msg))
                 } else if let Some((&first_id, first_product_class)) = self.product_classes.iter().next() {
                     // No selected product class but there is at least one in the collection:
                     // show the view for the first product class.
-                    product_classes::view(first_product_class, mode, &self.product_classes)
+                    product_classes::view(
+                        &self.product_classes,
+                        &self.product_class_edit_state_vec
+                    )
                         .map(move |msg| Message::ProductClasses(first_id.clone(), msg))
                 } else {
                     // No selected product class and the collection is empty; show the empty state.
@@ -1579,11 +1585,17 @@ impl MenuBuilder {
                         &self.security_levels[&id]
                     };
                 
-                    security_levels::view(security_level, mode, &self.security_levels)
+                    security_levels::view(
+                        &self.security_levels,
+                        &self.security_level_edit_state_vec
+                    )
                         .map(move |msg| Message::SecurityLevels(id, msg))
                 } else if let Some((&first_id, first_security_level)) = self.security_levels.iter().next() {
                     // No selected security level, but there is at least one available: show its view.
-                    security_levels::view(first_security_level, mode, &self.security_levels)
+                    security_levels::view(
+                        &self.security_levels,
+                        &self.security_level_edit_state_vec
+                    )
                         .map(move |msg| Message::SecurityLevels(first_id.clone(), msg))
                 } else {
                     // No selected security level and the collection is empty: show the empty state.
@@ -2391,7 +2403,7 @@ impl MenuBuilder {
                         self.show_modal = true;
                        Task::none()
                    }
-                   security_levels::Operation::CopySecurityLevel(id) => {
+                    security_levels::Operation::CopySecurityLevel(id) => {
                        println!("Copying SecurityLevel: {}", id);
                         let copy_item = self.security_levels.get(&id).unwrap();
                        let next_id = self.security_levels
@@ -2413,10 +2425,114 @@ impl MenuBuilder {
 
                        Task::none()
                    }
+                    security_levels::Operation::EditSecurityLevel(id) => {
+                        println!("Edit Security Group Operation on id: {}", id);
+                        // First check if we already have an edit state for this security_level
+                        let already_editing = self.security_level_edit_state_vec
+                            .iter()
+                            .any(|state| state.id.parse::<i32>().unwrap() == id);
+    
+                        // Only create new edit state if we're not already editing this security_level
+                        if !already_editing {
+                            if let Some(security_level) = self.security_levels.get(&id) {
+                                let edit_state = security_levels::EditState {
+                                    name: security_level.name.clone(),
+                                    original_name: security_level.name.clone(),
+                                    id: security_level.id.to_string(),
+                                    validation_error: None,
+                                };
+                                
+                                self.security_level_edit_state_vec.push(edit_state);
+                            }
+                        }
+    
+                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
+                        Task::none()
+                    },
                     security_levels::Operation::Select(id) => {
                         self.selected_security_level_id = Some(id);
                         self.screen = Screen::SecurityLevels(security_levels::Mode::View);
                         Task::none()
+                    },
+                    security_levels::Operation::SaveAll(id, edit_state) => {
+                        // First, find the edit state for this security_level
+                        if let Some(edit_state) = self.security_level_edit_state_vec
+                            .iter()
+                            .find(|state| state.id.parse::<i32>().unwrap() == id)
+                        {
+                            // Clone the edit state name since we'll need it after removing the edit state
+                            let new_name = edit_state.name.clone();
+                            
+                            // Get a mutable reference to the security_level and update it
+                            if let Some(security_group) = self.security_levels.get_mut(&id) {
+                                security_group.name = new_name;
+                            }
+                        }
+
+                        self.choice_group_edit_state_vec.retain(|edit| {
+                            edit.id.parse::<i32>().unwrap() != id
+                        });
+
+                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
+                        Task::none()
+                    },
+                    security_levels::Operation::UpdateMultiName(id, new_name) => {
+                        println!("MultinameEdit on id: {}", id);
+                        if let Some(edit_state) = self.security_level_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        { // Update the name
+                            edit_state.name = new_name;
+                        }
+    
+                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
+                        Task::none()
+                    },
+                    security_levels::Operation::CreateNewMulti => {
+                        let next_id = self.security_levels
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+
+                        //Create a new SecurityLevel
+                        let security_level = SecurityLevel {
+                            id: next_id,
+                            name: String::new()
+                        };
+
+                        //Add new SecurityLevel to the app state
+                        self.security_levels.insert(next_id, security_level.clone());
+
+                        //Create a new edit_state for the new security_level
+                        let edit_state = security_levels::EditState {
+                            name: security_level.name.clone(),
+                            original_name: security_level.name.clone(),
+                            id: security_level.id.to_string(),
+                            validation_error: None,
+                        };
+                        
+                        //Add new security_level edit_state to app state
+                        self.security_level_edit_state_vec.push(edit_state);
+
+                        Task::none()
+                    },
+                    security_levels::Operation::CancelEdit(id) => {
+                    // Find the edit state and reset it before removing
+                    if let Some(edit_state) = self.security_level_edit_state_vec
+                    .iter_mut()
+                    .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                    {
+                    // Reset the data to original values if needed
+                    edit_state.reset();
+                    }
+
+                    // Remove the edit state from the vec
+                    self.security_level_edit_state_vec.retain(|state| {
+                    state.id.parse::<i32>().unwrap() != id
+                    });
+
+                    self.screen = Screen::SecurityLevels(security_levels::Mode::View);
+                    Task::none()
                     },
                 }
             }    
@@ -2897,7 +3013,7 @@ impl MenuBuilder {
                         self.show_modal = true;
                        Task::none()
                    }
-                   product_classes::Operation::CopyProductClass(id) => {
+                    product_classes::Operation::CopyProductClass(id) => {
                        println!("Copying ProductClass: {}", id);
                         let copy_item = self.product_classes.get(&id).unwrap();
                         let next_id = self.product_classes
@@ -2919,8 +3035,112 @@ impl MenuBuilder {
 
                        Task::none()
                    }
+                    product_classes::Operation::EditProductClass(id) => {
+                        println!("Edit Product Class Operation on id: {}", id);
+                        // First check if we already have an edit state for this product_class
+                        let already_editing = self.product_class_edit_state_vec
+                            .iter()
+                            .any(|state| state.id.parse::<i32>().unwrap() == id);
+    
+                        // Only create new edit state if we're not already editing this product_class
+                        if !already_editing {
+                            if let Some(product_class) = self.product_classes.get(&id) {
+                                let edit_state = product_classes::EditState {
+                                    name: product_class.name.clone(),
+                                    original_name: product_class.name.clone(),
+                                    id: product_class.id.to_string(),
+                                    validation_error: None,
+                                };
+                                
+                                self.product_class_edit_state_vec.push(edit_state);
+                            }
+                        }
+    
+                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
+                        Task::none()
+                    },
                     product_classes::Operation::Select(id) => {
                         self.selected_product_class_id = Some(id);
+                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
+                        Task::none()
+                    },
+                    product_classes::Operation::SaveAll(id, edit_state) => {
+                        // First, find the edit state for this product_class
+                        if let Some(edit_state) = self.product_class_edit_state_vec
+                            .iter()
+                            .find(|state| state.id.parse::<i32>().unwrap() == id)
+                        {
+                            // Clone the edit state name since we'll need it after removing the edit state
+                            let new_name = edit_state.name.clone();
+                            
+                            // Get a mutable reference to the product_class and update it
+                            if let Some(product_class) = self.product_classes.get_mut(&id) {
+                                product_class.name = new_name;
+                            }
+                        }
+
+                        self.product_class_edit_state_vec.retain(|edit| {
+                            edit.id.parse::<i32>().unwrap() != id
+                        });
+
+                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
+                        Task::none()
+                    },
+                    product_classes::Operation::UpdateMultiName(id, new_name) => {
+                        println!("MultinameEdit on id: {}", id);
+                        if let Some(edit_state) = self.product_class_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        { // Update the name
+                            edit_state.name = new_name;
+                        }
+    
+                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
+                        Task::none()
+                    },
+                    product_classes::Operation::CreateNewMulti => {
+                        let next_id = self.product_classes
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+
+                        //Create a new ProductClass
+                        let product_class = ProductClass {
+                            id: next_id,
+                            name: String::new()
+                        };
+
+                        //Add new ProductClass to the app state
+                        self.product_classes.insert(next_id, product_class.clone());
+
+                        //Create a new edit_state for the new product_class
+                        let edit_state = product_classes::EditState {
+                            name: product_class.name.clone(),
+                            original_name: product_class.name.clone(),
+                            id: product_class.id.to_string(),
+                            validation_error: None,
+                        };
+                        
+                        //Add new product_class edit_state to app state
+                        self.product_class_edit_state_vec.push(edit_state);
+
+                        Task::none()
+                    },
+                    product_classes::Operation::CancelEdit(id) => {
+                        // Find the edit state and reset it before removing
+                        if let Some(edit_state) = self.product_class_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        {
+                        // Reset the data to original values if needed
+                        edit_state.reset();
+                        }
+
+                        // Remove the edit state from the vec
+                        self.product_class_edit_state_vec.retain(|state| {
+                        state.id.parse::<i32>().unwrap() != id
+                        });
+
                         self.screen = Screen::ProductClasses(product_classes::Mode::View);
                         Task::none()
                     },

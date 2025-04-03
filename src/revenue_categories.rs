@@ -1,6 +1,3 @@
-pub mod edit;
-pub mod view;
-
 use crate::data_types::{
     self,
     EntityId,
@@ -16,8 +13,6 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    Edit(edit::Message),
-    View(view::Message),
     CreateNew,
     RequestDelete(EntityId),
     CopyRevenueCategory(EntityId),
@@ -159,36 +154,6 @@ pub fn update(
     other_categories: &[&RevenueCategory]
 ) -> Action<Operation, Message> {
     match message {
-        Message::Edit(msg) => match msg {
-            edit::Message::UpdateName(name) => {
-                revenue_category.name = name;
-                Action::none()
-            }
-            edit::Message::UpdateId(id) => {
-                if let Ok(id) = id.parse() {
-                    if revenue_category.id < 0 {
-                        revenue_category.id = id;
-                    }
-                    Action::none()
-                } else {
-                    state.validation_error = Some("Invalid ID format".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::Save => {
-                if revenue_category.validate(other_categories).is_ok() {
-                    Action::operation(Operation::Save(revenue_category.clone()))
-                } else {
-                    state.validation_error = Some("Validation failed".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::Cancel => Action::operation(Operation::Cancel),
-        },
-        Message::View(msg) => match msg {
-            view::Message::Edit => Action::operation(Operation::StartEdit(revenue_category.id)),
-            view::Message::Back => Action::operation(Operation::Back),
-        }
         Message::CreateNew => {
             let new_revenue_category = RevenueCategory::default();
             Action::operation(Operation::CreateNew(new_revenue_category))
