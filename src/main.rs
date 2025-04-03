@@ -123,6 +123,10 @@ pub struct MenuBuilder {
     toggle_quickview: bool,
     printer_logical_edit_state_vec: Vec<printer_logicals::EditState>,
     choice_group_edit_state_vec: Vec<choice_groups::EditState>,
+    product_class_edit_state_vec: Vec<product_classes::EditState>,
+    security_level_edit_state_vec: Vec<security_levels::EditState>,
+    revenue_category_edit_state_vec: Vec<revenue_categories::EditState>,
+    report_category_edit_state_vec: Vec<report_categories::EditState>,
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -218,6 +222,10 @@ pub struct MenuBuilder {
             toggle_quickview: true,
             printer_logical_edit_state_vec: Vec::new(),
             choice_group_edit_state_vec: Vec::new(),
+            product_class_edit_state_vec: Vec::new(),
+            security_level_edit_state_vec: Vec::new(),
+            revenue_category_edit_state_vec: Vec::new(),
+            report_category_edit_state_vec: Vec::new(),
             
 
             // Items
@@ -1653,12 +1661,18 @@ impl MenuBuilder {
                         &self.report_categories[&id]
                     };
                 
-                    report_categories::view(report_category, mode, &self.report_categories)
+                    report_categories::view(
+                        &self.report_categories,
+                        &self.report_category_edit_state_vec
+                    )
                         .map(move |msg| Message::ReportCategories(id, msg))
                 } else if let Some((&first_id, first_report_category)) = self.report_categories.iter().next() {
                     // No selected report category, but there is at least one in the collection:
                     // Show its view.
-                    report_categories::view(first_report_category, mode, &self.report_categories)
+                    report_categories::view(
+                        &self.report_categories,
+                        &self.report_category_edit_state_vec
+                    )
                         .map(move |msg| Message::ReportCategories(first_id.clone(), msg))
                 } else {
                     // No selected report category and the collection is empty; show the empty state.
@@ -2470,7 +2484,7 @@ impl MenuBuilder {
                         self.show_modal = true;
                        Task::none()
                    }
-                   revenue_categories::Operation::CopyRevenueCategory(id) => {
+                    revenue_categories::Operation::CopyRevenueCategory(id) => {
                        println!("Copying RevenueCategory: {}", id);
                         let copy_item = self.revenue_categories.get(&id).unwrap();
                        let next_id = self.revenue_categories
@@ -2570,7 +2584,7 @@ impl MenuBuilder {
                         self.show_modal = true;
                        Task::none()
                    }
-                   report_categories::Operation::CopyReportCategory(id) => {
+                    report_categories::Operation::CopyReportCategory(id) => {
                        println!("Copying ReportCategory: {}", id);
                         let copy_item = self.report_categories.get(&id).unwrap();
                        let next_id = self.report_categories
@@ -2592,9 +2606,113 @@ impl MenuBuilder {
 
                        Task::none()
                    }
+                    report_categories::Operation::EditReportCategory(id) => {
+                        println!("Edit Report Category Operation on id: {}", id);
+                        // First check if we already have an edit state for this report_category
+                        let already_editing = self.report_category_edit_state_vec
+                            .iter()
+                            .any(|state| state.id.parse::<i32>().unwrap() == id);
+
+                        // Only create new edit state if we're not already editing this report_category
+                        if !already_editing {
+                            if let Some(report_category) = self.report_categories.get(&id) {
+                                let edit_state = report_categories::EditState {
+                                    name: report_category.name.clone(),
+                                    original_name: report_category.name.clone(),
+                                    id: report_category.id.to_string(),
+                                    validation_error: None,
+                                };
+                                
+                                self.report_category_edit_state_vec.push(edit_state);
+                            }
+                        }
+
+                        self.screen = Screen::ReportCategories(report_categories::Mode::Edit);
+                        Task::none()
+                    },
                     report_categories::Operation::Select(id) => {
                         self.selected_report_category_id = Some(id);
                         self.screen = Screen::ReportCategories(report_categories::Mode::View);
+                        Task::none()
+                    },
+                    report_categories::Operation::SaveAll(id, edit_state) => {
+                        // First, find the edit state for this report_category
+                        if let Some(edit_state) = self.report_category_edit_state_vec
+                        .iter()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id)
+                    {
+                        // Clone the edit state name since we'll need it after removing the edit state
+                        let new_name = edit_state.name.clone();
+                        
+                        // Get a mutable reference to the report_category and update it
+                        if let Some(report_category) = self.report_categories.get_mut(&id) {
+                            report_category.name = new_name;
+                        }
+                    }
+
+                    self.report_category_edit_state_vec.retain(|edit| {
+                        edit.id.parse::<i32>().unwrap() != id
+                    });
+
+                    self.screen = Screen::ReportCategories(report_categories::Mode::Edit);
+                    Task::none()
+                    },
+                    report_categories::Operation::UpdateMultiName(id, new_name) => {
+                        println!("MultinameEdit on id: {}", id);
+                        if let Some(edit_state) = self.report_category_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        { // Update the name
+                            edit_state.name = new_name;
+                        }
+    
+                        self.screen = Screen::ReportCategories(report_categories::Mode::Edit);
+                        Task::none()
+                    },
+                    report_categories::Operation::CreateNewMulti => {
+                        let next_id = self.report_categories
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+
+                        //Create a new ReportCategory
+                        let report_category = ReportCategory {
+                            id: next_id,
+                            name: String::new()
+                        };
+
+                        //Add new ReportCategory to the app state
+                        self.report_categories.insert(next_id, report_category.clone());
+
+                        //Create a new edit_state for the new report_category
+                        let edit_state = report_categories::EditState {
+                            name: report_category.name.clone(),
+                            original_name: report_category.name.clone(),
+                            id: report_category.id.to_string(),
+                            validation_error: None,
+                        };
+                        
+                        //Add new report_category edit_state to app state
+                        self.report_category_edit_state_vec.push(edit_state);
+
+                        Task::none()
+                    },
+                    report_categories::Operation::CancelEdit(id) => {
+                        // Find the edit state and reset it before removing
+                        if let Some(edit_state) = self.report_category_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        {
+                        // Reset the data to original values if needed
+                        edit_state.reset();
+                        }
+
+                        // Remove the edit state from the vec
+                        self.report_category_edit_state_vec.retain(|state| {
+                        state.id.parse::<i32>().unwrap() != id
+                        });
+
+                        self.screen = Screen::ReportCategories(report_categories::Mode::Edit);
                         Task::none()
                     },
                 }

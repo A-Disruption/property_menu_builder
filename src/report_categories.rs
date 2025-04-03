@@ -1,7 +1,5 @@
-pub mod edit;
-pub mod view;
-
 use crate::data_types::{
+    self,
     EntityId,
     ValidationError,
     Validatable,
@@ -9,18 +7,23 @@ use crate::data_types::{
 use crate::Action;
 use crate::icon;
 use serde::{Serialize, Deserialize};
-use iced::Element;
-use iced::widget::{button, container, column, row, text};
+use iced::{Element, Length};
+use iced::widget::{button, container, column, row, text, text_input, scrollable};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    Edit(edit::Message),
-    View(view::Message),
     CreateNew,
     RequestDelete(EntityId),
     CopyReportCategory(EntityId),
+    EditReportCategory(EntityId),
+    UpdateId(String),
+    UpdateName(String),
     Select(EntityId),
+    SaveAll(EntityId, EditState),
+    UpdateMultiName(EntityId, String),
+    CreateNewMulti,
+    CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -32,7 +35,12 @@ pub enum Operation {
     CreateNew(ReportCategory),
     RequestDelete(EntityId),
     CopyReportCategory(EntityId),
+    EditReportCategory(EntityId),
     Select(EntityId),
+    SaveAll(EntityId, EditState),
+    UpdateMultiName(EntityId, String),
+    CreateNewMulti,
+    CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -41,9 +49,10 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct EditState {
     pub name: String,
+    pub original_name: String,
     pub id: String,
     pub validation_error: Option<String>,
 }
@@ -52,9 +61,15 @@ impl EditState {
     pub fn new(report_category: &ReportCategory) -> Self {
         Self {
             name: report_category.name.clone(),
+            original_name: report_category.name.clone(),
             id: report_category.id.to_string(),
             validation_error: None,
         }
+    }
+
+    pub fn reset(& mut self) {
+        self.name = self.original_name.clone();
+        self.validation_error = None;
     }
 
     pub fn validate(&self) -> Result<(), ValidationError> {
@@ -140,34 +155,6 @@ pub fn update(
     other_categories: &[&ReportCategory]
 ) -> Action<Operation, Message> {
     match message {
-        Message::Edit(msg) => match msg {
-            edit::Message::UpdateName(name) => {
-                report_category.name = name;
-                Action::none()
-            }
-            edit::Message::UpdateId(id) => {
-                if let Ok(id) = id.parse() {
-                    report_category.id = id;
-                    Action::none()
-                } else {
-                    state.validation_error = Some("Invalid ID format".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::Save => {
-                if report_category.validate(other_categories).is_ok() {
-                    Action::operation(Operation::Save(report_category.clone()))
-                } else {
-                    state.validation_error = Some("Validation failed".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::Cancel => Action::operation(Operation::Cancel),
-        },
-        Message::View(msg) => match msg {
-            view::Message::Edit => Action::operation(Operation::StartEdit(report_category.id)),
-            view::Message::Back => Action::operation(Operation::Back),
-        }
         Message::CreateNew => {
             let new_report_category = ReportCategory::default();
             Action::operation(Operation::CreateNew(new_report_category))
@@ -178,86 +165,96 @@ pub fn update(
         Message::CopyReportCategory(id) => {
             Action::operation(Operation::CopyReportCategory(id))
         },
+        Message::EditReportCategory(id) => {
+            Action::operation(Operation::EditReportCategory(id))
+        },
         Message::Select(id) => {
             Action::operation(Operation::Select(id))
         },
+        Message::UpdateId(id) => {
+            if let Ok(id) = id.parse() {
+                report_category.id = id;
+                Action::none()
+            } else {
+                state.validation_error = Some("Invalid ID format".to_string());
+                Action::none()
+            }
+        },
+        Message::UpdateName(name) => {
+            report_category.name = name;
+            Action::none()
+        },
+        Message::CreateNewMulti => {
+            Action::operation(Operation::CreateNewMulti)
+        },
+        Message::SaveAll(id, edit_state) => {
+            Action::operation(Operation::SaveAll(id, edit_state))
+        }
+        Message::UpdateMultiName(id, new_name) => {
+            Action::operation(Operation::UpdateMultiName(id, new_name))
+        }
+        Message::CancelEdit(id) => {
+            Action::operation(Operation::CancelEdit(id))
+        }
     }
 }
 
 
 pub fn view<'a>(
-    report_category: &'a ReportCategory, 
-    mode: &'a Mode,
-    all_categories: &'a BTreeMap<EntityId, ReportCategory>
+    all_categories: &'a BTreeMap<EntityId, ReportCategory>,
+    edit_states: &'a Vec<EditState>,
 ) -> Element<'a, Message> {
 
-    let category_list = column(
-        all_categories
-            .values()
-            .map(|category| {
-                button(
-                    list_item(
-                        &category.name.as_str(), 
-                        button(icon::copy().size(14))
-                            .on_press(Message::CopyReportCategory(category.id))
-                            .style(
-                                if category.id == report_category.id {
-                                    button::secondary
-                                } else {
-                                    button::primary
-                                }
-                            ), 
-                        button(icon::trash().size(14)).on_press(Message::RequestDelete(category.id)),
-                    )
-                )
-                .width(iced::Length::Fill)
-                .on_press(Message::Select(category.id))
-                .style(if category.id == report_category.id {
-                    button::primary
-                } else {
-                    button::secondary
-                })
-                .into()
-            })
-            .collect::<Vec<_>>()
+    let title_row = container(
+        row![
+            text("Report Category").size(18).style(text::primary),
+            iced::widget::horizontal_space(),
+            button(icon::new().size(14))
+                .on_press(Message::CreateNewMulti)
+                .style(button::primary),
+        ]
+        .width(Length::Fixed(505.0))
+        .padding(15)
     )
-    .spacing(5)
-    .width(iced::Length::Fixed(250.0));
+    .style(container::rounded_box);
 
-    let content = match mode {
-        Mode::View => view::view(report_category).map(Message::View),
-        Mode::Edit => {
-            edit::view(
-                report_category,
-                EditState::new(report_category),
-                all_categories
-            ).map(Message::Edit)
-        }
-    };
+    // Header row for columns
+    let header_row = container(
+        row![
+            text("ID").width(Length::Fixed(75.0)),
+            text("Name").width(Length::Fixed(250.0)),
+            text("Actions").width(Length::Fixed(150.0)),
+        ]
+        .padding(15)
+    )
+    .style(container::rounded_box);
 
-    row![
-        container(
-            column![
-                row![
-                    text("Report Category").size(18),
-                    iced::widget::horizontal_space(),
-                    button(icon::new().size(14))
-                        .on_press(Message::CreateNew)
-                        .style(button::primary),
-                ].width(250),
-                category_list,
-            ]
-            .spacing(10)
-            .padding(10)
+    let category_list = scrollable(
+        column(
+            all_categories
+                .values()
+                .map(|category| 
+                    container(
+                        logical_quick_edit_view(
+                            category,
+                            edit_states
+                        )
+                    )
+                    .style(container::bordered_box)
+                    .padding(5)
+                    .into()
+                )
+                .collect::<Vec<_>>()
         )
-        .style(container::rounded_box),
-        container(content)
-            .width(iced::Length::Fill)
-            .style(container::rounded_box)
-    ]
-    .spacing(20)
-    .into()
+    ).height(Length::Fill);
 
+    column![
+        title_row,
+        header_row,
+        container(category_list)
+            .height(Length::Fill)
+            .style(container::rounded_box)
+    ].into()
 }
 
 pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
@@ -271,4 +268,74 @@ pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, M
     );
     
     button_content.into()
+}
+
+fn logical_quick_edit_view<'a>(
+    report_category: &'a ReportCategory,
+    edit_states: &'a Vec<EditState>
+    ) 
+    -> Element<'a, Message> {
+
+        // Find edit state for this report_category if it exists
+        let edit_state = edit_states.iter()
+            .find(|state| state.id.parse::<i32>().unwrap() == report_category.id);
+
+        let editing = edit_state.is_some();
+
+        let display_name = edit_state
+            .map(|state| state.name.clone())
+            .unwrap_or_else(|| report_category.name.clone());
+
+        // Check for validation error
+        let validation_error = edit_state
+        .and_then(|state| state.validation_error.as_ref())
+        .cloned();
+
+        let button_content: iced::widget::Button<'a, Message> = button(
+            container(
+                row![
+                    text_input("ID (1-25)", &report_category.id.to_string())
+                        //.on_input(Message::UpdateId)
+                        .width(Length::Fixed(75.0)),
+                    text_input("Choice Group Name", &display_name)
+                        .on_input_maybe(
+                            if editing {
+                               Some( |a_report_category| Message::UpdateMultiName(report_category.id, a_report_category) )
+                             } else {
+                                None 
+                             }
+                        ).style(if validation_error.is_some() { data_types::validated_error } else { text_input::default })
+                        .width(Length::Fixed(250.0)),
+
+                    row![
+
+                        button( if editing { icon::save().size(14) } else { icon::edit().size(14) })
+                        .on_press( if editing { Message::SaveAll(report_category.id, edit_state.unwrap().clone()) } else { Message::EditReportCategory(report_category.id) })
+                        .style(
+                            button::primary
+                    ),
+                        iced::widget::horizontal_space().width(2),
+                    button(icon::copy().size(14))
+                        .on_press(Message::CopyReportCategory(report_category.id))
+                        .style(
+                            button::primary
+                    ),
+                    iced::widget::horizontal_space().width(2),
+                    button(if editing { icon::cancel().size(14) } else { icon::trash().size(14) })
+                        .on_press( if editing { Message::CancelEdit(report_category.id) } else { Message::RequestDelete(report_category.id) })
+                        .style(button::danger),
+                    ].width(150),
+                ].align_y(iced::Alignment::Center),
+
+            )
+        )
+        .width(iced::Length::Shrink)
+        .on_press(Message::Select(report_category.id))
+        .style(
+            button::secondary
+        ).into();
+
+
+        
+        button_content.into()
 }

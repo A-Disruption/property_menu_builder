@@ -2,6 +2,7 @@ pub mod edit;
 pub mod view;
 
 use crate::data_types::{
+    self,
     EntityId,
     Validatable,
     ValidationError,
@@ -10,7 +11,7 @@ use crate::Action;
 use crate::icon;
 use serde::{Serialize, Deserialize};
 use iced::Element;
-use iced::widget::{button, container, column, row, text};
+use iced::widget::{button, container, column, row, text, text_input, scrollable};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
