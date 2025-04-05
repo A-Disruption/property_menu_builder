@@ -971,7 +971,7 @@ pub fn view<'a>(
         container(
             column![
                 row![
-                    text("Items").size(18),
+                    container(text("Items").size(18).style(text::primary)).padding(5),
                     iced::widget::horizontal_space(),
                     button(icon::new().size(14).center())
                         .on_press(Message::CreateNew)

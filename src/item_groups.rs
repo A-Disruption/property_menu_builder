@@ -1,7 +1,5 @@
-pub mod edit;
-pub mod view;
-
 use crate::data_types::{
+    self,
     EntityId,
     ValidationError,
     Validatable,
@@ -9,19 +7,26 @@ use crate::data_types::{
 use crate::Action;
 use crate::icon;
 use serde::{Serialize, Deserialize};
-use iced::Element;
-use iced::widget::{row, column, text, button, container};
+use iced::{Element, Length};
+use iced::widget::{row, column, text, button, container, text_input, scrollable};
 use std::ops::Range;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    Edit(edit::Message),
-    View(view::Message),
     CreateNew,
     RequestDelete(EntityId),
     CopyItemGroup(EntityId),
+    EditItemGroup(EntityId),
+    UpdateId(String),
+    UpdateName(String),
     Select(EntityId),
+    SaveAll(EntityId, EditState),
+    UpdateMultiName(EntityId, String),
+    UpdateIdRangeStart(EntityId, String),
+    UpdateIdRangeEnd(EntityId, String),
+    CreateNewMulti,
+    CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -33,7 +38,14 @@ pub enum Operation {
     CreateNew(ItemGroup),
     RequestDelete(EntityId),
     CopyItemGroup(EntityId),
+    EditItemGroup(EntityId),
     Select(EntityId),
+    SaveAll(EntityId, EditState),
+    UpdateMultiName(EntityId, String),
+    UpdateIdRangeStart(EntityId, String),
+    UpdateIdRangeEnd(EntityId, String),
+    CreateNewMulti,
+    CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -42,12 +54,15 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct EditState {
     pub name: String,
+    pub original_name: String,
     pub id: String,
     pub id_range_start: String,
+    pub original_id_range_start: String,
     pub id_range_end: String,
+    pub original_id_range_end: String,
     pub validation_error: Option<String>,
 }
 
@@ -55,11 +70,21 @@ impl EditState {
     pub fn new(item_group: &ItemGroup) -> Self {
         Self {
             name: item_group.name.clone(),
+            original_name: item_group.name.clone(),
             id: item_group.id.to_string(),
             id_range_start: item_group.id_range.start.to_string(),
+            original_id_range_start: item_group.id_range.start.to_string(),
             id_range_end: item_group.id_range.end.to_string(),
+            original_id_range_end: item_group.id_range.end.to_string(),
             validation_error: None,
         }
+    }
+
+    pub fn reset(& mut self) {
+        self.name = self.original_name.clone();
+        self.id_range_start = self.original_id_range_start.clone();
+        self.id_range_end = self.original_id_range_end.clone();
+        self.validation_error = None;
     }
  
     pub fn validate(&self) -> Result<(), ValidationError> {
@@ -179,54 +204,6 @@ pub fn update(
     other_groups: &[&ItemGroup]
  ) -> Action<Operation, Message> {
     match message {
-        Message::Edit(msg) => match msg {
-            edit::Message::UpdateName(name) => {
-                item_group.name = name;
-                Action::none()
-            }
-            edit::Message::UpdateId(id) => {
-                if let Ok(id) = id.parse() {
-                    if item_group.id < 0 {
-                        item_group.id = id;
-                    }
-                    Action::none()
-                } else {
-                    state.validation_error = Some("Invalid ID format".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::UpdateRangeStart(start) => {
-                if let Ok(start) = start.parse() {
-                    item_group.id_range.start = start;
-                    Action::none()
-                } else {
-                    state.validation_error = Some("Invalid range start format".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::UpdateRangeEnd(end) => {
-                if let Ok(end) = end.parse() {
-                    item_group.id_range.end = end;
-                    Action::none()
-                } else {
-                    state.validation_error = Some("Invalid range end format".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::Save => {
-                if item_group.validate(other_groups).is_ok() {
-                    Action::operation(Operation::Save(item_group.clone()))
-                } else {
-                    state.validation_error = Some("Validation failed".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::Cancel => Action::operation(Operation::Cancel),
-        },
-        Message::View(msg) => match msg {
-            view::Message::Edit => Action::operation(Operation::StartEdit(item_group.id)),
-            view::Message::Back => Action::operation(Operation::Back),
-        }
         Message::CreateNew => {
             let new_item_group = ItemGroup::default();
             Action::operation(Operation::CreateNew(new_item_group))
@@ -237,84 +214,103 @@ pub fn update(
         Message::CopyItemGroup(id) => {
             Action::operation(Operation::CopyItemGroup(id))
         },
+        Message::EditItemGroup(id) => {
+            Action::operation(Operation::EditItemGroup(id))
+        },
         Message::Select(id) => {
             Action::operation(Operation::Select(id))
         },
+        Message::UpdateId(id) => {
+            if let Ok(id) = id.parse() {
+                item_group.id = id;
+                Action::none()
+            } else {
+                state.validation_error = Some("Invalid ID format".to_string());
+                Action::none()
+            }
+        },
+        Message::UpdateName(name) => {
+            item_group.name = name;
+            Action::none()
+        },
+        Message::CreateNewMulti => {
+            Action::operation(Operation::CreateNewMulti)
+        },
+        Message::SaveAll(id, edit_state) => {
+            Action::operation(Operation::SaveAll(id, edit_state))
+        }
+        Message::UpdateMultiName(id, new_name) => {
+            Action::operation(Operation::UpdateMultiName(id, new_name))
+        }
+        Message::UpdateIdRangeStart(id, new_name) => {
+            Action::operation(Operation::UpdateIdRangeStart(id, new_name))
+        }
+        Message::UpdateIdRangeEnd(id, new_name) => {
+            Action::operation(Operation::UpdateIdRangeEnd(id, new_name))
+        }
+        Message::CancelEdit(id) => {
+            Action::operation(Operation::CancelEdit(id))
+        }
     }
  }
 
  pub fn view<'a>(
-    item_group: &'a ItemGroup, 
-    mode: &'a Mode,
-    all_groups: &'a BTreeMap<EntityId, ItemGroup>
+    all_groups: &'a BTreeMap<EntityId, ItemGroup>,
+    edit_states: &'a Vec<EditState>,
 ) -> Element<'a, Message> {
 
-    let groups_list = column(
-        all_groups
-            .values()
-            .map(|group| {
-                button(
-                    list_item(
-                        &group.name.as_str(), 
-                        button(icon::copy().size(14))
-                            .on_press(Message::CopyItemGroup(group.id))
-                            .style(
-                                if group.id == item_group.id {
-                                    button::secondary
-                                } else {
-                                    button::primary
-                                }
-                            ), 
-                        button(icon::trash().size(14)).on_press(Message::RequestDelete(group.id)),
-                    )
-                )
-                .width(iced::Length::Fill)
-                .on_press(Message::Select(group.id))
-                .style(if group.id == item_group.id {
-                    button::primary
-                } else {
-                    button::secondary
-                })
-                .into()
-            })
-            .collect::<Vec<_>>()
+    let title_row = container(
+        row![
+            text("Item Groups").size(18).style(text::primary),
+            iced::widget::horizontal_space(),
+            button(icon::new().size(14))
+                .on_press(Message::CreateNewMulti)
+                .style(button::primary),
+        ]
+        .width(Length::Fixed(805.0))
+        .padding(15)
     )
-    .spacing(5)
-    .width(iced::Length::Fixed(250.0));
+    .style(container::rounded_box);
 
-    let content = match mode {
-        Mode::View => view::view(item_group).map(Message::View),
-        Mode::Edit => {
-            edit::view(
-                item_group,
-                EditState::new(item_group),
-                all_groups
-            ).map(Message::Edit)
-        }
-    };
+    // Header row for columns
+    let header_row = container(
+        row![
+            text("ID").width(Length::Fixed(75.0)),
+            text("Name").width(Length::Fixed(250.0)),
+            text("Range Start").width(Length::Fixed(150.0)),
+            text("Range End").width(Length::Fixed(150.0)),
+            text("Actions").width(Length::Fixed(150.0)),
+        ]
+        .padding(15)
+    )
+    .style(container::rounded_box);
 
-    row![
-        container(
-            column![
-                row![
-                    text("Item Groups").size(18),
-                    iced::widget::horizontal_space(),
-                    button(icon::new().size(14))
-                        .on_press(Message::CreateNew)
-                        .style(button::primary),
-                ].width(250),
-                groups_list,
-            ]
-            .spacing(10)
-            .padding(10)
+    let groups_list = scrollable(
+        column(
+            all_groups
+                .values()
+                .map(|group| 
+                    container(
+                        logical_quick_edit_view(
+                            group,
+                            edit_states
+                        )
+                    )
+                    .style(container::bordered_box)
+                    .padding(5)
+                    .into()
+                )
+                .collect::<Vec<_>>()
         )
-        .style(container::rounded_box),
-        container(content)
-            .width(iced::Length::Fill)
+    ).height(Length::Fill);
+
+    column![
+        title_row,
+        header_row,
+        container(groups_list)
+            .height(Length::Fill)
             .style(container::rounded_box)
-    ]
-    .spacing(20)
-    .into()
+    ].into()
 }
 
 pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
@@ -328,4 +324,102 @@ pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, M
     );
     
     button_content.into()
+}
+
+
+fn logical_quick_edit_view<'a>(
+    item_group: &'a ItemGroup,
+    edit_states: &'a Vec<EditState>
+    ) 
+    -> Element<'a, Message> {
+
+        // Find edit state for this item_group if it exists
+        let edit_state = edit_states.iter()
+            .find(|state| state.id.parse::<i32>().unwrap() == item_group.id);
+
+        let editing = edit_state.is_some();
+
+        let display_name = edit_state
+            .map(|state| state.name.clone())
+            .unwrap_or_else(|| item_group.name.clone());
+
+        let range_start = edit_state
+            .map(|state| state.id_range_start.clone())
+            .unwrap_or_else(|| item_group.id_range.start.to_string());
+
+        let range_end = edit_state
+            .map(|state| state.id_range_end.clone())
+            .unwrap_or_else(|| item_group.id_range.end.to_string());
+
+        // Check for validation error
+        let validation_error = edit_state
+        .and_then(|state| state.validation_error.as_ref())
+        .cloned();
+
+        let button_content: iced::widget::Button<'a, Message> = button(
+            container(
+                row![
+                    text_input("ID (1-25)", &item_group.id.to_string())
+                        //.on_input(Message::UpdateId)
+                        .width(Length::Fixed(75.0)),
+                    text_input("Item Group Name", &display_name)
+                        .on_input_maybe(
+                            if editing {
+                               Some( |a_item_group| Message::UpdateMultiName(item_group.id, a_item_group) )
+                             } else {
+                                None 
+                             }
+                        ).style(if validation_error.is_some() { data_types::validated_error } else { text_input::default })
+                        .width(Length::Fixed(250.0)),
+                    
+                    text_input("Item ID Range Start", &range_start)
+                        .on_input_maybe(
+                            if editing {
+                               Some( |a_item_group| Message::UpdateIdRangeStart(item_group.id, a_item_group) )
+                             } else {
+                                None 
+                             }
+                        ).style(if validation_error.is_some() { data_types::validated_error } else { text_input::default })
+                        .width(Length::Fixed(150.0)),
+                    text_input("Item ID Range End", &range_end)
+                        .on_input_maybe(
+                            if editing {
+                               Some( |a_item_group| Message::UpdateIdRangeEnd(item_group.id, a_item_group) )
+                             } else {
+                                None 
+                             }
+                        ).style(if validation_error.is_some() { data_types::validated_error } else { text_input::default })
+                        .width(Length::Fixed(150.0)),
+
+                    row![
+
+                        button( if editing { icon::save().size(14) } else { icon::edit().size(14) })
+                        .on_press( if editing { Message::SaveAll(item_group.id, edit_state.unwrap().clone()) } else { Message::EditItemGroup(item_group.id) })
+                        .style(
+                            button::primary
+                    ),
+                        iced::widget::horizontal_space().width(2),
+                    button(icon::copy().size(14))
+                        .on_press(Message::CopyItemGroup(item_group.id))
+                        .style(
+                            button::primary
+                    ),
+                    iced::widget::horizontal_space().width(2),
+                    button(if editing { icon::cancel().size(14) } else { icon::trash().size(14) })
+                        .on_press( if editing { Message::CancelEdit(item_group.id) } else { Message::RequestDelete(item_group.id) })
+                        .style(button::danger),
+                    ].width(150),
+                ].align_y(iced::Alignment::Center),
+
+            )
+        )
+        .width(iced::Length::Shrink)
+        .on_press(Message::Select(item_group.id))
+        .style(
+            button::secondary
+        ).into();
+
+
+        
+        button_content.into()
 }

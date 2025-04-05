@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use rust_decimal::Decimal;
 use rfd::AsyncFileDialog;
 use std::path::PathBuf;
+use std::ops::Range;
 
 mod action;
 mod settings;
@@ -1421,11 +1422,17 @@ impl MenuBuilder {
                         &self.item_groups[&id]
                     };
                 
-                    item_groups::view(item_group, mode, &self.item_groups)
+                    item_groups::view(
+                        &self.item_groups,
+                        &self.item_group_edit_state_vec
+                    )
                         .map(move |msg| Message::ItemGroups(id, msg))
                 } else if let Some((&first_id, first_item_group)) = self.item_groups.iter().next() {
                     // No selected item group, but there is at least one available: show its view.
-                    item_groups::view(first_item_group, mode, &self.item_groups)
+                    item_groups::view(
+                        &self.item_groups,
+                        &self.item_group_edit_state_vec
+                    )
                         .map(move |msg| Message::ItemGroups(first_id.clone(), msg))
                 } else {
                     // No selected item group and the collection is empty: show the empty state.
@@ -2243,11 +2250,152 @@ impl MenuBuilder {
 
                         Task::none()
                     }
+                    item_groups::Operation::EditItemGroup(id) => {
+                        println!("Edit Item Group Operation on id: {}", id);
+                        // First check if we already have an edit state for this item_group
+                        let already_editing = self.item_group_edit_state_vec
+                            .iter()
+                            .any(|state| state.id.parse::<i32>().unwrap() == id);
+
+                        // Only create new edit state if we're not already editing this item_group
+                        if !already_editing {
+                            if let Some(item_group) = self.item_groups.get(&id) {
+                                let edit_state = item_groups::EditState {
+                                    name: item_group.name.clone(),
+                                    original_name: item_group.name.clone(),
+                                    id: item_group.id.to_string(),
+                                    id_range_start: item_group.id_range.start.to_string(),
+                                    original_id_range_start: item_group.id_range.start.to_string(),
+                                    id_range_end: item_group.id_range.end.to_string(),
+                                    original_id_range_end: item_group.id_range.end.to_string(),
+                                    validation_error: None,
+                                };
+                                
+                                self.item_group_edit_state_vec.push(edit_state);
+                            }
+                        }
+
+                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        Task::none()
+                    },
                     item_groups::Operation::Select(item_group_id) => {
                         self.selected_item_group_id = Some(item_group_id);
                         self.screen = Screen::ItemGroups(item_groups::Mode::View);
                         Task::none()
                     },
+                    item_groups::Operation::SaveAll(id, edit_state) => {
+                        // First, find the edit state for this item_group
+                        if let Some(edit_state) = self.item_group_edit_state_vec
+                            .iter()
+                            .find(|state| state.id.parse::<i32>().unwrap() == id)
+                        {
+                            // Clone the edit state name since we'll need it after removing the edit state
+                            let new_name = edit_state.name.clone();
+                            
+                            // Get a mutable reference to the item_group and update it
+                            if let Some(item_group) = self.item_groups.get_mut(&id) {
+                                item_group.name = new_name;
+                            }
+                        }
+
+                        self.item_group_edit_state_vec.retain(|edit| {
+                            edit.id.parse::<i32>().unwrap() != id
+                        });
+
+                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        Task::none()
+                    },
+                    item_groups::Operation::UpdateMultiName(id, new_name) => {
+                        println!("MultinameEdit on id: {}", id);
+                        if let Some(edit_state) = self.item_group_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        { // Update the name
+                            edit_state.name = new_name;
+                        }
+    
+                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        Task::none()
+                    },
+                    item_groups::Operation::UpdateIdRangeStart(id, new_range) => {
+                        println!("Edit Range Start on id: {}", id);
+                        if let Some(edit_state) = self.item_group_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        { // Update the range start
+                            edit_state.id_range_start = new_range;
+                        }
+    
+                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        Task::none()
+                    },
+                    item_groups::Operation::UpdateIdRangeEnd(id, new_range) => {
+                        println!("Edit Range End on id: {}", id);
+                        if let Some(edit_state) = self.item_group_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        { // Update the range end
+                            edit_state.id_range_end = new_range;
+                        }
+    
+                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        Task::none()
+                    },
+                    item_groups::Operation::CreateNewMulti => {
+                        let next_id = self.item_groups
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+
+                        //Create a new ItemGroup
+                        let item_group = ItemGroup {
+                            id: next_id,
+                            id_range: Range { 
+                                start: 0, 
+                                end: 0 
+                                },
+                            name: String::new()
+                        };
+
+                        //Add new ItemGroup to the app state
+                        self.item_groups.insert(next_id, item_group.clone());
+
+                        //Create a new edit_state for the new item_group
+                        let edit_state = item_groups::EditState {
+                            name: item_group.name.clone(),
+                            original_name: item_group.name.clone(),
+                            id: item_group.id.to_string(),
+                            id_range_start: item_group.id_range.start.to_string(),
+                            original_id_range_start: item_group.id_range.start.to_string(),
+                            id_range_end: item_group.id_range.end.to_string(),
+                            original_id_range_end: item_group.id_range.end.to_string(),
+                            validation_error: None,
+                        };
+                        
+                        //Add new item_group edit_state to app state
+                        self.item_group_edit_state_vec.push(edit_state);
+
+                        Task::none()
+                    },
+                    item_groups::Operation::CancelEdit(id) => {
+                        // Find the edit state and reset it before removing
+                        if let Some(edit_state) = self.item_group_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        {
+                        // Reset the data to original values if needed
+                        edit_state.reset();
+                        }
+
+                        // Remove the edit state from the vec
+                        self.item_group_edit_state_vec.retain(|state| {
+                        state.id.parse::<i32>().unwrap() != id
+                        });
+
+                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        Task::none()
+                    },
+                    
                 }
             }
             Operation::TaxGroups(id, op) => {
