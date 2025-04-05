@@ -7,6 +7,7 @@ use iced::widget::{
 };
 use iced::{Element, Length, Size, Subscription, Task};
 use persistence::FileManager;
+use price_levels::PriceLevelType;
 use std::collections::BTreeMap;
 use rust_decimal::Decimal;
 use rfd::AsyncFileDialog;
@@ -1461,11 +1462,17 @@ impl MenuBuilder {
                         &self.price_levels[&id]
                     };
                 
-                    price_levels::view(price_level, mode, &self.price_levels)
+                    price_levels::view(
+                        &self.price_levels,
+                        &self.price_level_edit_state_vec
+                    )
                         .map(move |msg| Message::PriceLevels(id, msg))
                 } else if let Some((&first_id, first_price_level)) = self.price_levels.iter().next() {
                     // No selected price level, but there is at least one: show the first one.
-                    price_levels::view(first_price_level, mode, &self.price_levels)
+                    price_levels::view( 
+                        &self.price_levels,
+                        &self.price_level_edit_state_vec
+                    )
                         .map(move |msg| Message::PriceLevels(first_id.clone(), msg))
                 } else {
                     // No selected price level and the collection is empty: show the empty state.
@@ -3761,7 +3768,7 @@ impl MenuBuilder {
                         self.show_modal = true;
                    Task::none()
                }
-               price_levels::Operation::CopyPriceLevel(id) => {
+                price_levels::Operation::CopyPriceLevel(id) => {
                     println!("Copying PriceLevel: {}", id);
                     let copy_item = self.price_levels.get(&id).unwrap();
                     let next_id = self.price_levels
@@ -3783,8 +3790,120 @@ impl MenuBuilder {
 
                    Task::none()
                }
+                price_levels::Operation::EditPriceLevel(id) => {
+                    println!("Edit Price Level Operation on id: {}", id);
+                    // First check if we already have an edit state for this price_level
+                    let already_editing = self.price_level_edit_state_vec
+                        .iter()
+                        .any(|state| state.id.parse::<i32>().unwrap() == id);
+
+                    // Only create new edit state if we're not already editing this price_level
+                    if !already_editing {
+                        if let Some(price_level) = self.price_levels.get(&id) {
+                            let edit_state = price_levels::EditState {
+                                name: price_level.name.clone(),
+                                original_name: price_level.name.clone(),
+                                id: price_level.id.to_string(),
+                                level_type: price_level.level_type.clone(),
+                                price: price_level.price.to_string(),
+                                original_price: price_level.price.to_string(),
+                                validation_error: None,
+                            };
+                            
+                            self.price_level_edit_state_vec.push(edit_state);
+                        }
+                    }
+
+                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    Task::none()
+                },
                 price_levels::Operation::Select(price_level_id) => {
                     self.selected_price_level_id = Some(price_level_id);
+                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    Task::none()
+                },
+                price_levels::Operation::SaveAll(id, edit_state) => {
+                    // First, find the edit state for this price_level
+                    if let Some(edit_state) = self.price_level_edit_state_vec
+                        .iter()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id)
+                    {
+                        // Clone the edit state name since we'll need it after removing the edit state
+                        let new_name = edit_state.name.clone();
+                        
+                        // Get a mutable reference to the price_level and update it
+                        if let Some(price_level) = self.price_levels.get_mut(&id) {
+                            price_level.name = new_name;
+                        }
+                    }
+
+                    self.price_level_edit_state_vec.retain(|edit| {
+                        edit.id.parse::<i32>().unwrap() != id
+                    });
+
+                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    Task::none()
+                },
+                price_levels::Operation::UpdateMultiName(id, new_name) => {
+                    println!("MultinameEdit on id: {}", id);
+                    if let Some(edit_state) = self.price_level_edit_state_vec
+                    .iter_mut()
+                    .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                    { // Update the name
+                        edit_state.name = new_name;
+                    }
+
+                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    Task::none()
+                },
+                price_levels::Operation::CreateNewMulti => {
+                    let next_id = self.price_levels
+                        .keys()
+                        .max()
+                        .map_or(1, |max_id| max_id + 1);
+
+                    //Create a new PriceLevel
+                    let price_level = PriceLevel {
+                        id: next_id,
+                        name: String::new(),
+                        level_type: PriceLevelType::Enterprise,
+                        price: Decimal::new(000, 2),
+                    };
+
+                    //Add new PriceLevel to the app state
+                    self.price_levels.insert(next_id, price_level.clone());
+
+                    //Create a new edit_state for the new price_level
+                    let edit_state = price_levels::EditState {
+                        name: price_level.name.clone(),
+                        original_name: price_level.name.clone(),
+                        id: price_level.id.to_string(),
+                        level_type: price_level.level_type.clone(),
+                        price: price_level.price.to_string(),
+                        original_price: price_level.price.to_string(),
+                        validation_error: None,
+                    };
+                    
+                    //Add new price_level edit_state to app state
+                    self.price_level_edit_state_vec.push(edit_state);
+
+                    Task::none()
+                },
+                price_levels::Operation::CancelEdit(id) => {
+                    // Find the edit state and reset it before removing
+                    if let Some(edit_state) = self.price_level_edit_state_vec
+                    .iter_mut()
+                    .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                    {
+                    // Reset the data to original values if needed
+                    edit_state.reset();
+                    }
+
+                    // Remove the edit state from the vec
+                    self.price_level_edit_state_vec.retain(|state| {
+                    state.id.parse::<i32>().unwrap() != id
+                    });
+
                     self.screen = Screen::PriceLevels(price_levels::Mode::View);
                     Task::none()
                 },
