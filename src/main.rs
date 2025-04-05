@@ -127,6 +127,9 @@ pub struct MenuBuilder {
     security_level_edit_state_vec: Vec<security_levels::EditState>,
     revenue_category_edit_state_vec: Vec<revenue_categories::EditState>,
     report_category_edit_state_vec: Vec<report_categories::EditState>,
+    item_group_edit_state_vec: Vec<item_groups::EditState>,
+    price_level_edit_state_vec: Vec<price_levels::EditState>,
+    tax_group_edit_state_vec: Vec<tax_groups::EditState>,
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -226,6 +229,9 @@ pub struct MenuBuilder {
             security_level_edit_state_vec: Vec::new(),
             revenue_category_edit_state_vec: Vec::new(),
             report_category_edit_state_vec: Vec::new(),
+            item_group_edit_state_vec: Vec::new(),
+            price_level_edit_state_vec: Vec::new(),
+            tax_group_edit_state_vec: Vec::new(),
             
 
             // Items
@@ -1544,11 +1550,17 @@ impl MenuBuilder {
                         &self.tax_groups[&id]
                     };
                 
-                    tax_groups::view(tax_group, mode, &self.tax_groups)
+                    tax_groups::view(
+                        &self.tax_groups,
+                        &self.tax_group_edit_state_vec
+                    )
                         .map(move |msg| Message::TaxGroups(id, msg))
                 } else if let Some((&first_id, first_tax_group)) = self.tax_groups.iter().next() {
                     // No selected ID but there is at least one tax group; show the first one.
-                    tax_groups::view(first_tax_group, mode, &self.tax_groups)
+                    tax_groups::view(
+                        &self.tax_groups,
+                        &self.tax_group_edit_state_vec
+                    )
                         .map(move |msg| Message::TaxGroups(first_id.clone(), msg))
                 } else {
                     // No selected ID and the collection is empty; show the empty state.
@@ -2302,7 +2314,7 @@ impl MenuBuilder {
                         self.show_modal = true;
                        Task::none()
                    }
-                   tax_groups::Operation::CopyTaxGroup(id) => {
+                    tax_groups::Operation::CopyTaxGroup(id) => {
                        println!("Copying TaxGroup: {}", id);
                         let copy_item = self.tax_groups.get(&id).unwrap();
                         let next_id = self.tax_groups
@@ -2324,8 +2336,132 @@ impl MenuBuilder {
 
                        Task::none()
                    }
+                    tax_groups::Operation::EditTaxGroup(id) => {
+                        println!("Edit Tax Group Operation on id: {}", id);
+                    // First check if we already have an edit state for this tax_group
+                    let already_editing = self.tax_group_edit_state_vec
+                        .iter()
+                        .any(|state| state.id.parse::<i32>().unwrap() == id);
+
+                    // Only create new edit state if we're not already editing this tax_group
+                    if !already_editing {
+                        if let Some(tax_group) = self.tax_groups.get(&id) {
+                            let edit_state = tax_groups::EditState {
+                                name: tax_group.name.clone(),
+                                original_name: tax_group.name.clone(),
+                                id: tax_group.id.to_string(),
+                                rate: tax_group.rate.to_string(),
+                                original_rate: tax_group.rate.to_string(),
+                                validation_error: None,
+                            };
+                            
+                            self.tax_group_edit_state_vec.push(edit_state);
+                        }
+                    }
+
+                    self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                    Task::none()
+                    },
                     tax_groups::Operation::Select(id) => {
                         self.selected_tax_group_id = Some(id);
+                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                        Task::none()
+                    },
+                    tax_groups::Operation::SaveAll(id, edit_state) => {
+                        // First, find the edit state for this tax_group
+                        if let Some(edit_state) = self.tax_group_edit_state_vec
+                            .iter()
+                            .find(|state| state.id.parse::<i32>().unwrap() == id)
+                        {
+                            // Clone the edit state name since we'll need it after removing the edit state
+                            let new_name = edit_state.name.clone();
+                            let new_rate = edit_state.rate.clone();
+                            
+                            // Get a mutable reference to the tax_group and update it
+                            if let Some(tax_group) = self.tax_groups.get_mut(&id) {
+                                tax_group.name = new_name;
+                                tax_group.rate = data_types::string_to_decimal(&new_rate)
+                                    .expect("Rate should be validated before message is triggered");
+                            }
+                        }
+
+                        self.tax_group_edit_state_vec.retain(|edit| {
+                            edit.id.parse::<i32>().unwrap() != id
+                        });
+
+                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                        Task::none()
+                    },
+                    tax_groups::Operation::UpdateMultiName(id, new_name) => {
+                        println!("MultinameEdit on id: {}", id);
+                        if let Some(edit_state) = self.tax_group_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        { // Update the name
+                            edit_state.name = new_name;
+                        }
+    
+                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                        Task::none()
+                    },
+                    tax_groups::Operation::UpdateTaxRate(id, new_rate) => {
+                        println!("MultinameEdit on id: {}", id);
+                        if let Some(edit_state) = self.tax_group_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        { // Update the name
+                            edit_state.rate = new_rate;
+                        }
+    
+                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                        Task::none()
+                    },
+                    tax_groups::Operation::CreateNewMulti => {
+                        let next_id = self.tax_groups
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
+
+                        //Create a new TaxGroup
+                        let tax_group = TaxGroup {
+                            id: next_id,
+                            name: String::new(),
+                            rate: Decimal::new( 000, 2),
+                        };
+
+                        //Add new TaxGroup to the app state
+                        self.tax_groups.insert(next_id, tax_group.clone());
+
+                        //Create a new edit_state for the new choice_group
+                        let edit_state = tax_groups::EditState {
+                            name: tax_group.name.clone(),
+                            original_name: tax_group.name.clone(),
+                            id: tax_group.id.to_string(),
+                            rate: tax_group.rate.to_string(),
+                            original_rate: tax_group.rate.to_string(),
+                            validation_error: None,
+                        };
+                        
+                        //Add new choice_group edit_state to app state
+                        self.tax_group_edit_state_vec.push(edit_state);
+
+                        Task::none()
+                    },
+                    tax_groups::Operation::CancelEdit(id) => {
+                        // Find the edit state and reset it before removing
+                        if let Some(edit_state) = self.tax_group_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        {
+                        // Reset the data to original values if needed
+                        edit_state.reset();
+                        }
+
+                        // Remove the edit state from the vec
+                        self.tax_group_edit_state_vec.retain(|state| {
+                        state.id.parse::<i32>().unwrap() != id
+                        });
+
                         self.screen = Screen::TaxGroups(tax_groups::Mode::View);
                         Task::none()
                     },

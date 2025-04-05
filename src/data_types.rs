@@ -3,12 +3,19 @@ use rust_decimal::Decimal;
 use iced::{Element, Color};
 use iced::widget::{stack, opaque, mouse_area, center, container,};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 // Custom type for IDs to make it easier to change the underlying type if needed
 pub type EntityId = i32;
 
 // Custom type for currency values
 pub type Currency = Decimal;
+
+//Convert String to Decimal
+pub fn string_to_decimal(input: &str) -> Result<Decimal, String> {
+    Decimal::from_str(input)
+        .map_err(|e| format!("Failed to convert '{}' to Decimal: {}", input, e))
+}
 
 //Struct to handle PriceLevel: Price pairs
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

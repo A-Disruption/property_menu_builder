@@ -1,7 +1,5 @@
-pub mod edit;
-pub mod view;
-
 use crate::data_types::{
+    self,
     EntityId,
     ValidationError,
     Validatable,
@@ -9,21 +7,28 @@ use crate::data_types::{
 use crate::Action;
 use crate::icon;
 use serde::{Serialize, Deserialize};
-use iced::Element;
-use iced::widget::{button, container, column, row, text};
+use iced::{Element, Length};
+use iced::widget::{button, container, column, row, text, text_input, scrollable};
 use std::collections::BTreeMap;
 use rust_decimal::Decimal;
 use std::fmt;
+use std::str::FromStr;
 
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    Edit(edit::Message),
-    View(view::Message),
     CreateNew,
     RequestDelete(EntityId),
     CopyTaxGroup(EntityId),
+    EditTaxGroup(EntityId),
+    UpdateId(String),
+    UpdateName(String),
     Select(EntityId),
+    SaveAll(EntityId, EditState),
+    UpdateMultiName(EntityId, String),
+    UpdateTaxRate(EntityId, String),
+    CreateNewMulti,
+    CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -35,7 +40,13 @@ pub enum Operation {
     CreateNew(TaxGroup),
     RequestDelete(EntityId),
     CopyTaxGroup(EntityId),
+    EditTaxGroup(EntityId),
     Select(EntityId),
+    SaveAll(EntityId, EditState),
+    UpdateMultiName(EntityId, String),
+    UpdateTaxRate(EntityId, String),
+    CreateNewMulti,
+    CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
@@ -44,11 +55,13 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct EditState {
     pub name: String,
+    pub original_name: String,
     pub id: String,
     pub rate: String,
+    pub original_rate: String,
     pub validation_error: Option<String>,
 }
 
@@ -56,10 +69,18 @@ impl EditState {
     pub fn new(tax_group: &TaxGroup) -> Self {
         Self {
             name: tax_group.name.clone(),
+            original_name: tax_group.name.clone(),
             id: tax_group.id.to_string(),
             rate: tax_group.rate_percentage().to_string(),
+            original_rate: tax_group.rate_percentage().to_string(),
             validation_error: None,
         }
+    }
+
+    pub fn reset(& mut self) {
+        self.name = self.original_name.clone();
+        self.rate = self.original_rate.clone();
+        self.validation_error = None;
     }
 
     pub fn validate(&self) -> Result<(), ValidationError> {
@@ -172,48 +193,6 @@ pub fn update(
     other_groups: &[&TaxGroup]
 ) -> Action<Operation, Message> {
     match message {
-        Message::Edit(msg) => match msg {
-            edit::Message::UpdateName(name) => {
-                tax_group.name = name;
-                Action::none()
-            }
-            edit::Message::UpdateId(id) => {
-                if let Ok(id) = id.parse() {
-                    if tax_group.id < 0 {
-                        tax_group.id = id;
-                    }
-                    Action::none()
-                } else {
-                    state.validation_error = Some("Invalid ID format".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::UpdateRate(rate_str) => {
-                match rate_str.parse::<Decimal>() {
-                    Ok(rate_percentage) => {
-                        tax_group.rate = rate_percentage / Decimal::from(100);
-                        Action::none()
-                    }
-                    Err(_) => {
-                        state.validation_error = Some("Invalid tax rate format".to_string());
-                        Action::none()
-                    }
-                }
-            }
-            edit::Message::Save => {
-                if tax_group.validate(other_groups).is_ok() {
-                    Action::operation(Operation::Save(tax_group.clone()))
-                } else {
-                    state.validation_error = Some("Validation failed".to_string());
-                    Action::none()
-                }
-            }
-            edit::Message::Cancel => Action::operation(Operation::Cancel),
-        },
-        Message::View(msg) => match msg {
-            view::Message::Edit => Action::operation(Operation::StartEdit(tax_group.id)),
-            view::Message::Back => Action::operation(Operation::Back),
-        }
         Message::CreateNew => {
             let new_tax_group = TaxGroup::default();
             Action::operation(Operation::CreateNew(new_tax_group))
@@ -224,86 +203,100 @@ pub fn update(
         Message::CopyTaxGroup(id) => {
             Action::operation(Operation::CopyTaxGroup(id))
         },
+        Message::EditTaxGroup(id) => {
+            Action::operation(Operation::EditTaxGroup(id))
+        },
         Message::Select(id) => {
             Action::operation(Operation::Select(id))
+        },
+        Message::UpdateId(id) => {
+            if let Ok(id) = id.parse() {
+                tax_group.id = id;
+                Action::none()
+            } else {
+                state.validation_error = Some("Invalid ID format".to_string());
+                Action::none()
+            }
+        },
+        Message::UpdateName(name) => {
+            tax_group.name = name;
+            Action::none()
+        },
+        Message::UpdateTaxRate(id, rate) => {
+            Action::operation(Operation::UpdateTaxRate(id, rate))
+        },
+        Message::CreateNewMulti => {
+            Action::operation(Operation::CreateNewMulti)
+        },
+        Message::SaveAll(id, edit_state) => {
+            Action::operation(Operation::SaveAll(id, edit_state))
+        },
+        Message::UpdateMultiName(id, new_name) => {
+            Action::operation(Operation::UpdateMultiName(id, new_name))
+        },
+        Message::CancelEdit(id) => {
+            Action::operation(Operation::CancelEdit(id))
         },
     }
 }
 
 pub fn view<'a>(
-    tax_group: &'a TaxGroup, 
-    mode: &'a Mode,
-    all_groups: &'a BTreeMap<EntityId, TaxGroup>
+    all_groups: &'a BTreeMap<EntityId, TaxGroup>,
+    edit_states: &'a Vec<EditState>,
 ) -> Element<'a, Message> {
 
-    let groups_list = column(
-        all_groups
-            .values()
-            .map(|group| {
-                button(
-                    list_item(
-                        &group.name.as_str(),
-                        button(icon::copy().size(14))
-                            .on_press(Message::CopyTaxGroup(group.id))
-                            .style(
-                                if group.id == tax_group.id {
-                                    button::secondary
-                                } else {
-                                    button::primary
-                                }
-                            ),
-                        button(icon::trash().size(14)).on_press(Message::RequestDelete(group.id)),
-
-                    )
-                    
-                )
-                .width(iced::Length::Fill)
-                .on_press(Message::Select(group.id))
-                .style(if group.id == tax_group.id {
-                    button::primary
-                } else {
-                    button::secondary
-                })
-                .into()
-            })
-            .collect::<Vec<_>>()
+    let title_row = container(
+        row![
+            text("Tax Groups").size(18).style(text::primary),
+            iced::widget::horizontal_space(),
+            button(icon::new().size(14))
+                .on_press(Message::CreateNewMulti)
+                .style(button::primary),
+        ]
+        .width(Length::Fixed(605.0))
+        .padding(15)
     )
-    .spacing(5)
-    .width(iced::Length::Fixed(250.0));
+    .style(container::rounded_box);
 
-    let content = match mode {
-        Mode::View => view::view(tax_group).map(Message::View),
-        Mode::Edit => {
-            edit::view(
-                tax_group,
-                EditState::new(tax_group),
-                all_groups
-            ).map(Message::Edit)
-        }
-    };
+    // Header row for columns
+    let header_row = container(
+        row![
+            text("ID").width(Length::Fixed(75.0)),
+            text("Name").width(Length::Fixed(250.0)),
+            text("Tax Rate").width(Length::Fixed(100.0)),
+            text("Actions").width(Length::Fixed(150.0)),
+        ]
+        .padding(15)
+    )
+    .style(container::rounded_box);
 
-    row![
-        container(
-            column![
-                row![
-                    text("Tax Groups").size(18),
-                    iced::widget::horizontal_space(),
-                    button(icon::new().size(14))
-                        .on_press(Message::CreateNew)
-                        .style(button::primary),
-                ].width(250),
-                groups_list,
-            ]
-            .spacing(10)
-            .padding(10)
+    let groups_list = scrollable(
+        column(
+            all_groups
+                .values()
+                .map(|group| 
+                    container(
+                        logical_quick_edit_view(
+                            group,
+                            edit_states
+                        )
+                    )
+                    .style(container::bordered_box)
+                    .padding(5)
+                    .into()
+                )
+                .collect::<Vec<_>>()
         )
-        .style(container::rounded_box),
-        container(content)
-            .width(iced::Length::Fill)
+    ).height(Length::Fill);
+
+    column![
+        title_row,
+        header_row,
+        container(groups_list)
+            .height(Length::Fill)
             .style(container::rounded_box)
-    ]
-    .spacing(20)
-    .into()
+    ].into()
+
 }
 
 pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
@@ -317,4 +310,94 @@ pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, M
     );
     
     button_content.into()
+}
+
+pub fn string_to_decimal(input: &str) -> Result<Decimal, String> {
+    Decimal::from_str(input)
+        .map_err(|e| format!("Failed to convert '{}' to Decimal: {}", input, e))
+}
+
+fn logical_quick_edit_view<'a>(
+    tax_group: &'a TaxGroup,
+    edit_states: &'a Vec<EditState>
+    ) 
+    -> Element<'a, Message> {
+
+        // Find edit state for this tax_group if it exists
+        let edit_state = edit_states.iter()
+            .find(|state| state.id.parse::<i32>().unwrap() == tax_group.id);
+
+        let editing = edit_state.is_some();
+
+        let display_name = edit_state
+            .map(|state| state.name.clone())
+            .unwrap_or_else(|| tax_group.name.clone());
+
+        let tax_rate = edit_state
+            .map(|state| state.rate.clone())
+            .unwrap_or_else(|| tax_group.rate.to_string());
+
+
+        // Check for validation error
+        let validation_error = edit_state
+        .and_then(|state| state.validation_error.as_ref())
+        .cloned();
+
+        let button_content: iced::widget::Button<'a, Message> = button(
+            container(
+                row![
+                    text_input("ID (1-25)", &tax_group.id.to_string())
+                        //.on_input(Message::UpdateId)
+                        .width(Length::Fixed(75.0)),
+                    text_input("Tax Group Name", &display_name)
+                        .on_input_maybe(
+                            if editing {
+                               Some( |a_tax_group| Message::UpdateMultiName(tax_group.id, a_tax_group) )
+                             } else {
+                                None 
+                             }
+                        ).style(if validation_error.is_some() { data_types::validated_error } else { text_input::default })
+                        .width(Length::Fixed(250.0)),
+
+                    text_input("Tax Rate", &tax_rate)
+                        .on_input_maybe(
+                            if editing {
+                            Some( |a_tax_rate| Message::UpdateTaxRate(tax_group.id, a_tax_rate) )
+                            } else {
+                                None 
+                            }
+                        ).style(if validation_error.is_some() { data_types::validated_error } else { text_input::default })
+                        .width(Length::Fixed(100.0)),
+
+                    row![
+
+                        button( if editing { icon::save().size(14) } else { icon::edit().size(14) })
+                        .on_press( if editing { Message::SaveAll(tax_group.id, edit_state.unwrap().clone()) } else { Message::EditTaxGroup(tax_group.id) })
+                        .style(
+                            button::primary
+                    ),
+                        iced::widget::horizontal_space().width(2),
+                    button(icon::copy().size(14))
+                        .on_press(Message::CopyTaxGroup(tax_group.id))
+                        .style(
+                            button::primary
+                    ),
+                    iced::widget::horizontal_space().width(2),
+                    button(if editing { icon::cancel().size(14) } else { icon::trash().size(14) })
+                        .on_press( if editing { Message::CancelEdit(tax_group.id) } else { Message::RequestDelete(tax_group.id) })
+                        .style(button::danger),
+                    ].width(150),
+                ].align_y(iced::Alignment::Center),
+
+            )
+        )
+        .width(iced::Length::Shrink)
+        .on_press(Message::Select(tax_group.id))
+        .style(
+            button::secondary
+        ).into();
+
+
+        
+        button_content.into()
 }
