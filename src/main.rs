@@ -68,7 +68,7 @@ pub enum Screen {
     PriceLevels,
     ProductClasses,
     TaxGroups,
-    SecurityLevels(security_levels::Mode),
+    SecurityLevels,
     RevenueCategories(revenue_categories::Mode),
     ReportCategories(report_categories::Mode),
     ChoiceGroups(choice_groups::Mode),
@@ -157,10 +157,10 @@ pub struct MenuBuilder {
  
     // Security Levels
     security_levels: BTreeMap<EntityId, SecurityLevel>,
-    draft_security_level: SecurityLevel,
+/*     draft_security_level: SecurityLevel,
     draft_security_level_id: Option<EntityId>,
     selected_security_level_id: Option<EntityId>,
-    security_level_edit_state: entity_component::EditState,
+    security_level_edit_state: entity_component::EditState, */
  
     // Revenue Categories
     revenue_categories: BTreeMap<EntityId, RevenueCategory>,
@@ -243,10 +243,10 @@ pub struct MenuBuilder {
  
             // Security Levels
             security_levels: BTreeMap::new(),
-            draft_security_level: SecurityLevel::default(),
+/*             draft_security_level: SecurityLevel::default(),
             draft_security_level_id: None,
             selected_security_level_id: None,
-            security_level_edit_state: entity_component::EditState::default(),
+            security_level_edit_state: entity_component::EditState::default(), */
  
             // Revenue Categories
             revenue_categories: BTreeMap::new(),
@@ -507,61 +507,22 @@ impl MenuBuilder {
             Message::SecurityLevels(id, msg) => {
                 let cloned_security_levels = self.security_levels.clone();
 
-                if id < 0 {  // New Security Level case
-                    let other_security_levels: Vec<&SecurityLevel> = cloned_security_levels
-                        .values()
-                        .filter(|sl| sl.id != id)
-                        .collect();
-    
-                    let action = security_levels::update(
-                        &mut self.draft_security_level, 
-                        msg, 
-                        &mut self.security_level_edit_state,
-                        &other_security_levels,
-                    )
-                        .map_operation(move |o| Operation::SecurityLevels(id, o))
-                        .map(move |m| Message::SecurityLevels(id, m));
-    
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
+                let other_security_levels: Vec<&SecurityLevel> = cloned_security_levels
+                    .values()
+                    .filter(|sl| sl.id != id)
+                    .collect();
+
+                let action = security_levels::update(msg)
+                    .map_operation(move |o| Operation::SecurityLevels(id, o))
+                    .map(move |m| Message::SecurityLevels(id, m));
+
+                let operation_task = if let Some(operation) = action.operation {
+                    self.perform(operation)
                 } else {
-                    let security_level = if let Some(draft_id) = self.draft_security_level_id {
-                        if draft_id == id {
-                            &mut self.draft_security_level
-                        } else {
-                            self.security_levels.get_mut(&id).expect("Security Level should exist")
-                        }
-                    } else {
-                        self.security_levels.get_mut(&id).expect("Security Level should exist")
-                    };
-    
-                    let other_security_levels: Vec<&SecurityLevel> = cloned_security_levels
-                        .values()
-                        .filter(|sl| sl.id != id)
-                        .collect();
-    
-                    let action = security_levels::update(
-                        security_level, 
-                        msg, 
-                        &mut self.security_level_edit_state,
-                        &other_security_levels,
-                    )
-                        .map_operation(move |o| Operation::SecurityLevels(id, o))
-                        .map(move |m| Message::SecurityLevels(id, m));
-    
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
-                }
+                    Task::none()
+                };
+
+                operation_task.chain(action.task)
             },
             Message::RevenueCategories(id, msg) => {
                 let cloned_revenue_categories = self.revenue_categories.clone();
@@ -958,8 +919,7 @@ impl MenuBuilder {
 
                         // Delete the security level
                         self.security_levels.remove(&deletion_info.entity_id);
-                        self.selected_security_level_id = None;
-                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
+                        self.screen = Screen::SecurityLevels;
                     }
                     "TaxGroup" => {
                         // Find all items using this tax group
@@ -1126,11 +1086,11 @@ impl MenuBuilder {
                         )
                     ),
                 button("Security Levels")
-                    .on_press(Message::Navigate(Screen::SecurityLevels(security_levels::Mode::View)))
+                    .on_press(Message::Navigate(Screen::SecurityLevels))
                     .width(Length::Fill)
                     .style(
                         Modern::conditional_button_style(
-                            matches!(self.screen, Screen::SecurityLevels(_)),
+                            matches!(self.screen, Screen::SecurityLevels),
                             Modern::selected_button_style(Modern::system_button()),
                             Modern::system_button()
                         )
@@ -1315,52 +1275,12 @@ impl MenuBuilder {
                 )
                 .map(move |msg| Message::TaxGroups(-1, msg))
             }
-            Screen::SecurityLevels(mode) => {
-                if let Some(id) = self.selected_security_level_id {
-                    // Use the draft if its ID matches; otherwise, use the stored security level.
-                    let security_level = if self.draft_security_level_id == Some(id) {
-                        &self.draft_security_level
-                    } else {
-                        &self.security_levels[&id]
-                    };
-                
-                    security_levels::view(
-                        &self.security_levels,
-                        &self.security_level_edit_state_vec
-                    )
-                        .map(move |msg| Message::SecurityLevels(id, msg))
-                } else if let Some((&first_id, first_security_level)) = self.security_levels.iter().next() {
-                    // No selected security level, but there is at least one available: show its view.
-                    security_levels::view(
-                        &self.security_levels,
-                        &self.security_level_edit_state_vec
-                    )
-                        .map(move |msg| Message::SecurityLevels(first_id.clone(), msg))
-                } else {
-                    // No selected security level and the collection is empty: show the empty state.
-                    container(
-                        column![
-                            text("Security Levels")
-                                .size(24)
-                                .width(Length::Fill),
-                            vertical_space(),
-                            text("No security levels have been created yet.")
-                                .width(Length::Fill),
-                            vertical_space(),
-                            button("Create New Security Level")
-                                .on_press(Message::SecurityLevels(-1, security_levels::Message::CreateNew))
-                                .style(button::primary)
-                        ]
-                        .spacing(10)
-                        .max_width(500)
-                    )
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill)
-                    .padding(30)
-                    .into()
-                }
+            Screen::SecurityLevels => {
+                security_levels::view(
+                    &self.security_levels,
+                    &self.security_level_edit_state_vec
+                )
+                .map(move |msg| Message::SecurityLevels(-1, msg))
             }
             Screen::RevenueCategories(mode) => {
                 if let Some(id) = self.selected_revenue_category_id {
@@ -2175,68 +2095,7 @@ impl MenuBuilder {
             }    
             Operation::SecurityLevels(id, op) => {
                 match op {
-                    security_levels::Operation::Save(mut level) => {
-
-                        if level.id < 0 {
-                            let next_id = self.security_levels
-                                .keys()
-                                .max()
-                                .map_or(1, |max_id| max_id + 1);
-                            level.id = next_id;
-
-                            self.security_levels.insert(next_id, level.clone());
-                            self.draft_security_level_id = None;
-                            self.draft_security_level = SecurityLevel::default();
-                            self.selected_security_level_id = Some(next_id);
-                        } else {
-                            self.security_levels.insert(level.id, level.clone());
-                            self.selected_security_level_id = Some(level.id);
-                        }
-                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
-
-                        if let Err(e) = self.save_state() {
-                            self.error_message = Some(e);
-                        } else {
-                            self.error_message = None;
-                        }
-
-                        Task::none()
-                    }
-                    security_levels::Operation::StartEdit(id) => {
-                        // Start editing an existing Security Level
-                        self.draft_security_level_id = Some(id);
-                        self.draft_security_level = self.security_levels[&id].clone();
-                        self.screen = Screen::SecurityLevels(security_levels::Mode::Edit);
-                        Task::none()
-                    }
-                    security_levels::Operation::Cancel => {
-                        if self.draft_security_level_id.is_some() {
-                            self.draft_security_level_id = None;
-                            self.draft_security_level = SecurityLevel::default();
-                        }
-                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
-                        Task::none()
-                    }
-                    security_levels::Operation::Back => {
-                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
-                        Task::none()
-                    }
-                    security_levels::Operation::CreateNew(mut level) => {
-                        println!("CreateNew operation received in main");
-                        let next_id = self.security_levels
-                            .keys()
-                            .max()
-                            .map_or(1, |max_id| max_id + 1);
-                        level.id = next_id;
-
-                        self.draft_security_level = level;
-                        self.draft_security_level_id = Some(-1);
-                        self.selected_security_level_id = Some(-1);
-                        self.screen = Screen::SecurityLevels(security_levels::Mode::Edit);
-                        Task::none()
-                    },
                     security_levels::Operation::RequestDelete(id) => {
-                        println!("Deleting SecurityLevel id: {}", id);
                         self.deletion_info = data_types::DeletionInfo { 
                            entity_type: "SecurityLevel".to_string(),
                            entity_id: id,
@@ -2246,7 +2105,6 @@ impl MenuBuilder {
                        Task::none()
                    }
                     security_levels::Operation::CopySecurityLevel(id) => {
-                       println!("Copying SecurityLevel: {}", id);
                         let copy_item = self.security_levels.get(&id).unwrap();
                        let next_id = self.security_levels
                            .keys()
@@ -2260,15 +2118,11 @@ impl MenuBuilder {
                        };
 
                        self.security_levels.insert(next_id, new_item.clone());
-                       self.draft_security_level_id = Some(next_id);
-                       self.draft_security_level = new_item;
-                       self.selected_security_level_id = Some(next_id);
-                       self.screen = Screen::SecurityLevels(security_levels::Mode::Edit);
+                       self.screen = Screen::SecurityLevels;
 
                        Task::none()
                    }
                     security_levels::Operation::EditSecurityLevel(id) => {
-                        println!("Edit Security Group Operation on id: {}", id);
                         // First check if we already have an edit state for this security_level
                         let already_editing = self.security_level_edit_state_vec
                             .iter()
@@ -2289,12 +2143,7 @@ impl MenuBuilder {
                             }
                         }
     
-                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
-                        Task::none()
-                    },
-                    security_levels::Operation::Select(id) => {
-                        self.selected_security_level_id = Some(id);
-                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
+                        self.screen = Screen::SecurityLevels;
                         Task::none()
                     },
                     security_levels::Operation::SaveAll(id, edit_state) => {
@@ -2316,11 +2165,10 @@ impl MenuBuilder {
                             edit.id.parse::<i32>().unwrap() != id
                         });
 
-                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
+                        self.screen = Screen::SecurityLevels;
                         Task::none()
                     },
-                    security_levels::Operation::UpdateMultiName(id, new_name) => {
-                        println!("MultinameEdit on id: {}", id);
+                    security_levels::Operation::UpdateName(id, new_name) => {
                         if let Some(edit_state) = self.security_level_edit_state_vec
                         .iter_mut()
                         .find(|state| state.id.parse::<i32>().unwrap() == id) 
@@ -2328,10 +2176,10 @@ impl MenuBuilder {
                             edit_state.name = new_name;
                         }
     
-                        self.screen = Screen::SecurityLevels(security_levels::Mode::View);
+                        self.screen = Screen::SecurityLevels;
                         Task::none()
                     },
-                    security_levels::Operation::CreateNewMulti => {
+                    security_levels::Operation::CreateNew => {
                         let next_id = self.security_levels
                             .keys()
                             .max()
@@ -2375,7 +2223,7 @@ impl MenuBuilder {
                     state.id.parse::<i32>().unwrap() != id
                     });
 
-                    self.screen = Screen::SecurityLevels(security_levels::Mode::View);
+                    self.screen = Screen::SecurityLevels;
                     Task::none()
                     },
                 }
