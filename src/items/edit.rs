@@ -3,6 +3,7 @@ use iced::widget::{
     button, checkbox, column, combo_box, container, pick_list, row, 
     text, text_input, horizontal_space, scrollable
 };
+use iced_modern_theme::Modern;
 use iced::{Element, Length};
 use std::collections::BTreeMap;
 use crate::data_types::{EntityId, ItemPrice};
@@ -105,12 +106,11 @@ pub fn view<'a>(
     price_levels: &'a BTreeMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
     let header = row![
-        button(icon::save().size(14)).on_press(Message::Save).style(button::primary),
-        button(icon::cancel().size(14)).on_press(Message::Cancel).style(button::danger),
+        button(icon::save().size(14)).on_press(Message::Save).style(Modern::primary_button()),
+        button(icon::cancel().size(14)).on_press(Message::Cancel).style(Modern::danger_button()),
         horizontal_space().width(4),
     ]
-    .spacing(10)
-    .padding(10);
+    .spacing(10);
 
     let validation_error = &state.validation_error;
 
@@ -118,75 +118,81 @@ pub fn view<'a>(
         column![
             row![
                 column![
-                    text("Item Name").style(text::primary),
+                    text("Item Name").style(Modern::primary_text()),
                     text_input("Item Name", &item.name)
                         .on_input(Message::UpdateName)
+                        .style(Modern::inline_text_input())
                         .width(200)
                         .padding(5)
                 ].spacing(10).padding(10),
                 column![
-                    text("Base Price").style(text::primary),
+                    text("Base Price").style(Modern::primary_text()),
                     text_input(
                         "Base Price",
                         &item.cost_amount.map_or(String::new(), |c| c.to_string())
                     )
                     .on_input(Message::UpdateCostAmount)
+                    .style(Modern::inline_text_input())
                     .width(200)
                     .padding(5)
                 ].spacing(10).padding(10),
             ].wrap(),
             row![
                 column![
-                    text("Button Text 1").style(text::primary),
+                    text("Button Text 1").style(Modern::primary_text()),
                     text_input("Button Text 1", &item.button1)
                         .on_input(Message::UpdateButton1)
+                        .style(Modern::inline_text_input())
                         .width(200)
                         .padding(5)
                 ].spacing(10).padding(10),
                 column![
-                    text("Button Text 2").style(text::primary),
+                    text("Button Text 2").style(Modern::primary_text()),
                     text_input("Button Text 2", &item.button2.clone().unwrap_or_default())
                         .on_input(Message::UpdateButton2)
+                        .style(Modern::inline_text_input())
                         .width(200)
                         .padding(5)
                 ].spacing(10).padding(10),
                 column![
-                    text("Customer Receipt Text").style(text::primary),
+                    text("Customer Receipt Text").style(Modern::primary_text()),
                     text_input(
                         "Customer Receipt Text", 
                         &item.customer_receipt
                     )
                     .on_input(Message::UpdateCustomerReceipt)
+                    .style(Modern::inline_text_input())
                     .width(200)
                     .padding(5)
                 ].spacing(10).padding(10),
             ],
             row![
                 column![
-                    text("Kitchen Printer Text").style(text::primary),
+                    text("Kitchen Printer Text").style(Modern::primary_text()),
                     text_input(
                         "Kitchen Printer Text", 
                         &item.printer_text
                     )
                     .on_input(Message::UpdatePrinterText)
+                    .style(Modern::inline_text_input())
                     .width(200)
                     .padding(5)
                 ].spacing(10).padding(10),
                 column![
-                    text("Kitchen Video Text").style(text::primary),
+                    text("Kitchen Video Text").style(Modern::primary_text()),
                     text_input(
                         "Kitchen Video Text", 
                         &item.kitchen_video
                     )
                     .on_input(Message::UpdateKitchenVideo)
+                    .style(Modern::inline_text_input())
                     .width(200)
                     .padding(5)
                 ].spacing(10).padding(10)
             ].wrap(),
-            iced::widget::horizontal_rule(5),
         ]
     )
-    .style(container::rounded_box)
+    .style(Modern::sheet_container())
     .width(Length::Fill)
     .padding(10);
 
@@ -194,90 +200,100 @@ pub fn view<'a>(
         column![
             row![
                 column![
-                    text("Item Group").style(text::primary),
+                    text("Item Group").style(Modern::primary_text()),
                     pick_list(
                         item_groups.values().collect::<Vec<_>>(),
                         item.item_group.and_then(|id| item_groups.get(&id)),
                         |group: &ItemGroup| Message::SelectItemGroup(Some(group.id))
-                    ).width(200)
+                    ).width(200).style(Modern::pick_list())
                 ].spacing(10).padding(10),
                 column![
-                    text("Product Class").style(text::primary),
+                    text("Product Class").style(Modern::primary_text()),
                     pick_list(
                         product_classes.values().collect::<Vec<_>>(),
                         item.product_class.and_then(|id| product_classes.get(&id)),
                         |product_class: &ProductClass| Message::SelectProductClass(Some(product_class.id))
-                    ).width(200)
+                    ).width(200).style(Modern::pick_list())
                 ].spacing(10).padding(10),
                 column![
-                    text("Revenue Category").style(text::primary),
+                    text("Revenue Category").style(Modern::primary_text()),
                     pick_list(
                         revenue_categories.values().collect::<Vec<_>>(),
                         item.revenue_category.and_then(|id| revenue_categories.get(&id)),
                         |revenue_category: &RevenueCategory| Message::SelectRevenueCategory(Some(revenue_category.id))
-                    ).width(200)
+                    ).width(200).style(Modern::pick_list())
                 ].spacing(10).padding(10),
             ].wrap(),
             row![
                 column![
-                    text("Tax Group").style(text::primary),
+                    text("Tax Group").style(Modern::primary_text()),
                     pick_list(
                         tax_groups.values().collect::<Vec<_>>(),
                         item.tax_group.and_then(|id| tax_groups.get(&id)),
                         |tax_group: &TaxGroup| Message::SelectTaxGroup(Some(tax_group.id))
-                    ).width(200)
+                    ).width(200).style(Modern::pick_list())
                 ].spacing(10).padding(10),
                 column![
-                    text("Security Level").style(text::primary),
+                    text("Security Level").style(Modern::primary_text()),
                     pick_list(
                         security_levels.values().collect::<Vec<_>>(),
                         item.security_level.and_then(|id| security_levels.get(&id)),
                         |security_level| Message::SelectSecurityLevel(Some(security_level.id))
-                    ).width(200)
+                    ).width(200).style(Modern::pick_list())
                 ].spacing(10).padding(10),
                 column![
-                    text("Report Category").style(text::primary),
+                    text("Report Category").style(Modern::primary_text()),
                     pick_list(
                         report_categories.values().collect::<Vec<_>>(),
                         item.report_category.and_then(|id| report_categories.get(&id)),
                         |report_category: &ReportCategory| Message::SelectReportCategory(Some(report_category.id))
-                    ).width(200)
+                    ).width(200).style(Modern::pick_list())
                 ].spacing(10).padding(10),
             ].wrap(),
             row![
-                checkbox(
-                    "Sold by weight".to_string(),
-                    item.use_weight
-                )
-                .on_toggle(Message::ToggleUseWeight)
-                    .width(200)
-                    .spacing(10)
-                    .style(checkbox::primary),
                 column![
-                    text("Tar Weight").style(text::primary),
-                    text_input(
-                        "Weight",
-                        &item.weight_amount.to_string()
+                    checkbox(
+                        "Sold by weight".to_string(),
+                        item.use_weight
                     )
-                    .on_input(Message::UpdateWeightAmount)
-                    .padding(5)
-                    .width(200)
+                    .on_toggle(Message::ToggleUseWeight)
+                        .width(200)
+                        .spacing(10)
+                        .style(Modern::checkbox()),
+                ].spacing(10).padding(10),
+
+                column![
+                    row![
+                        horizontal_space().width(5),
+                        text("Tar Weight").style(Modern::primary_text()),
+                    ],
+                    row![
+                        horizontal_space().width(5),
+                        text_input(
+                            "Weight",
+                            &item.weight_amount.to_string()
+                        )
+                        .on_input(Message::UpdateWeightAmount)
+                        .style(Modern::inline_text_input())
+                        .padding(5)
+                        .width(200)
+                    ],
                 ].spacing(10).padding(10),
             ]
-            .spacing(10)
-            .padding(10)
+/*             .spacing(10)
+            .padding(10) */
             .wrap(),
         ]
         .width(Length::Fill)
-        .spacing(10)
+//        .spacing(10)
     )
-    .style(container::rounded_box)
+    .style(Modern::sheet_container())
     .width(Length::Fill)
     .padding(10);
 
 /*     let weight_info = container(
         column![
-            text("Weight").size(16).style(iced::widget::text::primary),
+            text("Weight").size(16).style(iced::widget::Modern::primary_text()),
             checkbox(
                 "Use Weight",
                 item.use_weight
@@ -293,13 +309,12 @@ pub fn view<'a>(
             ],
         ]
     )
-    .style(container::rounded_box)
+    .style(Modern::card_container())
     .width(Length::Fill)
     .padding(10); */
 
     let flags = container(
         column![
-            iced::widget::horizontal_rule(5),
             column![
                 row![
                     checkbox(
@@ -307,6 +322,7 @@ pub fn view<'a>(
                         item.print_on_check
                     )
                     .on_toggle(Message::TogglePrintOnCheck)
+                    .style(Modern::checkbox())
                     .spacing(10)
                     .width(200),
                     checkbox(
@@ -314,6 +330,7 @@ pub fn view<'a>(
                         item.discountable
                     )
                     .on_toggle(Message::ToggleDiscountable)
+                    .style(Modern::checkbox())
                     .spacing(10)
                     .width(200),
                     checkbox(
@@ -321,6 +338,7 @@ pub fn view<'a>(
                         item.voidable
                     )
                     .on_toggle(Message::ToggleVoidable)
+                    .style(Modern::checkbox())
                     .spacing(10)
                     .width(200),
                 ].wrap(),
@@ -332,6 +350,7 @@ pub fn view<'a>(
                         item.not_active
                     )
                     .on_toggle(Message::ToggleNotActive)
+                    .style(Modern::checkbox())
                     .spacing(10)
                     .width(200),
                     checkbox(
@@ -339,6 +358,7 @@ pub fn view<'a>(
                         item.tax_included
                     )
                     .on_toggle(Message::ToggleTaxIncluded)
+                    .style(Modern::checkbox())
                     .spacing(10)
                     .width(200),
                     checkbox(
@@ -346,6 +366,7 @@ pub fn view<'a>(
                         item.stock_item
                     )
                     .on_toggle(Message::ToggleStockItem)
+                    .style(Modern::checkbox())
                     .spacing(10)
                     .width(200),
                 ].wrap(),
@@ -357,6 +378,7 @@ pub fn view<'a>(
                         item.ask_price
                     )
                     .on_toggle(Message::ToggleAskPrice)
+                    .style(Modern::checkbox())
                     .spacing(10)
                     .width(200),
                     checkbox(
@@ -364,14 +386,14 @@ pub fn view<'a>(
                         item.allow_price_override
                     )
                     .on_toggle(Message::ToggleAllowPriceOverride)
+                    .style(Modern::checkbox())
                     .spacing(10)
                     .width(200),
                 ].wrap(),
             ],
-            iced::widget::horizontal_rule(5),
         ]
     )
-    .style(container::rounded_box)
+    .style(Modern::sheet_container())
     .width(Length::Fill)
     .padding(10);
 
@@ -403,7 +425,7 @@ pub fn view<'a>(
         ],
     ]
     )
-    .style(container::rounded_box)
+    .style(Modern::card_container())
     .width(Length::Fill)
     .padding(10); */
 
@@ -435,22 +457,26 @@ pub fn view<'a>(
             ],
         ]
     )
-    .style(container::rounded_box)
+    .style(Modern::card_container())
     .width(Length::Fill)
     .padding(10); */
 
     let choice_groups = container(
         column![
             column![
-                text("Choice Groups").size(14).style(text::primary),
+                text("Choice Groups").style(Modern::primary_text()),
+                iced::widget::horizontal_space().height(5),
                 combo_box(
                     &state.choice_groups_combo,
                     "Add Choice Group",
                     state.choice_group_selection.as_ref(),
                     |choice_group: ChoiceGroup| Message::ChoiceGroupSelected(choice_group.id)
                 )
+                .input_style(Modern::combo_box())
+                .menu_style(Modern::combo_box_menu())
                 .width(200),
             ].spacing(5),
+            iced::widget::horizontal_space().height(5),
             row![ // Display Selected Choice Groups
                 if let Some(selected_groups) = &item.choice_groups {
                     row(
@@ -465,7 +491,7 @@ pub fn view<'a>(
                                         ].spacing(10)
                                     )
                                     .on_press(Message::RemoveChoiceGroup(group.id))
-                                    .style(data_types::badge)
+                                    .style(Modern::gray_button())
                                     .width(Length::Shrink)
                                 ).padding(5).into()
                             })
@@ -477,22 +503,26 @@ pub fn view<'a>(
             ],
         ],
     )
-    .style(container::rounded_box)
+    .style(Modern::sheet_container())
     .width(Length::Fill)
     .padding(10);
 
     let printer_info = container(
         column![
             column![
-                text("Printer Logicals").size(14).style(text::primary),
+                text("Printer Logicals").style(Modern::primary_text()),
+                iced::widget::horizontal_space().height(5),
                 combo_box(
                     &state.printer_logicals_combo,
                     "Add Printer Logical",
                     state.printer_logicals_selection.as_ref(),
                     |printer_logical: PrinterLogical| Message::PrinterLogicalSelected(printer_logical.id)
                 )
+                .input_style(Modern::combo_box())
+                .menu_style(Modern::combo_box_menu())
                 .width(200),
             ].spacing(5),
+            iced::widget::horizontal_space().height(5),
             row![ // Display Selected Printer Logicals
             if let Some(selected_logicals) = &item.printer_logicals {
                 row(
@@ -507,7 +537,7 @@ pub fn view<'a>(
                                     ].spacing(10)
                                 )
                                 .on_press(Message::RemovePrinterLogical(logical.id))
-                                .style(data_types::badge)
+                                .style(Modern::gray_button())
                                 .width(Length::Shrink)
                             ).padding(5).into()
                         })
@@ -519,7 +549,7 @@ pub fn view<'a>(
             ],
         ],
     )
-    .style(container::rounded_box)
+    .style(Modern::sheet_container())
     .width(Length::Fill)
     .padding(10);
 
@@ -529,7 +559,8 @@ pub fn view<'a>(
 
     let pricing = container(
         column![
-            text("Price Levels").size(14).style(text::primary),
+            text("Price Levels").style(Modern::primary_text()),
+            iced::widget::horizontal_space().height(10),
 
             row![ // Display Selected Price Levels
             if let Some(selected_prices) = &item.price_levels {
@@ -553,9 +584,11 @@ pub fn view<'a>(
                                 text_input("Price", current_price)
                                     .on_input( |price|
                                         Message::UpdatePrice(price_level.id, price)
-                                    ).width(125),
+                                    )
+                                    .style(Modern::inline_text_input())
+                                    .width(125),
                                     horizontal_space().width(10),
-                                button(icon::trash().size(14)).on_press(Message::RemovePriceLevel(price_level.id)).style(button::danger),
+                                button(icon::trash().size(14)).on_press(Message::RemovePriceLevel(price_level.id)).style(Modern::danger_button()),
                                 horizontal_space().width(10),
                             ].align_y(iced::Alignment::Center).into()
                         })
@@ -565,16 +598,20 @@ pub fn view<'a>(
                 row![].wrap()
             }
             ],
+            iced::widget::horizontal_space().height(5),
             row![
                 pick_list(
                     available_price_levels,
                     None::<PriceLevel>,
                     |price_level: PriceLevel| Message::PriceLevelSelected(price_level.id)
-                ).width(75).placeholder("Add Price Levels")
+                )
+                .width(75)
+                .placeholder("Add Price Levels")
+                .style(Modern::pick_list())
             ].spacing(5),
         ],
     )
-    .style(container::rounded_box)
+    .style(Modern::sheet_container())
     .width(Length::Fill)
     .padding(10);
 

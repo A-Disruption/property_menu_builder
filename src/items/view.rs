@@ -3,6 +3,7 @@ use iced::widget::{
     horizontal_space, text_input
 };
 use iced::{Element, Length};
+use iced_modern_theme::Modern;
 use std::collections::BTreeMap;
 //use crate::HotKey;
 use crate::{
@@ -41,11 +42,12 @@ pub fn view<'a>(
     price_levels: &'a BTreeMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
     let header = row![
-        button(icon::edit().size(14)).on_press(Message::Edit),
+        button(icon::edit().size(14))
+            .on_press(Message::Edit)
+            .style(Modern::primary_button()),
         horizontal_space().width(4),
     ]
-    .spacing(10)
-    .padding(10);
+    .spacing(10);
 
     let basic_info = container(
         column![
@@ -76,10 +78,9 @@ pub fn view<'a>(
                         "Kitchen Video Text".to_string(), 
                         item.kitchen_video.clone())
                 ].wrap(),
-                iced::widget::horizontal_rule(5),
         ]
     )
-    .style(container::rounded_box)
+    .style(Modern::sheet_container())
     .width(Length::Fill)
     .padding(10);
 
@@ -100,7 +101,7 @@ pub fn view<'a>(
                         .map_or("None".to_string(), |c| c.name.clone())
                 ),
                 info_column(
-                    "Rev Category".to_string(), 
+                    "Revenue Category".to_string(), 
                     item.revenue_category
                         .and_then(|id| revenue_categories.get(&id))
                         .map_or("None".to_string(), |c| c.name.clone())
@@ -127,33 +128,55 @@ pub fn view<'a>(
                 ),
             ].wrap(),
             row![
-                checkbox(
-                    "Sold by weight".to_string(), 
-                    item.use_weight
-                )
-                .style(checkbox::primary)
-                .width(200),
+                column![
+                    checkbox(
+                        "Sold by weight".to_string(), 
+                        item.use_weight
+                    )
+                    .width(200)
+                    .spacing(10)
+                    .style(Modern::checkbox()),
+                ].spacing(10).padding(10),
 
+                column![
+                    row![
+                        horizontal_space().width(5),
+                        text("Tar Weight").style(Modern::primary_text()),
+                    ],
+                    row![
+                        horizontal_space().width(5),
+                        text_input(
+                            "Weight",
+                            &weight_str.to_string()
+                        )
+                        .style(Modern::inline_text_input())
+                        .padding(5)
+                        .width(200)
+                    ],
+                ].spacing(10).padding(10),
+/*                ],
+ 
                 info_column(
                     "Tar Weight".to_string(),
                     weight_str
-                )
+                ) */
 
             ]
-            .spacing(10)
-            .padding(10)
+/*             .spacing(10)
+            .padding(10) */
             .wrap()
         ]
         .width(Length::Fill)
-        .spacing(10)
+//        .spacing(10)
     )
     .width(Length::Fill)
-    .style(container::rounded_box)
+    .style(Modern::sheet_container())
     .padding(10);
 
     let pricing = container(
         column![
-            text("Price Levels").size(14).style(iced::widget::text::primary),
+            text("Price Levels").style(Modern::primary_text()),
+            iced::widget::horizontal_space().height(5),
             row![
                 if let Some(ref prices) = item.item_prices {
                     row(
@@ -162,16 +185,16 @@ pub fn view<'a>(
                                 price_levels.get(&item_price.price_level_id).map(|price_level|{
                                     //let label = format!("{}: ${}", price_level.name, item_price.price);
                                     let label2 = row![
-                                        text(price_level.name.clone() + ": ").style(text::secondary),
+                                        text(price_level.name.clone() + ": ").style(Modern::primary_text()),
                                         text("$".to_string() + item_price.price.to_string().as_str()),
                                         ];
 
-                                    button(label2).style(data_types::badge).into()
+                                    button(label2).style(Modern::gray_button()).into()
                                 })
                             }).collect::<Vec<_>>()
                     ).spacing(10).wrap()
                 } else {
-                    row![button(text("No Price Level Assigned")).style(data_types::badge)].wrap()
+                    row![button(text("No Price Level Assigned")).style(Modern::gray_button())].wrap()
                 }
             ],
 /*             row![
@@ -179,7 +202,7 @@ pub fn view<'a>(
                     row(
                         levels.iter()
                             .filter_map(|id| price_levels.get(id))
-                            .map(|level| button(&*level.name).style(data_types::badge).into() )
+                            .map(|level| button(&*level.name).style(Modern::gray_button()).into() )
                             .collect::<Vec<_>>()
                     ).wrap()
                 } else {
@@ -188,27 +211,26 @@ pub fn view<'a>(
             ], */
         ]
     )
-    .style(container::rounded_box)
+    .style(Modern::sheet_container())
     .width(Length::Fill)
     .padding(10);
 
     let flags = container(
         column![
-            iced::widget::horizontal_rule(5),
             column![
                 row![
                     checkbox(
                         "Print on Check".to_string(), 
                         item.print_on_check
-                    ).spacing(10).width(200),
+                    ).spacing(10).width(200).style(Modern::checkbox()),
                     checkbox(
                         "Discountable".to_string(), 
                         item.discountable
-                    ).spacing(10).width(200),
+                    ).spacing(10).width(200).style(Modern::checkbox()),
                     checkbox(
                         "Voidable".to_string(), 
                         item.voidable
-                    ).spacing(10).width(200),
+                    ).spacing(10).width(200).style(Modern::checkbox()),
                 ].wrap()
             ],
             column![
@@ -216,15 +238,15 @@ pub fn view<'a>(
                     checkbox(
                         "Active".to_string(), 
                         item.not_active
-                    ).spacing(10).width(200),
+                    ).spacing(10).width(200).style(Modern::checkbox()),
                     checkbox(
                         "Tax Included".to_string(), 
                         item.tax_included
-                    ).spacing(10).width(200),
+                    ).spacing(10).width(200).style(Modern::checkbox()),
                     checkbox(
                         "Stock Item".to_string(), 
                         item.stock_item
-                    ).spacing(10).width(200),
+                    ).spacing(10).width(200).style(Modern::checkbox()),
                 ].wrap()
             ],
             column![
@@ -232,17 +254,16 @@ pub fn view<'a>(
                     checkbox(
                         "Prompt for price".to_string(), 
                         item.ask_price
-                    ).spacing(10).width(200),
+                    ).spacing(10).width(200).style(Modern::checkbox()),
                     checkbox(
                         "Allow price override".to_string(), 
                         item.allow_price_override
-                    ).spacing(10).width(200),
+                    ).spacing(10).width(200).style(Modern::checkbox()),
                 ].wrap()
             ],
-            iced::widget::horizontal_rule(5),
         ],
     )
-    .style(container::rounded_box)
+    .style(Modern::sheet_container())
     .width(Length::Fill)
     .padding(10);
 
@@ -253,18 +274,19 @@ pub fn view<'a>(
             info_row("KDS Department:".to_string(), item.kds_dept.to_string()),
         ]
     )
-    .style(container::rounded_box)
+    .style(Modern::card_container())
     .width(Length::Fill)
     .padding(10); */
 
     let printer_info = container(
         column![
-            text("Printer Logicals:").size(14).style(text::primary),
+            text("Printer Logicals:").style(Modern::primary_text()),
+            iced::widget::horizontal_space().height(5),
             if let Some(ref printers) = item.printer_logicals {
                 row(
                     printers.iter()
                         .filter_map(|id| printer_logicals.get(id))
-                        .map(|printer| button( &*printer.name).style(data_types::badge).into())
+                        .map(|printer| button( &*printer.name).style(Modern::gray_button()).into())
                         .collect::<Vec<_>>()
                 ).spacing(10).wrap()
             } else {
@@ -272,7 +294,7 @@ pub fn view<'a>(
             }
         ]
     )
-    .style(container::rounded_box)
+    .style(Modern::sheet_container())
     .width(Length::Fill)
     .padding(10);
 
@@ -300,18 +322,19 @@ pub fn view<'a>(
             }
         ]
     )
-    .style(container::rounded_box)
+    .style(Modern::card_container())
     .width(Length::Fill)
     .padding(10); */
 
     let choice_groups = container(
         column![
-            text("Choice Groups").size(14).style(iced::widget::text::primary),
+            text("Choice Groups").style(Modern::primary_text()),
+            iced::widget::horizontal_space().height(5),
             if let Some(ref groups) = item.choice_groups {
                 row(
                     groups.iter()
                         .filter_map(|id| choice_groups.get(id))
-                        .map(|group| button(&*group.name).style(data_types::badge).into() )
+                        .map(|group| button(&*group.name).style(Modern::gray_button()).into() )
                         .collect::<Vec<_>>()
                 ).spacing(10).wrap()
             } else {
@@ -319,7 +342,7 @@ pub fn view<'a>(
             }
         ]
     )
-    .style(container::rounded_box)
+    .style(Modern::sheet_container())
     .width(Length::Fill)
     .padding(10);
 
@@ -353,8 +376,8 @@ pub fn view<'a>(
 fn info_row(label: String, value: String) -> Element<'static, Message> {
     container(
         column![
-            text(label).width(Length::Shrink).style(text::secondary),
-            text_input(&value, &value).width(200)
+            text(label).width(Length::Shrink).style(Modern::primary_text()),
+            text_input(&value, &value).width(200).style(Modern::inline_text_input())
         ]
         .spacing(10)
         .padding(10)
@@ -365,8 +388,8 @@ fn info_row(label: String, value: String) -> Element<'static, Message> {
 fn info_column(label: String, value: String) -> Element<'static, Message> {
     container(
         column![
-            text(label).width(Length::Shrink).style(text::primary),
-            text_input(&value, &value).width(200)
+            text(label).width(Length::Shrink).style(Modern::primary_text()),
+            text_input(&value, &value).width(200).style(Modern::inline_text_input())
         ]
         .spacing(10)
         .padding(10)

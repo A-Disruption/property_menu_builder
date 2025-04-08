@@ -5,6 +5,7 @@ use crate::data_types::{
     Validatable,
 };
 use crate::Action;
+use crate::entity_component::{self, Entity, EditState};
 use crate::icon;
 use serde::{Serialize, Deserialize};
 use iced::{Element, Length};
@@ -49,52 +50,6 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Default, Debug, Clone)]
-pub struct EditState {
-    pub name: String,
-    pub original_name: String,
-    pub id: String,
-    pub validation_error: Option<String>,
-}
-
-impl EditState {
-    pub fn new(security_level: &SecurityLevel) -> Self {
-        Self {
-            name: security_level.name.clone(),
-            original_name: security_level.name.clone(),
-            id: security_level.id.to_string(),
-            validation_error: None,
-        }
-    }
-
-    pub fn reset(& mut self) {
-        self.name = self.original_name.clone();
-        self.validation_error = None;
-    }
-
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        if self.name.trim().is_empty() {
-            return Err(ValidationError::EmptyName(
-                "Security level name cannot be empty".to_string()
-            ));
-        }
-
-        if let Ok(id) = self.id.parse::<EntityId>() {
-            if !(1..=999).contains(&id) {
-                return Err(ValidationError::InvalidId(
-                    "Security level ID must be between 1 and 999".to_string()
-                ));
-            }
-        } else {
-            return Err(ValidationError::InvalidId(
-                "Invalid ID format".to_string()
-            ));
-        }
-
-        Ok(())
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SecurityLevel {
     pub id: EntityId,
@@ -116,8 +71,33 @@ impl Default for SecurityLevel {
     }
 }
 
-impl SecurityLevel {
+impl Entity for SecurityLevel {
+    fn id(&self) -> EntityId {
+        self.id
+    }
+    
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    fn with_id(&self, id: EntityId) -> Self {
+        let mut clone = self.clone();
+        clone.id = id;
+        clone
+    }
+    
+    fn with_name(&self, name: String) -> Self {
+        let mut clone = self.clone();
+        clone.name = name;
+        clone
+    }
+    
+    fn default_new() -> Self {
+        Self::default()
+    }
+}
 
+impl SecurityLevel {
     pub fn new_draft() -> Self {
         Self::default()
     }
@@ -125,21 +105,21 @@ impl SecurityLevel {
     fn validate(&self, other_levels: &[&SecurityLevel]) -> Result<(), ValidationError> {
         if !(1..=999).contains(&self.id) {
             return Err(ValidationError::InvalidId(
-                "Security level ID must be between 1 and 999".to_string()
+                "Price Levels ID must be between 1 and 999".to_string()
             ));
         }
 
         for other in other_levels {
             if other.id == self.id {
                 return Err(ValidationError::DuplicateId(
-                    format!("Security level with ID {} already exists", self.id)
+                    format!("Price Levels with ID {} already exists", self.id)
                 ));
             }
         }
 
         if self.name.trim().is_empty() {
             return Err(ValidationError::EmptyName(
-                "Security level name cannot be empty".to_string()
+                "Price Levels name cannot be empty".to_string()
             ));
         }
 
@@ -155,7 +135,6 @@ pub fn update(
 ) -> Action<Operation, Message> {
     match message {
         Message::CreateNew => {
-            println!("CreateNew message received in security_levels");
             let new_security_level = SecurityLevel::default();
             Action::operation(Operation::CreateNew(new_security_level))
         },
@@ -176,7 +155,7 @@ pub fn update(
                 security_level.id = id;
                 Action::none()
             } else {
-                state.validation_error = Some("Invalid ID format".to_string());
+                state.id_validation_error = Some("Invalid ID format".to_string());
                 Action::none()
             }
         },
@@ -203,138 +182,35 @@ pub fn view<'a>(
     all_levels: &'a BTreeMap<EntityId, SecurityLevel>,
     edit_states: &'a Vec<EditState>,
 ) -> Element<'a, Message> {
-
-    let title_row = container(
-        row![
-            text("Security Levels").size(18).style(text::primary),
-            iced::widget::horizontal_space(),
-            button(icon::new().size(14))
-                .on_press(Message::CreateNewMulti)
-                .style(button::primary),
-        ]
-        .width(Length::Fixed(505.0))
-        .padding(15)
+    entity_component::entity_view(
+        "Security Levels",
+        Message::CreateNewMulti,
+        all_levels,
+        edit_states,
+        |security_level, edit_states| render_security_level_row(security_level, edit_states),
     )
-    .style(container::rounded_box);
-
-    // Header row for columns
-    let header_row = container(
-        row![
-            text("ID").width(Length::Fixed(75.0)),
-            text("Name").width(Length::Fixed(250.0)),
-            text("Actions").width(Length::Fixed(150.0)),
-        ]
-        .padding(15)
-    )
-    .style(container::rounded_box);
-
-    let levels_list = scrollable(
-        column(
-            all_levels
-                .values()
-                .map(|level| 
-                    container(
-                        logical_quick_edit_view(
-                            level,
-                            edit_states
-                        )
-                    )
-                    .style(container::bordered_box)
-                    .padding(5)
-                    .into()
-                )
-                .collect::<Vec<_>>()
-        )
-    ).height(Length::Fill);
-
-    column![
-        title_row,
-        header_row,
-        container(levels_list)
-            .height(Length::Fill)
-            .style(container::rounded_box)
-    ].into()
 }
 
-pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
-    let button_content = container (
-        row![
-            text(list_text),
-            iced::widget::horizontal_space(),
-            copy_button,
-            delete_button.style(button::danger)
-        ].align_y(iced::Alignment::Center),
-    );
-    
-    button_content.into()
-}
-
-fn logical_quick_edit_view<'a>(
+fn render_security_level_row<'a>(
     security_level: &'a SecurityLevel,
     edit_states: &'a Vec<EditState>
-    ) 
-    -> Element<'a, Message> {
+) -> Element<'a, Message> {
+    entity_component::entity_quick_edit_view(
+        security_level,
+        edit_states,
+        Message::EditSecurityLevel,
+        Message::SaveAll,
+        Message::CopySecurityLevel,
+        Message::RequestDelete,
+        Message::CancelEdit,
+        Message::UpdateMultiName,
+        "Security Level Name"
+    )
+}
 
-        // Find edit state for this choice_group if it exists
-        let edit_state = edit_states.iter()
-            .find(|state| state.id.parse::<i32>().unwrap() == security_level.id);
-
-        let editing = edit_state.is_some();
-
-        let display_name = edit_state
-            .map(|state| state.name.clone())
-            .unwrap_or_else(|| security_level.name.clone());
-
-        // Check for validation error
-        let validation_error = edit_state
-        .and_then(|state| state.validation_error.as_ref())
-        .cloned();
-
-        let button_content: iced::widget::Button<'a, Message> = button(
-            container(
-                row![
-                    text_input("ID (1-25)", &security_level.id.to_string())
-                        //.on_input(Message::UpdateId)
-                        .width(Length::Fixed(75.0)),
-                    text_input("Security Level Name", &display_name)
-                        .on_input_maybe(
-                            if editing {
-                               Some( |a_security_level| Message::UpdateMultiName(security_level.id, a_security_level) )
-                             } else {
-                                None 
-                             }
-                        ).style(if validation_error.is_some() { data_types::validated_error } else { text_input::default })
-                        .width(Length::Fixed(250.0)),
-
-                    row![
-
-                        button( if editing { icon::save().size(14) } else { icon::edit().size(14) })
-                        .on_press( if editing { Message::SaveAll(security_level.id, edit_state.unwrap().clone()) } else { Message::EditSecurityLevel(security_level.id) })
-                        .style(
-                            button::primary
-                    ),
-                        iced::widget::horizontal_space().width(2),
-                    button(icon::copy().size(14))
-                        .on_press(Message::CopySecurityLevel(security_level.id))
-                        .style(
-                            button::primary
-                    ),
-                    iced::widget::horizontal_space().width(2),
-                    button(if editing { icon::cancel().size(14) } else { icon::trash().size(14) })
-                        .on_press( if editing { Message::CancelEdit(security_level.id) } else { Message::RequestDelete(security_level.id) })
-                        .style(button::danger),
-                    ].width(150),
-                ].align_y(iced::Alignment::Center),
-
-            )
-        )
-        .width(iced::Length::Shrink)
-        .on_press(Message::Select(security_level.id))
-        .style(
-            button::secondary
-        ).into();
-
-
-        
-        button_content.into()
+fn get_next_id(levels: &BTreeMap<EntityId, SecurityLevel>) -> EntityId {
+    levels
+        .keys()
+        .max()
+        .map_or(1, |max_id| max_id + 1)
 }

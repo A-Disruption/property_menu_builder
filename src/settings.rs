@@ -1,10 +1,12 @@
 use iced::widget::{button, checkbox, column, container, row, text, text_input};
 use iced::{Element, Length, Theme};
 pub use iced::window::Settings;
+use iced_modern_theme::Modern;
 use crate::HotKey;
 use serde::{Serialize, Deserialize};
 use crate::persistence;
 use std::fs::File;
+use std::fmt;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -14,7 +16,7 @@ pub enum Message {
     ValidateAndSave,
     Back,
     ShowError(String),
-    UpdateTheme(String),
+    ThemeChanged(ThemeChoice),
     ExportItemsToCSV,
 }
 
@@ -23,7 +25,7 @@ pub enum Operation {
     Save(AppSettings),
     Back,
     ShowError(String),
-    UpdateTheme(Theme),
+    ThemeChanged(ThemeChoice),
     ExportItemsToCSV,
 }
 
@@ -32,7 +34,7 @@ pub struct AppSettings {
     pub file_path: String,
     pub auto_save: bool,
     pub create_backups: bool,
-    pub app_theme: String,
+    pub app_theme: ThemeChoice,
 }
 
 impl Default for AppSettings {
@@ -46,7 +48,7 @@ impl Default for AppSettings {
                 .into_owned(),
             auto_save: true,
             create_backups: true,
-            app_theme: theme_to_string(Theme::SolarizedDark),
+            app_theme: ThemeChoice::Dark,
         }
     }
 }
@@ -81,9 +83,9 @@ pub fn update(
         Message::ShowError(_) => {
             crate::Action::none()
         }
-        Message::UpdateTheme(theme) => {
+        Message::ThemeChanged(theme) => {
             settings.app_theme = theme.clone();
-            crate::Action::operation(Operation::UpdateTheme(string_to_theme(theme.as_str())))
+            crate::Action::operation(Operation::ThemeChanged(theme))
         }
         Message::ExportItemsToCSV => {
             crate::Action::operation(Operation::ExportItemsToCSV)
@@ -95,142 +97,112 @@ pub fn view<'a>(
     settings: &'a AppSettings,
     error_message: Option<&'a str>,
 ) -> Element<'a, Message> {
-    //println!("Theme: {:?}", settings.app_theme);
-    container(
-        column![
-            row![
-                text("Settings").size(24),
-            ].spacing(10),
-            
-            column![
-                text("Data File Path:"),
-                text_input("Path to RON file", &settings.file_path)
-                    .on_input(Message::UpdateFilePath)
-                    .padding(5),
-                
-                checkbox("Auto-save on changes", settings.auto_save)
-                    .on_toggle(Message::ToggleAutoSave),
-                
-                checkbox("Create backups before saving", settings.create_backups)
-                    .on_toggle(Message::ToggleBackups),
-                
-                if let Some(error) = error_message {
-                    text(error).style(text::danger)
-                } else {
-                    text("")
-                },
 
-                 iced::widget::pick_list(
-                    Theme::ALL,
-                    Some(string_to_theme(&settings.app_theme)),
-                    |m| Message::UpdateTheme(theme_to_string(m))
-                ),
+    let title_row = row![
+        text("Settings").style(Modern::primary_text()).size(18)
+    ].padding(15);
 
-                // Add an export section
-                column![
-                    iced::widget::horizontal_rule(5),
-                    text("Data Export").size(18),
-                    row![
-                        button("Export Menu Items to CSV")
-                            .on_press(Message::ExportItemsToCSV)
-                            .style(button::secondary),
-                    ]
-                    .spacing(10)
-                ]
-                .spacing(10), 
-                
-                row![
-                    button("Save Settings")
-                        .on_press(Message::ValidateAndSave)
-                        .style(button::primary),
-                ]
-                .spacing(10)
-            ]
-            .spacing(10)
-            .padding(20)
+    let setting_column = column![
+        text("Data File Path:"),
+        text_input("Path to RON file", &settings.file_path)
+            .on_input(Message::UpdateFilePath)
+            .style(Modern::inline_text_input())
+            .padding(5),
+        
+        row![
+            checkbox("Auto-save on changes", settings.auto_save)
+            .on_toggle(Message::ToggleAutoSave)
+            .style(Modern::checkbox()),
+        
+            checkbox("Create backups before saving", settings.create_backups)
+                .on_toggle(Message::ToggleBackups)
+                .style(Modern::checkbox()),
+        ].spacing(15),
+        
+        if let Some(error) = error_message {
+            text(error).style(Modern::error_text())
+        } else {
+            text("")
+        },
+
+        row![
+            button("Save Settings")
+                .on_press(Message::ValidateAndSave)
+                .style(Modern::primary_button()),
         ]
-        .spacing(20)
-        .padding(20)
+        .spacing(10),
+
+/* 
+         iced::widget::pick_list(
+            ThemeChoice::ALL,
+            Some(settings.app_theme),
+            |m| Message::ThemeChanged(m)
+        ).style(Modern::pick_list()),
+         */
+
+    ].spacing(10);
+
+    let setting_container = container(
+        column![
+            title_row,
+            setting_column,
+        ]
+        .spacing(10)
+        .padding(15)
     )
-    .style(container::rounded_box)
+    .width(805)
+    .style(Modern::card_container());
+
+    let import_export = container(
+        // Add an export section
+        column![
+            text("Data Export").size(18),
+            row![
+                button("Export Menu Items to CSV")
+                    .on_press(Message::ExportItemsToCSV)
+                    .style(Modern::system_button()),
+            ]
+            .spacing(10),
+        ]
+
+        .spacing(10)
+        .padding(15), 
+    )
+    .style(Modern::card_container())
+    .width(805)
+    .padding(15);
+
+
+    column![
+        setting_container,
+        import_export,
+    ]
+    .spacing(10)
     .into()
 }
 
 
-
-
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct ThemeConfig(String);
-
-impl ThemeConfig {
-    pub fn from_theme(theme: Theme) -> Self {
-        Self(theme_to_string(theme))
-    }
-
-    pub fn to_theme(&self) -> Theme {
-        string_to_theme(&self.0)
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThemeChoice {
+    Light,
+    Dark,
 }
 
-//helper functions
-fn theme_to_string(theme: Theme) -> String {
-    match theme {
-        Theme::Light => "Light".to_string(),
-        Theme::Dark => "Dark".to_string(),
-        Theme::Dracula => "Dracula".to_string(),
-        Theme::Nord => "Nord".to_string(),
-        Theme::SolarizedLight => "SolarizedLight".to_string(),
-        Theme::SolarizedDark => "SolarizedDark".to_string(),
-        Theme::GruvboxLight => "GruvboxLight".to_string(),
-        Theme::GruvboxDark => "GruvboxDark".to_string(),
-        Theme::CatppuccinLatte => "CatppuccinLatte".to_string(),
-        Theme::CatppuccinFrappe => "CatppuccinFrappe".to_string(),
-        Theme::CatppuccinMacchiato => "CatppuccinMacchiato".to_string(),
-        Theme::CatppuccinMocha => "CatppuccinMocha".to_string(),
-        Theme::TokyoNight => "TokyoNight".to_string(),
-        Theme::TokyoNightStorm => "TokyoNightStorm".to_string(),
-        Theme::TokyoNightLight => "TokyoNightLight".to_string(),
-        Theme::KanagawaWave => "KanagawaWave".to_string(),
-        Theme::KanagawaDragon => "KanagawaDragon".to_string(),
-        Theme::KanagawaLotus => "KanagawaLotus".to_string(),
-        Theme::Moonfly => "Moonfly".to_string(),
-        Theme::Nightfly => "Nightfly".to_string(),
-        Theme::Oxocarbon => "Oxocarbon".to_string(),
-        Theme::Ferra => "Ferra".to_string(),
-        _ => {"".to_string()}
-    }
+impl ThemeChoice {
+    pub const ALL: &'static [Self] = &[
+        Self::Light,
+        Self::Dark,
+    ];
 }
 
-pub fn string_to_theme(s: &str) -> Theme {
-    match s {
-        "Light" => Theme::Light,
-        "Dark" => Theme::Dark,
-        "Dracula"=> Theme::Dracula,
-        "Nord" => Theme::Nord,
-        "SolarizedLight" => Theme::SolarizedLight,
-        "SolarizedDark" => Theme::SolarizedDark,
-        "GruvboxLight" => Theme::GruvboxLight,
-        "GruvboxDark" => Theme::GruvboxDark,
-        "CatppuccinLatte" => Theme::CatppuccinLatte,
-        "CatppuccinFrappe" => Theme::CatppuccinFrappe,
-        "CatppuccinMacchiato" => Theme::CatppuccinMacchiato,
-        "CatppuccinMocha" => Theme::CatppuccinMocha,
-        "TokyoNight" => Theme::TokyoNight,
-        "TokyoNightStorm" => Theme::TokyoNightStorm,
-        "TokyoNightLight" => Theme::TokyoNightLight,
-        "KanagawaWave" => Theme::KanagawaWave,
-        "KanagawaDragon" => Theme::KanagawaDragon,
-        "KanagawaLotus" => Theme::KanagawaLotus,
-        "Moonfly" => Theme::Moonfly,
-        "Nightfly" => Theme::Nightfly,
-        "Oxocarbon" => Theme::Oxocarbon,
-        "Ferra" => Theme::Ferra,
-        _ => Theme::SolarizedDark,
+impl fmt::Display for ThemeChoice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Light => write!(f, "Light"),
+            Self::Dark => write!(f, "Dark"),
+        }
     }
 }
-
-
 
 #[cfg(target_os = "windows")]
 pub fn load_icon() -> Option<iced::window::icon::Icon> {

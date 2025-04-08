@@ -10,7 +10,8 @@ use crate::data_types::{
 pub use prepare_export::export_to_csv;
 pub use prepare_exports2::export_to_csv2;
 use crate::Action;
-use iced::{Alignment, Element};
+use iced_modern_theme::Modern;
+use iced::{Alignment, Element, Length};
 use serde::{Serialize, Deserialize};
 use iced::widget::{button, combo_box, container, column, row, text};
 use rust_decimal::Decimal;
@@ -886,6 +887,7 @@ pub fn view<'a>(
         &item_search
     )
     .width(iced::Length::Fixed(250.0))
+    .style(Modern::search_input())
     .on_input(Message::SearchItems);
 
     let filtered_items = items.values()
@@ -904,33 +906,33 @@ pub fn view<'a>(
         ))
         .collect::<Vec<_>>();
 
+    let header_row = row![
+        text("Name").width(Length::Fixed(175.0)),
+        text("Actions").width(Length::Fixed(150.0)),
+    ]
+    .padding(5);
+
     let items_list = column(
         filtered_items
             .iter()
             .map(|an_item| {
-                //button(text(&an_item.name))
                 button(
                     list_item(
                         an_item.name.as_str(),
                         button(icon::copy().size(14))
-                            .on_press(Message::CopyItem(an_item.id))
-                            .style(
-                                if an_item.id == item.id {
-                                    button::secondary
-                                } else {
-                                    button::primary
-                                }),
-                        button(icon::trash().size(14)).on_press(Message::RequestDelete(an_item.id)),
+                            .on_press(Message::CopyItem(an_item.id)),
+                        button(icon::trash().size(14))
+                            .on_press(Message::RequestDelete(an_item.id)),
                     )
+                )
+                .on_press(Message::Select(an_item.id))
+                .style(
+                    Modern::conditional_button_style(
+                        an_item.id == item.id,
+                        Modern::selected_button_style(Modern::system_button()),
+                        Modern::system_button()
                     )
-                    .width(iced::Length::Fill)
-                    .on_press(Message::Select(an_item.id))
-                    .style(if an_item.id == item.id {
-                        button::primary
-                    } else {
-                        button::secondary
-                    })
-                    .into()
+                ).into()
             })
             .collect::<Vec<_>>()
     )
@@ -971,22 +973,26 @@ pub fn view<'a>(
         container(
             column![
                 row![
-                    container(text("Items").size(18).style(text::primary)).padding(5),
+                    container(text("Items").size(18).style(Modern::primary_text())).padding(5),
                     iced::widget::horizontal_space(),
                     button(icon::new().size(14).center())
                         .on_press(Message::CreateNew)
-                        .style(button::primary),
+                        .style(Modern::primary_button()),
                 ].width(250),
-                search_bar,   
+                search_bar,
+                header_row,   
                 items_list,
             ]
+            .width(270)
             .spacing(10)
             .padding(10)
         )
-        .style(container::rounded_box),
+        .style(Modern::card_container()),
+
         container(content)
             .width(iced::Length::Fill)
-            .style(container::rounded_box)
+            .style(Modern::card_container())
+
     ]
     .spacing(20)
     .into();
@@ -1118,14 +1124,12 @@ fn matches_search(
 
 
 pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
-    let button_content = container (
-        row![
-            text(list_text).center(),
-            iced::widget::horizontal_space(),
-            copy_button,
-            delete_button.style(button::danger)
-        ].align_y(Alignment::Center),
-    );
+    let button_content = row![
+        text(list_text).center(),
+        iced::widget::horizontal_space(),
+        copy_button.style(Modern::primary_button()),
+        delete_button.style(Modern::danger_button())
+    ].align_y(Alignment::Center);
     
     button_content.into()
 }

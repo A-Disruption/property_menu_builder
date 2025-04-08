@@ -30,6 +30,7 @@ pub enum ValidationError {
     InvalidId(String),
     DuplicateId(String),
     EmptyName(String),
+    NameTooLong(String),
     InvalidRange(String),
     RangeOverlap(String),  // Added this variant
     InvalidValue(String),
@@ -48,6 +49,7 @@ impl std::fmt::Display for ValidationError {
             ValidationError::InvalidId(msg) => write!(f, "Invalid ID: {}", msg),
             ValidationError::DuplicateId(msg) => write!(f, "Duplicate ID: {}", msg),
             ValidationError::EmptyName(msg) => write!(f, "Empty name: {}", msg),
+            ValidationError::NameTooLong(msg) => write!(f, "Too Long: {}", msg),
             ValidationError::InvalidValue(msg) => write!(f, "Invalid value: {}", msg),
             ValidationError::InvalidReference(msg) => write!(f, "Invalid refernce: {}", msg),
             ValidationError::InvalidRate(msg) => write!(f, "Invalid rate: {}", msg),

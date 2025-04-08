@@ -1,16 +1,17 @@
 use crate::data_types::{
-    self,
     EntityId,
-    Currency,
-    Validatable,
-    ValidationError
+    ValidationError,
+    Currency
 };
 use crate::Action;
+use crate::entity_component::{self, Entity, EditState as BaseEditState};
 use crate::icon;
+use iced_modern_theme::Modern;
 use serde::{Serialize, Deserialize};
 use iced::{Element, Length};
-use iced::widget::{button, text, container, row, column, text_input, scrollable};
+use iced::widget::{button, row, column, container, text, text_input, scrollable, tooltip};
 use std::collections::BTreeMap;
+use std::ops::Range;
 use rust_decimal::Decimal;
 
 #[derive(Debug, Clone)]
@@ -22,7 +23,7 @@ pub enum Message {
     UpdateId(String),
     UpdateName(String),
     Select(EntityId),
-    SaveAll(EntityId, EditState),
+    SaveAll(EntityId, PriceLevelEditState),
     UpdateMultiName(EntityId, String),
     CreateNewMulti,
     CancelEdit(EntityId),
@@ -39,7 +40,7 @@ pub enum Operation {
     CopyPriceLevel(EntityId),
     EditPriceLevel(EntityId),
     Select(EntityId),
-    SaveAll(EntityId, EditState),
+    SaveAll(EntityId, PriceLevelEditState),
     UpdateMultiName(EntityId, String),
     CreateNewMulti,
     CancelEdit(EntityId),
@@ -50,66 +51,6 @@ pub enum Mode {
     View,
     Edit,
 }
-
-#[derive(Default, Debug, Clone)]
-pub struct EditState {
-    pub name: String,
-    pub original_name: String,
-    pub id: String,
-    pub price: String,
-    pub original_price: String,
-    pub level_type: PriceLevelType,
-    pub validation_error: Option<String>,
-}
-
-impl EditState {
-    pub fn new(price_level: &PriceLevel) -> Self {
-        Self {
-            name: price_level.name.clone(),
-            original_name: price_level.name.clone(),
-            id: price_level.id.to_string(),
-            price: price_level.price.to_string(),
-            original_price: price_level.price.to_string(),
-            level_type: price_level.level_type.clone(),
-            validation_error: None,
-        }
-    }
-
-    pub fn reset(&mut self){
-        self.name = self.original_name.clone();
-        self.price = self.original_price.clone();
-        self.validation_error = None;
-    }
-
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        if self.name.trim().is_empty() {
-            return Err(ValidationError::EmptyName(
-                "Price level name cannot be empty".to_string()
-            ));
-        }
-
-        if let Ok(id) = self.id.parse::<EntityId>() {
-            if !(1..=999).contains(&id) {
-                return Err(ValidationError::InvalidId(
-                    "Price level ID must be between 1 and 999".to_string()
-                ));
-            }
-        } else {
-            return Err(ValidationError::InvalidId(
-                "Invalid ID format".to_string()
-            ));
-        }
-
-        if let Err(_) = self.price.parse::<Decimal>() {
-            return Err(ValidationError::InvalidValue(
-                "Invalid price format".to_string()
-            ));
-        }
-
-        Ok(())
-    }
-}
-
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PriceLevelType {
@@ -129,6 +70,62 @@ impl std::fmt::Display for PriceLevelType {
             PriceLevelType::Enterprise => write!(f, "Enterprise Price Level"),
             PriceLevelType::Store => write!(f, "Store Price Level"),
         }
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct PriceLevelEditState {
+    pub base: BaseEditState,
+    pub price: String,
+    pub original_price: String,
+    pub level_type: PriceLevelType,
+    pub range_validation_error: Option<String>,
+}
+
+impl PriceLevelEditState {
+    pub fn new(price_level: &PriceLevel) -> Self {
+        Self {
+            base: BaseEditState::new(price_level),
+            price: price_level.price.to_string(),
+            original_price: price_level.price.to_string(),
+            level_type: price_level.level_type.clone(),
+            range_validation_error: None,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.base.reset();
+        self.price = self.original_price.clone();
+        self.level_type = PriceLevelType::default();
+        self.range_validation_error = None;
+    }
+ 
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.base.name.trim().is_empty() {
+            return Err(ValidationError::EmptyName(
+                "Price level name cannot be empty".to_string()
+            ));
+        }
+
+        if let Ok(id) = self.base.id.parse::<EntityId>() {
+            if !(1..=999).contains(&id) {
+                return Err(ValidationError::InvalidId(
+                    "Price level ID must be between 1 and 999".to_string()
+                ));
+            }
+        } else {
+            return Err(ValidationError::InvalidId(
+                "Invalid ID format".to_string()
+            ));
+        }
+
+        if let Err(_) = self.price.parse::<Decimal>() {
+            return Err(ValidationError::InvalidValue(
+                "Invalid price format".to_string()
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -157,39 +154,59 @@ impl Default for PriceLevel {
     }
 }
 
-impl PriceLevel {
+impl Entity for PriceLevel {
+    fn id(&self) -> EntityId {
+        self.id
+    }
+    
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    fn with_id(&self, id: EntityId) -> Self {
+        let mut clone = self.clone();
+        clone.id = id;
+        clone
+    }
+    
+    fn with_name(&self, name: String) -> Self {
+        let mut clone = self.clone();
+        clone.name = name;
+        clone
+    }
+    
+    fn default_new() -> Self {
+        Self::default()
+    }
+}
 
+impl PriceLevel {
     pub fn new_draft() -> Self {
         Self::default()
     }
 
-    fn validate(&self, other_levels: &[&PriceLevel]) -> Result<(), ValidationError> {
+    fn validate(&self, other_groups: &[&PriceLevel]) -> Result<(), ValidationError> {
         if !(1..=999).contains(&self.id) {
             return Err(ValidationError::InvalidId(
-                "Price level ID must be between 1 and 999".to_string()
+                "Item group ID must be between 1 and 999".to_string()
             ));
         }
-
-        for other in other_levels {
+ 
+        // Check for duplicate IDs
+        for other in other_groups {
             if other.id == self.id {
                 return Err(ValidationError::DuplicateId(
-                    format!("Price level with ID {} already exists", self.id)
+                    format!("Item group with ID {} already exists", self.id)
                 ));
             }
         }
-
+ 
         if self.name.trim().is_empty() {
             return Err(ValidationError::EmptyName(
-                "Price level name cannot be empty".to_string()
+                "Item group name cannot be empty".to_string()
             ));
         }
-
-        if self.price < Decimal::ZERO {
-            return Err(ValidationError::InvalidValue(
-                "Price cannot be negative".to_string()
-            ));
-        }
-
+ 
         Ok(())
     }
 }
@@ -197,8 +214,8 @@ impl PriceLevel {
 pub fn update(
     price_level: &mut PriceLevel,
     message: Message,
-    state: &mut EditState,
-    other_levels: &[&PriceLevel]
+    state: &mut PriceLevelEditState,
+    other_groups: &[&PriceLevel]
 ) -> Action<Operation, Message> {
     match message {
         Message::CreateNew => {
@@ -222,7 +239,7 @@ pub fn update(
                 price_level.id = id;
                 Action::none()
             } else {
-                state.validation_error = Some("Invalid ID format".to_string());
+                state.base.id_validation_error = Some("Invalid ID format".to_string());
                 Action::none()
             }
         },
@@ -246,46 +263,32 @@ pub fn update(
 }
 
 pub fn view<'a>(
-    all_levels: &'a BTreeMap<EntityId, PriceLevel>,
-    edit_states: &'a Vec<EditState>,
+    all_prices: &'a BTreeMap<EntityId, PriceLevel>,
+    edit_states: &'a Vec<PriceLevelEditState>,
 ) -> Element<'a, Message> {
+    let title_row = entity_component::render_title_row(
+        "Price Levels", 
+        Message::CreateNewMulti,
+        505.0 // view width
+    );
 
-    let title_row = container(
-        row![
-            text("Price Levels").size(18).style(text::primary),
-            iced::widget::horizontal_space(),
-            button(icon::new().size(14))
-                .on_press(Message::CreateNewMulti)
-                .style(button::primary),
-        ]
-        .width(Length::Fixed(505.0))
-        .padding(15)
-    )
-    .style(container::rounded_box);
+    // Custom header row for columns including range fields
+    let header_row = row![
+        text("ID").width(Length::Fixed(75.0)),
+        text("Name").width(Length::Fixed(250.0)),
+        text("Actions").width(Length::Fixed(150.0)),
+    ]
+    .padding(15);
 
-    // Header row for columns
-    let header_row = container(
-        row![
-            text("ID").width(Length::Fixed(75.0)),
-            text("Name").width(Length::Fixed(250.0)),
-            text("Actions").width(Length::Fixed(150.0)),
-        ]
-        .padding(15)
-    )
-    .style(container::rounded_box);
-
-    let levels_list = scrollable(
+    // List of price levels
+    let price_list = scrollable(
         column(
-            all_levels
+            all_prices
                 .values()
-                .map(|level| 
-                    container(
-                        logical_quick_edit_view(
-                            level,
-                            edit_states
-                        )
-                    )
-                    .style(container::bordered_box)
+                .map(|group| 
+                    row![
+                        render_price_level_row(group, edit_states)
+                    ]
                     .padding(5)
                     .into()
                 )
@@ -293,95 +296,116 @@ pub fn view<'a>(
         )
     ).height(Length::Fill);
 
+    // Combine all elements
+    let all_content = column![title_row, header_row, price_list];
+
     column![
-        title_row,
-        header_row,
-        container(levels_list)
-            .height(Length::Fill)
-            .style(container::rounded_box)
-    ].into()
+        container(all_content)
+            .height(Length::Shrink)
+            .style(Modern::card_container())
+    ]
+    .into()
 }
 
-pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
-    let button_content = container (
-        row![
-            text(list_text),
-            iced::widget::horizontal_space(),
-            copy_button,
-            delete_button.style(button::danger)
-        ].align_y(iced::Alignment::Center),
-    );
-    
-    button_content.into()
-}
-
-
-fn logical_quick_edit_view<'a>(
+fn render_price_level_row<'a>(
     price_level: &'a PriceLevel,
-    edit_states: &'a Vec<EditState>
-    ) 
-    -> Element<'a, Message> {
+    edit_states: &'a Vec<PriceLevelEditState>
+) -> Element<'a, Message> {
+    // Find edit state for this price_level if it exists
+    let edit_state = edit_states.iter()
+        .find(|state| state.base.id.parse::<i32>().unwrap_or(-999) == price_level.id);
 
-        // Find edit state for this price_level if it exists
-        let edit_state = edit_states.iter()
-            .find(|state| state.id.parse::<i32>().unwrap() == price_level.id);
+    let editing = edit_state.is_some();
 
-        let editing = edit_state.is_some();
+    // Get display values
+    let display_name = edit_state
+        .map(|state| state.base.name.clone())
+        .unwrap_or_else(|| price_level.name.clone());
 
-        let display_name = edit_state
-            .map(|state| state.name.clone())
-            .unwrap_or_else(|| price_level.name.clone());
+    // Check for validation errors
+    let id_validation_error = edit_state
+        .and_then(|state| state.base.id_validation_error.as_ref());
 
-        // Check for validation error
-        let validation_error = edit_state
-        .and_then(|state| state.validation_error.as_ref())
-        .cloned();
+    let name_validation_error = edit_state
+    .and_then(|state| state.base.name_validation_error.as_ref());
 
-        let button_content: iced::widget::Button<'a, Message> = button(
-            container(
-                row![
-                    text_input("ID (1-25)", &price_level.id.to_string())
-                        //.on_input(Message::UpdateId)
-                        .width(Length::Fixed(75.0)),
-                    text_input("Choice Group Name", &display_name)
-                        .on_input_maybe(
-                            if editing {
-                               Some( |a_price_level| Message::UpdateMultiName(price_level.id, a_price_level) )
-                             } else {
-                                None 
-                             }
-                        ).style(if validation_error.is_some() { data_types::validated_error } else { text_input::default })
-                        .width(Length::Fixed(250.0)),
+    // ID input with validation
+    let id_input: Element<'_, Message> = {
+        let input = text_input("ID (1-999)", &price_level.id.to_string())
+            .style(Modern::validated_text_input(id_validation_error.is_some()))
+            .width(Length::Fixed(75.0));
 
-                    row![
+        if let Some(error) = id_validation_error {
+            tooltip(
+                input,
+                container(error.as_str()).padding(10).style(Modern::danger_tooltip_container()),
+                tooltip::Position::Top,
+            ).into()
+        } else {
+            input.into()
+        }
+    };
 
-                        button( if editing { icon::save().size(14) } else { icon::edit().size(14) })
-                        .on_press( if editing { Message::SaveAll(price_level.id, edit_state.unwrap().clone()) } else { Message::EditPriceLevel(price_level.id) })
-                        .style(
-                            button::primary
-                    ),
-                        iced::widget::horizontal_space().width(2),
-                    button(icon::copy().size(14))
-                        .on_press(Message::CopyPriceLevel(price_level.id))
-                        .style(
-                            button::primary
-                    ),
-                    iced::widget::horizontal_space().width(2),
-                    button(if editing { icon::cancel().size(14) } else { icon::trash().size(14) })
-                        .on_press( if editing { Message::CancelEdit(price_level.id) } else { Message::RequestDelete(price_level.id) })
-                        .style(button::danger),
-                    ].width(150),
-                ].align_y(iced::Alignment::Center),
-
+    // Name input with validation
+    let name_input: Element<'_, Message> = {
+        let input = text_input("Item Group Name", &display_name)
+            .on_input_maybe(
+                if editing {
+                    Some(|name| Message::UpdateMultiName(price_level.id, name))
+                } else {
+                    None
+                }
             )
-        )
-        .width(iced::Length::Shrink)
-        .on_press(Message::Select(price_level.id))
-        .style(
-            button::secondary
-        ).into();
+            .style(Modern::validated_text_input(name_validation_error.is_some()))
+            .width(Length::Fixed(250.0));
 
+        if let Some(error) = name_validation_error {
+            tooltip(
+                input,
+                container(error.as_str()).padding(10).style(Modern::danger_tooltip_container()),
+                tooltip::Position::Top,
+            ).into()
+        } else {
+            input.into()
+        }
+    };
 
-        
-        button_content.into()
+    // Action buttons
+    let action_row = row![
+        button(if editing { icon::save().size(14) } else { icon::edit().size(14) })
+            .on_press(
+                if editing { 
+                    Message::SaveAll(price_level.id, edit_state.unwrap().clone()) 
+                } else { 
+                    Message::EditPriceLevel(price_level.id) 
+                }
+            )
+            .style(Modern::primary_button()),
+        iced::widget::horizontal_space().width(2),
+        button(icon::copy().size(14))
+            .on_press(Message::CopyPriceLevel(price_level.id))
+            .style(Modern::primary_button()),
+        iced::widget::horizontal_space().width(2),
+        button(if editing { icon::cancel().size(14) } else { icon::trash().size(14) })
+            .on_press(
+                if editing { 
+                    Message::CancelEdit(price_level.id) 
+                } else { 
+                    Message::RequestDelete(price_level.id) 
+                }
+            )
+            .style(Modern::danger_button()),
+    ].width(150);
+
+    // Combine all elements
+    row![
+        iced::widget::horizontal_space().width(3),
+        id_input,
+        name_input,
+        iced::widget::horizontal_space().width(5),
+        action_row,
+    ]
+    .align_y(iced::Alignment::Center)
+    .width(Length::Fixed(495.0))
+    .into()
 }

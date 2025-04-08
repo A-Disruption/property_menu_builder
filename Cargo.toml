@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 iced = { version = "0.13.1", features = ["advanced", "debug", "tokio"] }
-iced_modern_theme = "0.1.0"
+iced_modern_theme = { git = "https://github.com/KainTwinam/iced-modern-theme.git" }
 rust_decimal = "1.36"
 strsim = "0.11.1"
 rangemap = "1.5"

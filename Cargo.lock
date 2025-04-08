@@ -2059,9 +2059,8 @@ dependencies = [
 
 [[package]]
 name = "iced_modern_theme"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3418bb673ee48af239578eebcb815cddc7f59ea088dff93bfcc4981a6bde6411"
+version = "0.1.6"
+source = "git+https://github.com/KainTwinam/iced-modern-theme.git#ca342aed223dee4ab4644daf366f95bdbf356be2"
 dependencies = [
  "iced",
  "palette",

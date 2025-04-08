@@ -1,11 +1,8 @@
-use crate::data_types::{
-    self, EntityId, Validatable, ValidationError
-};
+use crate::data_types::{EntityId, ValidationError};
 use crate::Action;
-use crate::icon;
+use crate::entity_component::{self, Entity, EditState};
 use serde::{Serialize, Deserialize};
-use iced::{Alignment, Element, Length};
-use iced::widget::{button, column, container, row, text, scrollable, text_input};
+use iced::Element;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
@@ -46,52 +43,6 @@ pub enum Mode {
     Edit,
 }
 
-#[derive(Default, Debug, Clone)]
-pub struct EditState {
-    pub name: String,
-    pub original_name: String,
-    pub id: String,
-    pub validation_error: Option<String>,
-}
-
-impl EditState {
-    pub fn new(printer: &PrinterLogical) -> Self {
-        Self {
-            name: printer.name.clone(),
-            original_name: printer.name.clone(),
-            id: printer.id.to_string(),
-            validation_error: None,
-        }
-    }
-
-    pub fn reset(& mut self) {
-        self.name = self.original_name.clone();
-        self.validation_error = None;
-    }
-
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        if self.name.trim().is_empty() {
-            return Err(ValidationError::EmptyName(
-                "Printer name cannot be empty".to_string()
-            ));
-        }
-
-        if let Ok(id) = self.id.parse::<EntityId>() {
-            if !(1..=999).contains(&id) {
-                return Err(ValidationError::InvalidId(
-                    "Printer ID must be between 1 and 999".to_string()
-                ));
-            }
-        } else {
-            return Err(ValidationError::InvalidId(
-                "Invalid ID format".to_string()
-            ));
-        }
-
-        Ok(())
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PrinterLogical {
     pub id: EntityId,
@@ -113,8 +64,33 @@ impl Default for PrinterLogical {
     }
 }
 
-impl PrinterLogical {
+impl Entity for PrinterLogical {
+    fn id(&self) -> EntityId {
+        self.id
+    }
+    
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    fn with_id(&self, id: EntityId) -> Self {
+        let mut clone = self.clone();
+        clone.id = id;
+        clone
+    }
+    
+    fn with_name(&self, name: String) -> Self {
+        let mut clone = self.clone();
+        clone.name = name;
+        clone
+    }
+    
+    fn default_new() -> Self {
+        Self::default()
+    }
+}
 
+impl PrinterLogical {
     pub fn new_draft() -> Self {
         Self::default()
     }
@@ -144,9 +120,9 @@ impl PrinterLogical {
         }
 
         // Validate name is not more than 16 Characters
-        if self.name.len() < 17 {
-            return Err(ValidationError::EmptyName(
-                "Printer Logical name cannot be empty".to_string()
+        if self.name.len() > 16 {
+            return Err(ValidationError::NameTooLong(
+                "Printer Logical name cannot be more than 16 Characters".to_string()
             ));
         }
 
@@ -177,14 +153,13 @@ pub fn update(
         }
         Message::Select(id) => {
             Action::operation(Operation::Select(id))
-            //Action::none()
         },
         Message::UpdateId(id) => {
             if let Ok(id) = id.parse() {
                 printer.id = id;
                 Action::none()
             } else {
-                state.validation_error = Some("Invalid ID format".to_string());
+                state.id_validation_error = Some("Invalid ID format".to_string());
                 Action::none()
             }
         }
@@ -211,144 +186,28 @@ pub fn view<'a>(
     all_printers: &'a BTreeMap<EntityId, PrinterLogical>,
     edit_states: &'a Vec<EditState>,
 ) -> Element<'a, Message> {
-
-    let title_row = container(
-        row![
-            text("Printer Logicals").size(18).style(text::primary),
-            iced::widget::horizontal_space(),
-            button(icon::new().size(14))
-                .on_press(Message::CreateNewMulti)
-                .style(button::primary),
-        ]
-        .width(Length::Fixed(505.0))
-        .padding(15)
+    entity_component::entity_view(
+        "Printer Logicals",
+        Message::CreateNewMulti,
+        all_printers,
+        edit_states,
+        |printer, edit_states| render_printer_row(printer, edit_states),
     )
-    .style(container::rounded_box);
-
-    // Header row for columns
-    let header_row = container(
-        row![
-            text("ID").width(Length::Fixed(75.0)),
-            text("Name").width(Length::Fixed(250.0)),
-            text("Actions").width(Length::Fixed(150.0)),
-        ]
-        .padding(15)
-    )
-    .style(container::rounded_box);
-
-    // List of printer logicals in a scrollable container
-    let printer_list = scrollable(
-        column(
-            all_printers.values()
-                .map(|a_printer| 
-                    container(
-                        logical_quick_edit_view(
-                            //printer.clone(), 
-                            a_printer,
-                            edit_states
-                        )
-                    )
-                    .style(container::bordered_box)
-                    .padding(5)
-                    .into()
-                )
-                .collect::<Vec<_>>()
-        )
-    )
-    .height(Length::Fill);
-
-    column![
-        title_row,
-        header_row,
-        container(printer_list)
-            .height(Length::Fill)
-            .style(container::rounded_box)
-    ]
-    //.spacing(10)
-    //.padding(10)
-    .into()
-
 }
 
-pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
-    let button_content = container (
-        row![
-            text(list_text),
-            iced::widget::horizontal_space(),
-            copy_button,
-            delete_button.style(button::danger)
-        ].align_y(iced::Alignment::Center),
-    );
-    
-    button_content.into()
-}
-
-fn logical_quick_edit_view<'a>(
+fn render_printer_row<'a>(
     printer: &'a PrinterLogical,
     edit_states: &'a Vec<EditState>
-    ) 
-    -> Element<'a, Message> {
-
-        // Find edit state for this printer if it exists
-        let edit_state = edit_states.iter()
-            .find(|state| state.id.parse::<i32>().unwrap() == printer.id);
-
-        let editing = edit_state.is_some();
-
-        let display_name = edit_state
-            .map(|state| state.name.clone())
-            .unwrap_or_else(|| printer.name.clone());
-
-        // Check for validation error
-        let validation_error = edit_state
-        .and_then(|state| state.validation_error.as_ref())
-        .cloned();
-
-        let button_content: iced::widget::Button<'a, Message> = button(
-            container(
-                row![
-                    text_input("ID (1-25)", &printer.id.to_string())
-                        //.on_input(Message::UpdateId)
-                        .width(Length::Fixed(75.0)),
-                    text_input("Printer Name", &display_name)
-                        .on_input_maybe(
-                            if editing {
-                               Some( |a_printer| Message::UpdateMultiName(printer.id, a_printer) )
-                             } else {
-                                None 
-                             }
-                        ).style(if validation_error.is_some() { data_types::validated_error } else { text_input::default })
-                        .width(Length::Fixed(250.0)),
-
-                    row![
-
-                        button( if editing { icon::save().size(14) } else { icon::edit().size(14) })
-                        .on_press( if editing { Message::SaveMultiTest(printer.id, edit_state.unwrap().clone()) } else { Message::EditPrinterLogical(printer.id) })
-                        .style(
-                            button::primary
-                    ),
-                        iced::widget::horizontal_space().width(2),
-                    button(icon::copy().size(14))
-                        .on_press(Message::CopyPrinterLogical(printer.id))
-                        .style(
-                            button::primary
-                    ),
-                    iced::widget::horizontal_space().width(2),
-                    button(if editing { icon::cancel().size(14) } else { icon::trash().size(14) })
-                        .on_press( if editing { Message::CancelEdit(printer.id) } else { Message::RequestDelete(printer.id) })
-                        .style(button::danger),
-                    ].width(150),
-                ].align_y(iced::Alignment::Center),
-
-            )
-        )
-        .width(iced::Length::Shrink)
-        .on_press(Message::Select(printer.id))
-        .style(
-            button::secondary
-        ).into();
-
-
-        
-        button_content.into()
+) -> Element<'a, Message> {
+    entity_component::entity_quick_edit_view(
+        printer,
+        edit_states,
+        Message::EditPrinterLogical,
+        Message::SaveMultiTest,
+        Message::CopyPrinterLogical,
+        Message::RequestDelete,
+        Message::CancelEdit,
+        Message::UpdateMultiName,
+        "Printer Name"
+    )
 }

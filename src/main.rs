@@ -13,6 +13,7 @@ use rust_decimal::Decimal;
 use rfd::AsyncFileDialog;
 use std::path::PathBuf;
 use std::ops::Range;
+use iced_modern_theme::Modern;
 
 mod action;
 mod settings;
@@ -28,6 +29,7 @@ mod choice_groups;
 mod printer_logicals;
 mod data_types;
 mod persistence;
+mod entity_component;
 mod icon;
 
 use crate::{
@@ -43,7 +45,7 @@ use crate::{
     printer_logicals::PrinterLogical,
 };
 
-use data_types::{DeletionInfo, EntityId, ItemPrice};
+use data_types::{DeletionInfo, EntityId, ItemPrice, ValidationError};
 pub use action::Action;
 
 fn main() -> iced::Result {
@@ -90,7 +92,7 @@ pub enum Message {
     HotKey(HotKey),
     ConfirmDelete(data_types::DeletionInfo),
     CancelDelete,
-    ToggleQuickView(bool),
+    ToggleTheme(bool),
     ExportCSVSelected(Option<String>),
     ExportComplete(String),
     ExportFailed(String),
@@ -118,20 +120,21 @@ pub struct MenuBuilder {
     screen: Screen,
     settings: settings::AppSettings,
     theme: iced::Theme,
+    //theme: iced_modern_theme::theme::Modern,
     file_manager: persistence::FileManager,
     deletion_info: data_types::DeletionInfo,
     show_modal: bool,
     error_message: Option<String>,
-    toggle_quickview: bool,
-    printer_logical_edit_state_vec: Vec<printer_logicals::EditState>,
-    choice_group_edit_state_vec: Vec<choice_groups::EditState>,
-    product_class_edit_state_vec: Vec<product_classes::EditState>,
-    security_level_edit_state_vec: Vec<security_levels::EditState>,
-    revenue_category_edit_state_vec: Vec<revenue_categories::EditState>,
-    report_category_edit_state_vec: Vec<report_categories::EditState>,
-    item_group_edit_state_vec: Vec<item_groups::EditState>,
-    price_level_edit_state_vec: Vec<price_levels::EditState>,
-    tax_group_edit_state_vec: Vec<tax_groups::EditState>,
+    toggle_theme: bool,
+    printer_logical_edit_state_vec: Vec<entity_component::EditState>,
+    choice_group_edit_state_vec: Vec<entity_component::EditState>,
+    product_class_edit_state_vec: Vec<entity_component::EditState>,
+    security_level_edit_state_vec: Vec<entity_component::EditState>,
+    revenue_category_edit_state_vec: Vec<entity_component::EditState>,
+    report_category_edit_state_vec: Vec<entity_component::EditState>,
+    item_group_edit_state_vec: Vec<item_groups::ItemGroupEditState>,
+    price_level_edit_state_vec: Vec<price_levels::PriceLevelEditState>,
+    tax_group_edit_state_vec: Vec<tax_groups::TaxGroupEditState>,
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -146,63 +149,63 @@ pub struct MenuBuilder {
     draft_item_group: ItemGroup,
     draft_item_group_id: Option<EntityId>,
     selected_item_group_id: Option<EntityId>,
-    item_group_edit_state: item_groups::EditState,
+    item_group_edit_state: item_groups::ItemGroupEditState,
  
     // Price Levels
     price_levels: BTreeMap<EntityId, PriceLevel>,
     draft_price_level: PriceLevel,
     draft_price_level_id: Option<EntityId>,
     selected_price_level_id: Option<EntityId>,
-    price_level_edit_state: price_levels::EditState,
+    price_level_edit_state: price_levels::PriceLevelEditState,
  
     // Product Classes
     product_classes: BTreeMap<EntityId, ProductClass>,
     draft_product_class: ProductClass,
     draft_product_class_id: Option<EntityId>,
     selected_product_class_id: Option<EntityId>,
-    product_class_edit_state: product_classes::EditState,
+    product_class_edit_state: entity_component::EditState,
  
     // Tax Groups
     tax_groups: BTreeMap<EntityId, TaxGroup>,
     draft_tax_group: TaxGroup,
     draft_tax_group_id: Option<EntityId>,
     selected_tax_group_id: Option<EntityId>,
-    tax_group_edit_state: tax_groups::EditState,
+    tax_group_edit_state: tax_groups::TaxGroupEditState,
  
     // Security Levels
     security_levels: BTreeMap<EntityId, SecurityLevel>,
     draft_security_level: SecurityLevel,
     draft_security_level_id: Option<EntityId>,
     selected_security_level_id: Option<EntityId>,
-    security_level_edit_state: security_levels::EditState,
+    security_level_edit_state: entity_component::EditState,
  
     // Revenue Categories
     revenue_categories: BTreeMap<EntityId, RevenueCategory>,
     draft_revenue_category: RevenueCategory,
     draft_revenue_category_id: Option<EntityId>,
     selected_revenue_category_id: Option<EntityId>,
-    revenue_category_edit_state: revenue_categories::EditState,
+    revenue_category_edit_state: entity_component::EditState,
  
     // Report Categories
     report_categories: BTreeMap<EntityId, ReportCategory>,
     draft_report_category: ReportCategory,
     draft_report_category_id: Option<EntityId>,
     selected_report_category_id: Option<EntityId>,
-    report_category_edit_state: report_categories::EditState,
+    report_category_edit_state: entity_component::EditState,
  
     // Choice Groups
     choice_groups: BTreeMap<EntityId, ChoiceGroup>,
     draft_choice_group: ChoiceGroup,
     draft_choice_group_id: Option<EntityId>,
     selected_choice_group_id: Option<EntityId>,
-    choice_group_edit_state: choice_groups::EditState,
+    choice_group_edit_state: entity_component::EditState,
  
     // Printer Logicals
     printer_logicals: BTreeMap<EntityId, PrinterLogical>,
     draft_printer: PrinterLogical,
     draft_printer_id: Option<EntityId>,
     selected_printer_id: Option<EntityId>,
-    printer_edit_state: printer_logicals::EditState,
+    printer_edit_state: entity_component::EditState,
 
  }
  
@@ -219,12 +222,13 @@ pub struct MenuBuilder {
         Self {
             screen: Screen::Items(items::Mode::View),
             settings: settings::AppSettings::default(),
-            theme: iced::Theme::SolarizedDark,
+            //theme: iced::Theme::SolarizedDark,
+            theme: iced_modern_theme::Modern::dark_theme(),
             file_manager: file_manager,
             show_modal: false,
             deletion_info: data_types::DeletionInfo::new(),
             error_message: None,
-            toggle_quickview: true,
+            toggle_theme: true,
             printer_logical_edit_state_vec: Vec::new(),
             choice_group_edit_state_vec: Vec::new(),
             product_class_edit_state_vec: Vec::new(),
@@ -249,63 +253,63 @@ pub struct MenuBuilder {
             draft_item_group: ItemGroup::default(),
             draft_item_group_id: None,
             selected_item_group_id: None,
-            item_group_edit_state: item_groups::EditState::default(),
+            item_group_edit_state: item_groups::ItemGroupEditState::default(),
  
             // Price Levels 
             price_levels: BTreeMap::new(),
             draft_price_level: PriceLevel::default(),
             draft_price_level_id: None,
             selected_price_level_id: None,
-            price_level_edit_state: price_levels::EditState::default(),
+            price_level_edit_state: price_levels::PriceLevelEditState::default(),
  
             // Product Classes
             product_classes: BTreeMap::new(),
             draft_product_class: ProductClass::default(),
             draft_product_class_id: None,
             selected_product_class_id: None,
-            product_class_edit_state: product_classes::EditState::default(),
+            product_class_edit_state: entity_component::EditState::default(),
  
             // Tax Groups
             tax_groups: BTreeMap::new(),
             draft_tax_group: TaxGroup::default(),
             draft_tax_group_id: None,
             selected_tax_group_id: None,
-            tax_group_edit_state: tax_groups::EditState::default(),
+            tax_group_edit_state: tax_groups::TaxGroupEditState::default(),
  
             // Security Levels
             security_levels: BTreeMap::new(),
             draft_security_level: SecurityLevel::default(),
             draft_security_level_id: None,
             selected_security_level_id: None,
-            security_level_edit_state: security_levels::EditState::default(),
+            security_level_edit_state: entity_component::EditState::default(),
  
             // Revenue Categories
             revenue_categories: BTreeMap::new(),
             draft_revenue_category: RevenueCategory::default(),
             draft_revenue_category_id: None,
             selected_revenue_category_id: None,
-            revenue_category_edit_state: revenue_categories::EditState::default(),
+            revenue_category_edit_state: entity_component::EditState::default(),
  
             // Report Categories
             report_categories: BTreeMap::new(),
             draft_report_category: ReportCategory::default(),
             draft_report_category_id: None,
             selected_report_category_id: None,
-            report_category_edit_state: report_categories::EditState::default(),
+            report_category_edit_state: entity_component::EditState::default(),
  
             // Choice Groups
             choice_groups: BTreeMap::new(),
             draft_choice_group: ChoiceGroup::default(),
             draft_choice_group_id: None,
             selected_choice_group_id: None,
-            choice_group_edit_state: choice_groups::EditState::default(),
+            choice_group_edit_state: entity_component::EditState::default(),
  
             // Printer Logicals
             printer_logicals: BTreeMap::new(),
             draft_printer: PrinterLogical::default(),
             draft_printer_id: None,
             selected_printer_id: None,
-            printer_edit_state: printer_logicals::EditState::default(),
+            printer_edit_state: entity_component::EditState::default(),
         }
     }
  }
@@ -314,6 +318,7 @@ impl MenuBuilder {
 
     fn theme(&self) -> iced::Theme {
         self.theme.clone()
+        //iced_modern_theme::theme::Modern::dark_theme()
     }
 
     fn title(&self) -> String {
@@ -1187,8 +1192,13 @@ impl MenuBuilder {
                 self.show_modal = false;
                 Task::none()
             }
-            Message::ToggleQuickView(bool) => {
-                self.toggle_quickview = !self.toggle_quickview;
+            Message::ToggleTheme(bool) => {
+                if bool {
+                    self.theme = iced_modern_theme::Modern::dark_theme()
+                } else {
+                    self.theme = iced_modern_theme::Modern::light_theme()
+                }
+                self.toggle_theme = !self.toggle_theme;
                 Task::none()
             }
             Message::ExportCSVSelected(maybe_path) => {
@@ -1271,56 +1281,122 @@ impl MenuBuilder {
                 button("Items")
                     .on_press(Message::Navigate(Screen::Items(items::Mode::View)))
                     .width(Length::Fill)
-                    .style(button::secondary),
+                    .style(
+                        Modern::conditional_button_style(
+                            matches!(self.screen, Screen::Items(_)),
+                            Modern::selected_button_style(Modern::system_button()),
+                            Modern::system_button()
+                        )
+                    ),
                 button("Item Groups")
                     .on_press(Message::Navigate(Screen::ItemGroups(item_groups::Mode::View)))
                     .width(Length::Fill)
-                    .style(button::secondary),
+                    .style(
+                        Modern::conditional_button_style(
+                            matches!(self.screen, Screen::ItemGroups(_)),
+                            Modern::selected_button_style(Modern::system_button()),
+                            Modern::system_button()
+                        )
+                    ),
                 button("Price Levels")
                     .on_press(Message::Navigate(Screen::PriceLevels(price_levels::Mode::View)))
                     .width(Length::Fill)
-                    .style(button::secondary),
+                    .style(
+                        Modern::conditional_button_style(
+                            matches!(self.screen, Screen::PriceLevels(_)),
+                            Modern::selected_button_style(Modern::system_button()),
+                            Modern::system_button()
+                        )
+                    ),
                 button("Product Classes")
                     .on_press(Message::Navigate(Screen::ProductClasses(product_classes::Mode::View)))
                     .width(Length::Fill)
-                    .style(button::secondary),
+                    .style(
+                        Modern::conditional_button_style(
+                            matches!(self.screen, Screen::ProductClasses(_)),
+                            Modern::selected_button_style(Modern::system_button()),
+                            Modern::system_button()
+                        )
+                    ),
                 button("Tax Groups")
                     .on_press(Message::Navigate(Screen::TaxGroups(tax_groups::Mode::View)))
                     .width(Length::Fill)
-                    .style(button::secondary),
+                    .style(
+                        Modern::conditional_button_style(
+                            matches!(self.screen, Screen::TaxGroups(_)),
+                            Modern::selected_button_style(Modern::system_button()),
+                            Modern::system_button()
+                        )
+                    ),
                 button("Security Levels")
                     .on_press(Message::Navigate(Screen::SecurityLevels(security_levels::Mode::View)))
                     .width(Length::Fill)
-                    .style(button::secondary),
+                    .style(
+                        Modern::conditional_button_style(
+                            matches!(self.screen, Screen::SecurityLevels(_)),
+                            Modern::selected_button_style(Modern::system_button()),
+                            Modern::system_button()
+                        )
+                    ),
                 button("Revenue Categories")
                     .on_press(Message::Navigate(Screen::RevenueCategories(revenue_categories::Mode::View)))
                     .width(Length::Fill)
-                    .style(button::secondary),
+                    .style(
+                        Modern::conditional_button_style(
+                            matches!(self.screen, Screen::RevenueCategories(_)),
+                            Modern::selected_button_style(Modern::system_button()),
+                            Modern::system_button()
+                        )
+                    ),
                 button("Report Categories")
                     .on_press(Message::Navigate(Screen::ReportCategories(report_categories::Mode::View)))
                     .width(Length::Fill)
-                    .style(button::secondary),
+                    .style(
+                        Modern::conditional_button_style(
+                            matches!(self.screen, Screen::ReportCategories(_)),
+                            Modern::selected_button_style(Modern::system_button()),
+                            Modern::system_button()
+                        )
+                    ),
                 button("Choice Groups")
                     .on_press(Message::Navigate(Screen::ChoiceGroups(choice_groups::Mode::View)))
                     .width(Length::Fill)
-                    .style(button::secondary),
+                    .style(
+                        Modern::conditional_button_style(
+                            matches!(self.screen, Screen::ChoiceGroups(_)),
+                            Modern::selected_button_style(Modern::system_button()),
+                            Modern::system_button()
+                        )
+                    ),
                 button("Printer Logicals")
                     .on_press(Message::Navigate(Screen::PrinterLogicals(printer_logicals::Mode::View)))
                     .width(Length::Fill)
-                    .style(button::secondary),
+                    .style(
+                        Modern::conditional_button_style(
+                            matches!(self.screen, Screen::PrinterLogicals(_)),
+                            Modern::selected_button_style(Modern::system_button()),
+                            Modern::system_button()
+                        )
+                    ),
 
                 vertical_space(),
                 row![
                     column![
-                        text("Toggle Quick Edit").size(10),
+                        text("Toggle Theme").size(10),
                         iced::widget::vertical_space().height(2),
-                        iced::widget::toggler(self.toggle_quickview).on_toggle(Message::ToggleQuickView),
+                        iced::widget::toggler(self.toggle_theme).on_toggle(Message::ToggleTheme),
                     ],
                     iced::widget::horizontal_space(),
                     button(icon::settings().size(14)) 
                         .on_press(Message::Navigate(Screen::Settings(self.settings.clone())))
                         //.width(Length::Fixed(40.0))
-                        .style(button::secondary),
+                        .style(
+                            Modern::conditional_button_style(
+                                matches!(self.screen, Screen::Settings(_)),
+                                Modern::selected_button_style(Modern::system_button()),
+                                Modern::system_button()
+                            )
+                        ),
                 ]
             ]
             .spacing(5)
@@ -1328,7 +1404,7 @@ impl MenuBuilder {
         )
         .width(Length::Fixed(200.0))
         .height(Length::Fill)
-        .style(container::rounded_box);
+        .style(Modern::sidebar_container());
 
         let content = match &self.screen {
             Screen::Settings(settings) => {
@@ -1844,22 +1920,23 @@ impl MenuBuilder {
         let delete_confirmation_popup = container(
             container(
                 column![
+                    vertical_space().height(10),
                     row![
                         iced::widget::horizontal_space().width(6),
-                        text("Are you sure you want to delete this ".to_string() + &self.deletion_info.entity_type).style(text::default).size(16),
+                        text("Are you sure you want to delete this ".to_string() + &self.deletion_info.entity_type).style(Modern::primary_text()).size(16),
                         iced::widget::horizontal_space().width(6),
                     ],
                     
                     iced::widget::vertical_space().height(15),
                     row![
                         iced::widget::horizontal_space().width(6),
-                        button("Delete").on_press(Message::ConfirmDelete(self.deletion_info.clone())).style(button::danger),
+                        button("Delete").on_press(Message::ConfirmDelete(self.deletion_info.clone())).style(Modern::danger_button()),
                         iced::widget::horizontal_space(),
-                        button("Cancel").on_press(Message::CancelDelete).style(button::secondary),
+                        button("Cancel").on_press(Message::CancelDelete).style(Modern::system_button()),
                         iced::widget::horizontal_space().width(6),
                     ]
                 ].width(275).height(100)
-            ).style(container::bordered_box)
+            ).style(Modern::separated_container())
         ).padding(250);
 
         //iced::widget::stack
@@ -1907,8 +1984,14 @@ impl MenuBuilder {
                         self.screen = Screen::Settings(self.settings.clone());
                         Task::none()
                     }
-                    settings::Operation::UpdateTheme(theme) => {
-                        self.theme = theme;
+                    settings::Operation::ThemeChanged(theme) => {
+                        //self.theme = theme;
+
+                        self.theme = match theme {
+                            settings::ThemeChoice::Light => Modern::light_theme(),
+                            settings::ThemeChoice::Dark => Modern::dark_theme(),
+                        };
+
                         self.screen = Screen::Settings(self.settings.clone());
                         Task::none()
                     }
@@ -2255,21 +2338,12 @@ impl MenuBuilder {
                         // First check if we already have an edit state for this item_group
                         let already_editing = self.item_group_edit_state_vec
                             .iter()
-                            .any(|state| state.id.parse::<i32>().unwrap() == id);
+                            .any(|state| state.base.id.parse::<i32>().unwrap() == id);
 
                         // Only create new edit state if we're not already editing this item_group
                         if !already_editing {
                             if let Some(item_group) = self.item_groups.get(&id) {
-                                let edit_state = item_groups::EditState {
-                                    name: item_group.name.clone(),
-                                    original_name: item_group.name.clone(),
-                                    id: item_group.id.to_string(),
-                                    id_range_start: item_group.id_range.start.to_string(),
-                                    original_id_range_start: item_group.id_range.start.to_string(),
-                                    id_range_end: item_group.id_range.end.to_string(),
-                                    original_id_range_end: item_group.id_range.end.to_string(),
-                                    validation_error: None,
-                                };
+                                let edit_state = item_groups::ItemGroupEditState::new(&item_group);
                                 
                                 self.item_group_edit_state_vec.push(edit_state);
                             }
@@ -2287,19 +2361,28 @@ impl MenuBuilder {
                         // First, find the edit state for this item_group
                         if let Some(edit_state) = self.item_group_edit_state_vec
                             .iter()
-                            .find(|state| state.id.parse::<i32>().unwrap() == id)
+                            .find(|state| state.base.id.parse::<i32>().unwrap() == id)
                         {
                             // Clone the edit state name since we'll need it after removing the edit state
-                            let new_name = edit_state.name.clone();
+                            let new_name = edit_state.base.name.clone();
+
+                            let start = edit_state.id_range_start.parse::<i32>().expect("Should be an i32, why dis happen??");
+                            let end = edit_state.id_range_end.parse::<i32>().expect("Should be an i32, why dis happen??");
+
+                            let new_range = Range {
+                                start: start,
+                                end: end
+                            };
                             
                             // Get a mutable reference to the item_group and update it
                             if let Some(item_group) = self.item_groups.get_mut(&id) {
                                 item_group.name = new_name;
+                                item_group.id_range = new_range;
                             }
                         }
 
                         self.item_group_edit_state_vec.retain(|edit| {
-                            edit.id.parse::<i32>().unwrap() != id
+                            edit.base.id.parse::<i32>().unwrap() != id
                         });
 
                         self.screen = Screen::ItemGroups(item_groups::Mode::View);
@@ -2309,9 +2392,9 @@ impl MenuBuilder {
                         println!("MultinameEdit on id: {}", id);
                         if let Some(edit_state) = self.item_group_edit_state_vec
                         .iter_mut()
-                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
                         { // Update the name
-                            edit_state.name = new_name;
+                            edit_state.base.name = new_name;
                         }
     
                         self.screen = Screen::ItemGroups(item_groups::Mode::View);
@@ -2321,7 +2404,7 @@ impl MenuBuilder {
                         println!("Edit Range Start on id: {}", id);
                         if let Some(edit_state) = self.item_group_edit_state_vec
                         .iter_mut()
-                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
                         { // Update the range start
                             edit_state.id_range_start = new_range;
                         }
@@ -2333,7 +2416,7 @@ impl MenuBuilder {
                         println!("Edit Range End on id: {}", id);
                         if let Some(edit_state) = self.item_group_edit_state_vec
                         .iter_mut()
-                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
                         { // Update the range end
                             edit_state.id_range_end = new_range;
                         }
@@ -2361,16 +2444,7 @@ impl MenuBuilder {
                         self.item_groups.insert(next_id, item_group.clone());
 
                         //Create a new edit_state for the new item_group
-                        let edit_state = item_groups::EditState {
-                            name: item_group.name.clone(),
-                            original_name: item_group.name.clone(),
-                            id: item_group.id.to_string(),
-                            id_range_start: item_group.id_range.start.to_string(),
-                            original_id_range_start: item_group.id_range.start.to_string(),
-                            id_range_end: item_group.id_range.end.to_string(),
-                            original_id_range_end: item_group.id_range.end.to_string(),
-                            validation_error: None,
-                        };
+                        let edit_state = item_groups::ItemGroupEditState::new(&item_group);
                         
                         //Add new item_group edit_state to app state
                         self.item_group_edit_state_vec.push(edit_state);
@@ -2381,7 +2455,7 @@ impl MenuBuilder {
                         // Find the edit state and reset it before removing
                         if let Some(edit_state) = self.item_group_edit_state_vec
                         .iter_mut()
-                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
                         {
                         // Reset the data to original values if needed
                         edit_state.reset();
@@ -2389,7 +2463,7 @@ impl MenuBuilder {
 
                         // Remove the edit state from the vec
                         self.item_group_edit_state_vec.retain(|state| {
-                        state.id.parse::<i32>().unwrap() != id
+                        state.base.id.parse::<i32>().unwrap() != id
                         });
 
                         self.screen = Screen::ItemGroups(item_groups::Mode::View);
@@ -2496,19 +2570,12 @@ impl MenuBuilder {
                     // First check if we already have an edit state for this tax_group
                     let already_editing = self.tax_group_edit_state_vec
                         .iter()
-                        .any(|state| state.id.parse::<i32>().unwrap() == id);
+                        .any(|state| state.base.id.parse::<i32>().unwrap() == id);
 
                     // Only create new edit state if we're not already editing this tax_group
                     if !already_editing {
                         if let Some(tax_group) = self.tax_groups.get(&id) {
-                            let edit_state = tax_groups::EditState {
-                                name: tax_group.name.clone(),
-                                original_name: tax_group.name.clone(),
-                                id: tax_group.id.to_string(),
-                                rate: tax_group.rate.to_string(),
-                                original_rate: tax_group.rate.to_string(),
-                                validation_error: None,
-                            };
+                            let edit_state = tax_groups::TaxGroupEditState::new(&tax_group);
                             
                             self.tax_group_edit_state_vec.push(edit_state);
                         }
@@ -2526,10 +2593,10 @@ impl MenuBuilder {
                         // First, find the edit state for this tax_group
                         if let Some(edit_state) = self.tax_group_edit_state_vec
                             .iter()
-                            .find(|state| state.id.parse::<i32>().unwrap() == id)
+                            .find(|state| state.base.id.parse::<i32>().unwrap() == id)
                         {
                             // Clone the edit state name since we'll need it after removing the edit state
-                            let new_name = edit_state.name.clone();
+                            let new_name = edit_state.base.name.clone();
                             let new_rate = edit_state.rate.clone();
                             
                             // Get a mutable reference to the tax_group and update it
@@ -2541,7 +2608,7 @@ impl MenuBuilder {
                         }
 
                         self.tax_group_edit_state_vec.retain(|edit| {
-                            edit.id.parse::<i32>().unwrap() != id
+                            edit.base.id.parse::<i32>().unwrap() != id
                         });
 
                         self.screen = Screen::TaxGroups(tax_groups::Mode::View);
@@ -2551,9 +2618,9 @@ impl MenuBuilder {
                         println!("MultinameEdit on id: {}", id);
                         if let Some(edit_state) = self.tax_group_edit_state_vec
                         .iter_mut()
-                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
                         { // Update the name
-                            edit_state.name = new_name;
+                            edit_state.base.name = new_name;
                         }
     
                         self.screen = Screen::TaxGroups(tax_groups::Mode::View);
@@ -2563,7 +2630,7 @@ impl MenuBuilder {
                         println!("MultinameEdit on id: {}", id);
                         if let Some(edit_state) = self.tax_group_edit_state_vec
                         .iter_mut()
-                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
                         { // Update the name
                             edit_state.rate = new_rate;
                         }
@@ -2588,14 +2655,7 @@ impl MenuBuilder {
                         self.tax_groups.insert(next_id, tax_group.clone());
 
                         //Create a new edit_state for the new choice_group
-                        let edit_state = tax_groups::EditState {
-                            name: tax_group.name.clone(),
-                            original_name: tax_group.name.clone(),
-                            id: tax_group.id.to_string(),
-                            rate: tax_group.rate.to_string(),
-                            original_rate: tax_group.rate.to_string(),
-                            validation_error: None,
-                        };
+                        let edit_state = tax_groups::TaxGroupEditState::new(&tax_group);
                         
                         //Add new choice_group edit_state to app state
                         self.tax_group_edit_state_vec.push(edit_state);
@@ -2606,7 +2666,7 @@ impl MenuBuilder {
                         // Find the edit state and reset it before removing
                         if let Some(edit_state) = self.tax_group_edit_state_vec
                         .iter_mut()
-                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
                         {
                         // Reset the data to original values if needed
                         edit_state.reset();
@@ -2614,7 +2674,7 @@ impl MenuBuilder {
 
                         // Remove the edit state from the vec
                         self.tax_group_edit_state_vec.retain(|state| {
-                        state.id.parse::<i32>().unwrap() != id
+                        state.base.id.parse::<i32>().unwrap() != id
                         });
 
                         self.screen = Screen::TaxGroups(tax_groups::Mode::View);
@@ -2726,11 +2786,12 @@ impl MenuBuilder {
                         // Only create new edit state if we're not already editing this security_level
                         if !already_editing {
                             if let Some(security_level) = self.security_levels.get(&id) {
-                                let edit_state = security_levels::EditState {
+                                let edit_state = entity_component::EditState {
                                     name: security_level.name.clone(),
                                     original_name: security_level.name.clone(),
                                     id: security_level.id.to_string(),
-                                    validation_error: None,
+                                    id_validation_error: None,
+                                    name_validation_error: None,
                                 };
                                 
                                 self.security_level_edit_state_vec.push(edit_state);
@@ -2760,7 +2821,7 @@ impl MenuBuilder {
                             }
                         }
 
-                        self.choice_group_edit_state_vec.retain(|edit| {
+                        self.security_level_edit_state_vec.retain(|edit| {
                             edit.id.parse::<i32>().unwrap() != id
                         });
 
@@ -2795,11 +2856,12 @@ impl MenuBuilder {
                         self.security_levels.insert(next_id, security_level.clone());
 
                         //Create a new edit_state for the new security_level
-                        let edit_state = security_levels::EditState {
+                        let edit_state = entity_component::EditState {
                             name: security_level.name.clone(),
                             original_name: security_level.name.clone(),
                             id: security_level.id.to_string(),
-                            validation_error: None,
+                            id_validation_error: None,
+                            name_validation_error: None,
                         };
                         
                         //Add new security_level edit_state to app state
@@ -2929,11 +2991,12 @@ impl MenuBuilder {
                     // Only create new edit state if we're not already editing this revenue_category
                     if !already_editing {
                         if let Some(revenue_category) = self.report_categories.get(&id) {
-                            let edit_state = revenue_categories::EditState {
+                            let edit_state = entity_component::EditState {
                                 name: revenue_category.name.clone(),
                                 original_name: revenue_category.name.clone(),
                                 id: revenue_category.id.to_string(),
-                                validation_error: None,
+                                id_validation_error: None,
+                                name_validation_error: None,
                             };
                             
                             self.revenue_category_edit_state_vec.push(edit_state);
@@ -2998,11 +3061,12 @@ impl MenuBuilder {
                         self.revenue_categories.insert(next_id, revenue_category.clone());
 
                         //Create a new edit_state for the new revenue_category
-                        let edit_state = revenue_categories::EditState {
+                        let edit_state = entity_component::EditState {
                             name: revenue_category.name.clone(),
                             original_name: revenue_category.name.clone(),
                             id: revenue_category.id.to_string(),
-                            validation_error: None,
+                            id_validation_error: None,
+                            name_validation_error: None,
                         };
                         
                         //Add new revenue_category edit_state to app state
@@ -3133,11 +3197,12 @@ impl MenuBuilder {
                         // Only create new edit state if we're not already editing this report_category
                         if !already_editing {
                             if let Some(report_category) = self.report_categories.get(&id) {
-                                let edit_state = report_categories::EditState {
+                                let edit_state = entity_component::EditState {
                                     name: report_category.name.clone(),
                                     original_name: report_category.name.clone(),
                                     id: report_category.id.to_string(),
-                                    validation_error: None,
+                                    id_validation_error: None,
+                                    name_validation_error: None,
                                 };
                                 
                                 self.report_category_edit_state_vec.push(edit_state);
@@ -3202,11 +3267,12 @@ impl MenuBuilder {
                         self.report_categories.insert(next_id, report_category.clone());
 
                         //Create a new edit_state for the new report_category
-                        let edit_state = report_categories::EditState {
+                        let edit_state = entity_component::EditState {
                             name: report_category.name.clone(),
                             original_name: report_category.name.clone(),
                             id: report_category.id.to_string(),
-                            validation_error: None,
+                            id_validation_error: None,
+                            name_validation_error: None,
                         };
                         
                         //Add new report_category edit_state to app state
@@ -3336,11 +3402,12 @@ impl MenuBuilder {
                         // Only create new edit state if we're not already editing this product_class
                         if !already_editing {
                             if let Some(product_class) = self.product_classes.get(&id) {
-                                let edit_state = product_classes::EditState {
+                                let edit_state = entity_component::EditState {
                                     name: product_class.name.clone(),
                                     original_name: product_class.name.clone(),
                                     id: product_class.id.to_string(),
-                                    validation_error: None,
+                                    id_validation_error: None,
+                                    name_validation_error: None,
                                 };
                                 
                                 self.product_class_edit_state_vec.push(edit_state);
@@ -3405,11 +3472,12 @@ impl MenuBuilder {
                         self.product_classes.insert(next_id, product_class.clone());
 
                         //Create a new edit_state for the new product_class
-                        let edit_state = product_classes::EditState {
+                        let edit_state = entity_component::EditState {
                             name: product_class.name.clone(),
                             original_name: product_class.name.clone(),
                             id: product_class.id.to_string(),
-                            validation_error: None,
+                            id_validation_error: None,
+                            name_validation_error: None,
                         };
                         
                         //Add new product_class edit_state to app state
@@ -3540,12 +3608,14 @@ impl MenuBuilder {
                     // Only create new edit state if we're not already editing this choice_group
                     if !already_editing {
                         if let Some(choice_group) = self.choice_groups.get(&id) {
-                            let edit_state = choice_groups::EditState {
+                            let edit_state = entity_component::EditState {
                                 name: choice_group.name.clone(),
                                 original_name: choice_group.name.clone(),
                                 id: choice_group.id.to_string(),
-                                next_id: choice_group.id,
-                                validation_error: None,
+                                id_validation_error: None,
+                                name_validation_error: None,
+                                //next_id: choice_group.id,
+                                //validation_error: None,
                             };
                             
                             self.choice_group_edit_state_vec.push(edit_state);
@@ -3611,12 +3681,14 @@ impl MenuBuilder {
                     self.choice_groups.insert(next_id, choice_group.clone());
 
                     //Create a new edit_state for the new choice_group
-                    let edit_state = choice_groups::EditState {
+                    let edit_state = entity_component::EditState {
                         name: choice_group.name.clone(),
                         original_name: choice_group.name.clone(),
                         id: choice_group.id.to_string(),
-                        next_id: choice_group.id,
-                        validation_error: None,
+                        id_validation_error: None,
+                        name_validation_error: None,
+                        //next_id: choice_group.id,
+                        //validation_error: None,
                     };
                     
                     //Add new choice_group edit_state to app state
@@ -3745,11 +3817,12 @@ impl MenuBuilder {
                     // Only create new edit state if we're not already editing this printer
                     if !already_editing {
                         if let Some(printer) = self.printer_logicals.get(&id) {
-                            let edit_state = printer_logicals::EditState {
+                            let edit_state = entity_component::EditState {
                                 name: printer.name.clone(),
                                 original_name: printer.name.clone(),
                                 id: printer.id.to_string(),
-                                validation_error: None,
+                                id_validation_error: None,
+                                name_validation_error: None,
                             };
                             
                             self.printer_logical_edit_state_vec.push(edit_state);
@@ -3775,11 +3848,12 @@ impl MenuBuilder {
                     self.printer_logicals.insert(next_id, printer.clone());
 
                     //Create a new edit_state for the new printer
-                    let edit_state = printer_logicals::EditState {
+                    let edit_state = entity_component::EditState {
                         name: printer.name.clone(),
                         original_name: printer.name.clone(),
                         id: printer.id.to_string(),
-                        validation_error: None,
+                        id_validation_error: None,
+                        name_validation_error: None,
                     };
                     
                     //Add new printer edit_state to app state
@@ -3838,8 +3912,16 @@ impl MenuBuilder {
                     if let Some(edit_state) = self.printer_logical_edit_state_vec
                     .iter_mut()
                     .find(|state| state.id.parse::<i32>().unwrap() == id) 
-                    { // Update the name
-                        edit_state.name = new_name;
+                    {
+                        //check if name var is less than 17 characters
+                        if new_name.len() < 17 {
+                            // Update the name
+                            edit_state.name = new_name;
+                        } else {
+                            //set validation error message if it's longer than 16 characters
+                            edit_state.name_validation_error = Some("Can't have more than 16 characters".to_string());
+                        }
+
                     }
 
                     self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
@@ -3943,20 +4025,12 @@ impl MenuBuilder {
                     // First check if we already have an edit state for this price_level
                     let already_editing = self.price_level_edit_state_vec
                         .iter()
-                        .any(|state| state.id.parse::<i32>().unwrap() == id);
+                        .any(|state| state.base.id.parse::<i32>().unwrap() == id);
 
                     // Only create new edit state if we're not already editing this price_level
                     if !already_editing {
                         if let Some(price_level) = self.price_levels.get(&id) {
-                            let edit_state = price_levels::EditState {
-                                name: price_level.name.clone(),
-                                original_name: price_level.name.clone(),
-                                id: price_level.id.to_string(),
-                                level_type: price_level.level_type.clone(),
-                                price: price_level.price.to_string(),
-                                original_price: price_level.price.to_string(),
-                                validation_error: None,
-                            };
+                            let edit_state = price_levels::PriceLevelEditState::new(&price_level);
                             
                             self.price_level_edit_state_vec.push(edit_state);
                         }
@@ -3974,10 +4048,10 @@ impl MenuBuilder {
                     // First, find the edit state for this price_level
                     if let Some(edit_state) = self.price_level_edit_state_vec
                         .iter()
-                        .find(|state| state.id.parse::<i32>().unwrap() == id)
+                        .find(|state| state.base.id.parse::<i32>().unwrap() == id)
                     {
                         // Clone the edit state name since we'll need it after removing the edit state
-                        let new_name = edit_state.name.clone();
+                        let new_name = edit_state.base.name.clone();
                         
                         // Get a mutable reference to the price_level and update it
                         if let Some(price_level) = self.price_levels.get_mut(&id) {
@@ -3986,7 +4060,7 @@ impl MenuBuilder {
                     }
 
                     self.price_level_edit_state_vec.retain(|edit| {
-                        edit.id.parse::<i32>().unwrap() != id
+                        edit.base.id.parse::<i32>().unwrap() != id
                     });
 
                     self.screen = Screen::PriceLevels(price_levels::Mode::View);
@@ -3996,9 +4070,9 @@ impl MenuBuilder {
                     println!("MultinameEdit on id: {}", id);
                     if let Some(edit_state) = self.price_level_edit_state_vec
                     .iter_mut()
-                    .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                    .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
                     { // Update the name
-                        edit_state.name = new_name;
+                        edit_state.base.name = new_name;
                     }
 
                     self.screen = Screen::PriceLevels(price_levels::Mode::View);
@@ -4022,15 +4096,7 @@ impl MenuBuilder {
                     self.price_levels.insert(next_id, price_level.clone());
 
                     //Create a new edit_state for the new price_level
-                    let edit_state = price_levels::EditState {
-                        name: price_level.name.clone(),
-                        original_name: price_level.name.clone(),
-                        id: price_level.id.to_string(),
-                        level_type: price_level.level_type.clone(),
-                        price: price_level.price.to_string(),
-                        original_price: price_level.price.to_string(),
-                        validation_error: None,
-                    };
+                        let edit_state = price_levels::PriceLevelEditState::new(&price_level);
                     
                     //Add new price_level edit_state to app state
                     self.price_level_edit_state_vec.push(edit_state);
@@ -4041,7 +4107,7 @@ impl MenuBuilder {
                     // Find the edit state and reset it before removing
                     if let Some(edit_state) = self.price_level_edit_state_vec
                     .iter_mut()
-                    .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                    .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
                     {
                     // Reset the data to original values if needed
                     edit_state.reset();
@@ -4049,7 +4115,7 @@ impl MenuBuilder {
 
                     // Remove the edit state from the vec
                     self.price_level_edit_state_vec.retain(|state| {
-                    state.id.parse::<i32>().unwrap() != id
+                    state.base.id.parse::<i32>().unwrap() != id
                     });
 
                     self.screen = Screen::PriceLevels(price_levels::Mode::View);
@@ -4117,7 +4183,11 @@ impl MenuBuilder {
             // Keep current settings if none in file
             println!("No settings found in save file, keeping current settings");
         } else {
-            self.theme = settings::string_to_theme(&state.settings.app_theme.clone());
+            self.theme =  match &state.settings.app_theme {
+                settings::ThemeChoice::Light => Modern::light_theme(),
+                settings::ThemeChoice::Dark => Modern::dark_theme(),
+            };
+
             self.settings = state.settings;
         }
 
