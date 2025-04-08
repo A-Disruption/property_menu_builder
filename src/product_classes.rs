@@ -1,53 +1,30 @@
-use crate::data_types::{
-    self,
-    EntityId,
-    Validatable,
-    ValidationError,
-};
+use crate::data_types::{ EntityId, ValidationError };
 use crate::Action;
 use crate::entity_component::{self, Entity, EditState};
-use crate::icon;
 use serde::{Serialize, Deserialize};
-use iced::{Element, Length};
-use iced::widget::{column, container, row, text, button, text_input, scrollable};
+use iced::Element;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    CreateNew,
     RequestDelete(EntityId),
     CopyProductClass(EntityId),
     EditProductClass(EntityId),
-    UpdateId(String),
-    UpdateName(String),
-    Select(EntityId),
     SaveAll(EntityId, EditState),
-    UpdateMultiName(EntityId, String),
-    CreateNewMulti,
+    UpdateName(EntityId, String),
+    CreateNew,
     CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
 pub enum Operation {
-    Save(ProductClass),
-    StartEdit(EntityId),
-    Cancel,
-    Back,
-    CreateNew(ProductClass),
     RequestDelete(EntityId),
     CopyProductClass(EntityId),
     EditProductClass(EntityId),
-    Select(EntityId),
     SaveAll(EntityId, EditState),
-    UpdateMultiName(EntityId, String),
-    CreateNewMulti,
+    UpdateName(EntityId, String),
+    CreateNew,
     CancelEdit(EntityId),
-}
-
-#[derive(Debug, Clone)]
-pub enum Mode {
-    View,
-    Edit,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -128,16 +105,12 @@ impl ProductClass {
 }
 
 pub fn update(
-    product_class: &mut ProductClass,
+//    product_class: &mut ProductClass,
     message: Message,
-    state: &mut EditState,
-    other_classes: &[&ProductClass]
+/*     state: &mut EditState,
+    other_classes: &[&ProductClass] */
 ) -> Action<Operation, Message> {
     match message {
-        Message::CreateNew => {
-            let new_product_class = ProductClass::default();
-            Action::operation(Operation::CreateNew(new_product_class))
-        },
         Message::RequestDelete(id) => {
             Action::operation(Operation::RequestDelete(id))
         },
@@ -147,30 +120,14 @@ pub fn update(
         Message::EditProductClass(id) => {
             Action::operation(Operation::EditProductClass(id))
         },
-        Message::Select(id) => {
-            Action::operation(Operation::Select(id))
-        },
-        Message::UpdateId(id) => {
-            if let Ok(id) = id.parse() {
-                product_class.id = id;
-                Action::none()
-            } else {
-                state.id_validation_error = Some("Invalid ID format".to_string());
-                Action::none()
-            }
-        },
-        Message::UpdateName(name) => {
-            product_class.name = name;
-            Action::none()
-        },
-        Message::CreateNewMulti => {
-            Action::operation(Operation::CreateNewMulti)
+        Message::CreateNew => {
+            Action::operation(Operation::CreateNew)
         },
         Message::SaveAll(id, edit_state) => {
             Action::operation(Operation::SaveAll(id, edit_state))
         }
-        Message::UpdateMultiName(id, new_name) => {
-            Action::operation(Operation::UpdateMultiName(id, new_name))
+        Message::UpdateName(id, new_name) => {
+            Action::operation(Operation::UpdateName(id, new_name))
         }
         Message::CancelEdit(id) => {
             Action::operation(Operation::CancelEdit(id))
@@ -184,7 +141,7 @@ pub fn view<'a>(
 ) -> Element<'a, Message> {
     entity_component::entity_view(
         "Product classes",
-        Message::CreateNewMulti,
+        Message::CreateNew,
         all_groups,
         edit_states,
         |product_class, edit_states| render_product_class_row(product_class, edit_states),
@@ -203,7 +160,7 @@ fn render_product_class_row<'a>(
         Message::CopyProductClass,
         Message::RequestDelete,
         Message::CancelEdit,
-        Message::UpdateMultiName,
+        Message::UpdateName,
         "Product class Name"
     )
 }

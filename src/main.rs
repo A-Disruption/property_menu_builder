@@ -66,7 +66,7 @@ pub enum Screen {
     Items(items::Mode),
     ItemGroups,
     PriceLevels,
-    ProductClasses(product_classes::Mode),
+    ProductClasses,
     TaxGroups(tax_groups::Mode),
     SecurityLevels(security_levels::Mode),
     RevenueCategories(revenue_categories::Mode),
@@ -127,7 +127,6 @@ pub struct MenuBuilder {
     toggle_theme: bool,
     printer_logical_edit_state_vec: Vec<entity_component::EditState>,
     choice_group_edit_state_vec: Vec<entity_component::EditState>,
-    product_class_edit_state_vec: Vec<entity_component::EditState>,
     security_level_edit_state_vec: Vec<entity_component::EditState>,
     revenue_category_edit_state_vec: Vec<entity_component::EditState>,
     report_category_edit_state_vec: Vec<entity_component::EditState>,
@@ -151,10 +150,7 @@ pub struct MenuBuilder {
 
     // Product Classes
     product_classes: BTreeMap<EntityId, ProductClass>,
-    draft_product_class: ProductClass,
-    draft_product_class_id: Option<EntityId>,
-    selected_product_class_id: Option<EntityId>,
-    product_class_edit_state: entity_component::EditState,
+    product_class_edit_state_vec: Vec<entity_component::EditState>,
  
     // Tax Groups
     tax_groups: BTreeMap<EntityId, TaxGroup>,
@@ -221,7 +217,6 @@ pub struct MenuBuilder {
             toggle_theme: true,
             printer_logical_edit_state_vec: Vec::new(),
             choice_group_edit_state_vec: Vec::new(),
-            product_class_edit_state_vec: Vec::new(),
             security_level_edit_state_vec: Vec::new(),
             revenue_category_edit_state_vec: Vec::new(),
             report_category_edit_state_vec: Vec::new(),
@@ -246,10 +241,7 @@ pub struct MenuBuilder {
  
             // Product Classes
             product_classes: BTreeMap::new(),
-            draft_product_class: ProductClass::default(),
-            draft_product_class_id: None,
-            selected_product_class_id: None,
-            product_class_edit_state: entity_component::EditState::default(),
+            product_class_edit_state_vec: Vec::new(),
  
             // Tax Groups
             tax_groups: BTreeMap::new(),
@@ -489,20 +481,16 @@ impl MenuBuilder {
             Message::ProductClasses(id, msg) => {
                 let cloned_product_classes = self.product_classes.clone();
 
-                if id < 0 {  // New Product Class case
-                    let other_product_classes: Vec<&ProductClass> = cloned_product_classes
+                let other_product_classes: Vec<&ProductClass> = cloned_product_classes
                     .values()
                     .filter(|pc| pc.id != id)
                     .collect();
 
                 let action = product_classes::update(
-                    &mut self.draft_product_class, 
                     msg, 
-                    &mut self.product_class_edit_state,
-                    &other_product_classes
                 )
-                    .map_operation(move |o| Operation::ProductClasses(id, o))
-                    .map(move |m| Message::ProductClasses(id, m));
+                .map_operation(move |o| Operation::ProductClasses(id, o))
+                .map(move |m| Message::ProductClasses(id, m));
 
                 let operation_task = if let Some(operation) = action.operation {
                     self.perform(operation)
@@ -510,43 +498,7 @@ impl MenuBuilder {
                     Task::none()
                 };
 
-                operation_task.chain(action.task)
-
-                } else {
-                    let product_class = if let Some(draft_id) = self.draft_product_class_id {
-                        if draft_id == id {
-                            &mut self.draft_product_class
-                        } else {
-                            self.product_classes.get_mut(&id).expect("Product Class should exist")
-                        }
-                    } else {
-                        self.product_classes.get_mut(&id).expect("Product Class should exist")
-                    };
-    
-                    let other_product_classes: Vec<&ProductClass> = cloned_product_classes
-                        .values()
-                        .filter(|pc| pc.id != id)
-                        .collect();
-    
-                    let action = product_classes::update(
-                        product_class, 
-                        msg, 
-                        &mut self.product_class_edit_state,
-                        &other_product_classes
-                    )
-                        .map_operation(move |o| Operation::ProductClasses(id, o))
-                        .map(move |m| Message::ProductClasses(id, m));
-    
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
-                }
-
-                
+                operation_task.chain(action.task)  
             },
             Message::TaxGroups(id, msg) => {
                 let cloned_tax_groups = self.tax_groups.clone();
@@ -1014,8 +966,7 @@ impl MenuBuilder {
 
                         // Delete the product class
                         self.product_classes.remove(&deletion_info.entity_id);
-                        self.selected_product_class_id = None;
-                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
+                        self.screen = Screen::ProductClasses;
                     }
                     "ReportCategory" => {
                         // Find all items using this report category
@@ -1211,11 +1162,11 @@ impl MenuBuilder {
                         )
                     ),
                 button("Product Classes")
-                    .on_press(Message::Navigate(Screen::ProductClasses(product_classes::Mode::View)))
+                    .on_press(Message::Navigate(Screen::ProductClasses))
                     .width(Length::Fill)
                     .style(
                         Modern::conditional_button_style(
-                            matches!(self.screen, Screen::ProductClasses(_)),
+                            matches!(self.screen, Screen::ProductClasses),
                             Modern::selected_button_style(Modern::system_button()),
                             Modern::system_button()
                         )
@@ -1403,55 +1354,15 @@ impl MenuBuilder {
                     &self.price_levels,
                     &self.price_level_edit_state_vec
                 )
-                    .map(move |msg| Message::PriceLevels(-1, msg))
+                .map(move |msg| Message::PriceLevels(-1, msg))
             }
-            Screen::ProductClasses(mode) => {
-                if let Some(id) = self.selected_product_class_id {
-                    // Use the draft if its ID matches the selected one
-                    let product_class = if self.draft_product_class_id == Some(id) {
-                        &self.draft_product_class
-                    } else {
-                        &self.product_classes[&id]
-                    };
-                
-                    product_classes::view(
-                        &self.product_classes,
-                        &self.product_class_edit_state_vec
-                    )
-                        .map(move |msg| Message::ProductClasses(id, msg))
-                } else if let Some((&first_id, first_product_class)) = self.product_classes.iter().next() {
-                    // No selected product class but there is at least one in the collection:
-                    // show the view for the first product class.
-                    product_classes::view(
-                        &self.product_classes,
-                        &self.product_class_edit_state_vec
-                    )
-                        .map(move |msg| Message::ProductClasses(first_id.clone(), msg))
-                } else {
-                    // No selected product class and the collection is empty; show the empty state.
-                    container(
-                        column![
-                            text("Product Classes")
-                                .size(24)
-                                .width(Length::Fill),
-                            vertical_space(),
-                            text("No product classes have been created yet.")
-                                .width(Length::Fill),
-                            vertical_space(),
-                            button("Create New Product Class")
-                                .on_press(Message::ProductClasses(-1, product_classes::Message::CreateNew))
-                                .style(button::primary)
-                        ]
-                        .spacing(10)
-                        .max_width(500)
-                    )
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill)
-                    .padding(30)
-                    .into()
-                }
+            Screen::ProductClasses => {
+
+                product_classes::view(
+                    &self.product_classes,
+                    &self.product_class_edit_state_vec
+                )
+                .map(move |msg| Message::ProductClasses(-1, msg))
             }
             Screen::TaxGroups(mode) => {
                 if let Some(id) = self.selected_tax_group_id {
@@ -3056,64 +2967,6 @@ impl MenuBuilder {
             }    
             Operation::ProductClasses(id, op) => {
                 match op {
-                    product_classes::Operation::Save(mut class) => {
-                        if class.id < 0 {
-                            let next_id = self.product_classes
-                                .keys()
-                                .max()
-                                .map_or(1, |max_id| max_id + 1);
-                            class.id = next_id;
-
-                            self.product_classes.insert(next_id, class.clone());
-                            self.draft_product_class_id = None;
-                            self.draft_product_class = ProductClass::default();
-                            self.selected_product_class_id = Some(next_id);
-                        } else {
-                            self.product_classes.insert(class.id, class.clone());
-                            self.selected_product_class_id = Some(class.id);
-                        }
-                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
-
-                        if let Err(e) = self.save_state() {
-                            self.error_message = Some(e);
-                        } else {
-                            self.error_message = None;
-                        }
-
-                        Task::none()
-                    }
-                    product_classes::Operation::StartEdit(id) => {
-                        // Start editing an existing product class
-                        self.draft_product_class_id = Some(id);
-                        self.draft_product_class = self.product_classes[&id].clone();
-                        self.screen = Screen::ProductClasses(product_classes::Mode::Edit);
-                        Task::none()
-                    }
-                    product_classes::Operation::Cancel => {
-                        if self.draft_product_class_id.is_some() {
-                            self.draft_product_class_id = None;
-                            self.draft_product_class = ProductClass::default();
-                        }
-                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
-                        Task::none()
-                    }
-                    product_classes::Operation::Back => {
-                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
-                        Task::none()
-                    }
-                    product_classes::Operation::CreateNew(mut product_class) => {
-                        let next_id = self.product_classes
-                            .keys()
-                            .max()
-                            .map_or(1, |max_id| max_id + 1);
-                        product_class.id = next_id;
-
-                        self.draft_product_class = product_class;
-                        self.draft_product_class_id = Some(-1);
-                        self.selected_product_class_id = Some(-1);
-                        self.screen = Screen::ProductClasses(product_classes::Mode::Edit);
-                        Task::none()
-                    },
                     product_classes::Operation::RequestDelete(id) => {
                         println!("Deleting ProductClass id: {}", id);
                         self.deletion_info = data_types::DeletionInfo { 
@@ -3139,10 +2992,7 @@ impl MenuBuilder {
                         };
 
                        self.product_classes.insert(next_id, new_item.clone());
-                       self.draft_product_class_id = Some(next_id);
-                       self.draft_product_class = new_item;
-                       self.selected_product_class_id = Some(next_id);
-                       self.screen = Screen::ProductClasses(product_classes::Mode::Edit);
+                       self.screen = Screen::ProductClasses;
 
                        Task::none()
                    }
@@ -3168,12 +3018,7 @@ impl MenuBuilder {
                             }
                         }
     
-                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
-                        Task::none()
-                    },
-                    product_classes::Operation::Select(id) => {
-                        self.selected_product_class_id = Some(id);
-                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
+                        self.screen = Screen::ProductClasses;
                         Task::none()
                     },
                     product_classes::Operation::SaveAll(id, edit_state) => {
@@ -3195,10 +3040,10 @@ impl MenuBuilder {
                             edit.id.parse::<i32>().unwrap() != id
                         });
 
-                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
+                        self.screen = Screen::ProductClasses;
                         Task::none()
                     },
-                    product_classes::Operation::UpdateMultiName(id, new_name) => {
+                    product_classes::Operation::UpdateName(id, new_name) => {
                         println!("MultinameEdit on id: {}", id);
                         if let Some(edit_state) = self.product_class_edit_state_vec
                         .iter_mut()
@@ -3207,10 +3052,10 @@ impl MenuBuilder {
                             edit_state.name = new_name;
                         }
     
-                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
+                        self.screen = Screen::ProductClasses;
                         Task::none()
                     },
-                    product_classes::Operation::CreateNewMulti => {
+                    product_classes::Operation::CreateNew => {
                         let next_id = self.product_classes
                             .keys()
                             .max()
@@ -3254,7 +3099,7 @@ impl MenuBuilder {
                         state.id.parse::<i32>().unwrap() != id
                         });
 
-                        self.screen = Screen::ProductClasses(product_classes::Mode::View);
+                        self.screen = Screen::ProductClasses;
                         Task::none()
                     },
                 }
