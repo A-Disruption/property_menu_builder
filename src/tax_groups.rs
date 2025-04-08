@@ -1,9 +1,4 @@
-use crate::data_types::{
-    self,
-    EntityId,
-    ValidationError,
-    Validatable,
-};
+use crate::data_types::{ EntityId, ValidationError };
 use crate::Action;
 use crate::entity_component::{self, Entity, EditState as BaseEditState};
 use crate::icon;
@@ -13,48 +8,30 @@ use iced::{Element, Length};
 use iced::widget::{button, container, column, row, text, text_input, scrollable, tooltip};
 use std::collections::BTreeMap;
 use rust_decimal::Decimal;
-use std::fmt;
-use std::str::FromStr;
 
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    CreateNew,
     RequestDelete(EntityId),
     CopyTaxGroup(EntityId),
     EditTaxGroup(EntityId),
-    UpdateId(String),
-    UpdateName(String),
-    Select(EntityId),
     SaveAll(EntityId, TaxGroupEditState),
-    UpdateMultiName(EntityId, String),
+    UpdateName(EntityId, String),
     UpdateTaxRate(EntityId, String),
-    CreateNewMulti,
+    CreateNew,
     CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
 pub enum Operation {
-    Save(TaxGroup),
-    StartEdit(EntityId),
-    Cancel,
-    Back,
-    CreateNew(TaxGroup),
     RequestDelete(EntityId),
     CopyTaxGroup(EntityId),
     EditTaxGroup(EntityId),
-    Select(EntityId),
     SaveAll(EntityId, TaxGroupEditState),
-    UpdateMultiName(EntityId, String),
+    UpdateName(EntityId, String),
     UpdateTaxRate(EntityId, String),
-    CreateNewMulti,
+    CreateNew,
     CancelEdit(EntityId),
-}
-
-#[derive(Debug, Clone)]
-pub enum Mode {
-    View,
-    Edit,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -207,16 +184,9 @@ impl TaxGroup {
 }
 
 pub fn update(
-    tax_group: &mut TaxGroup,
     message: Message,
-    state: &mut TaxGroupEditState,
-    other_groups: &[&TaxGroup]
 ) -> Action<Operation, Message> {
     match message {
-        Message::CreateNew => {
-            let new_tax_group = TaxGroup::default();
-            Action::operation(Operation::CreateNew(new_tax_group))
-        },
         Message::RequestDelete(id) => {
             Action::operation(Operation::RequestDelete(id))
         },
@@ -226,33 +196,17 @@ pub fn update(
         Message::EditTaxGroup(id) => {
             Action::operation(Operation::EditTaxGroup(id))
         },
-        Message::Select(id) => {
-            Action::operation(Operation::Select(id))
-        },
-        Message::UpdateId(id) => {
-            if let Ok(id) = id.parse() {
-                tax_group.id = id;
-                Action::none()
-            } else {
-                state.base.id_validation_error = Some("Invalid ID format".to_string());
-                Action::none()
-            }
-        },
-        Message::UpdateName(name) => {
-            tax_group.name = name;
-            Action::none()
-        },
         Message::UpdateTaxRate(id, rate) => {
             Action::operation(Operation::UpdateTaxRate(id, rate))
         },
-        Message::CreateNewMulti => {
-            Action::operation(Operation::CreateNewMulti)
+        Message::CreateNew => {
+            Action::operation(Operation::CreateNew)
         },
         Message::SaveAll(id, edit_state) => {
             Action::operation(Operation::SaveAll(id, edit_state))
         }
-        Message::UpdateMultiName(id, new_name) => {
-            Action::operation(Operation::UpdateMultiName(id, new_name))
+        Message::UpdateName(id, new_name) => {
+            Action::operation(Operation::UpdateName(id, new_name))
         }
         Message::CancelEdit(id) => {
             Action::operation(Operation::CancelEdit(id))
@@ -266,7 +220,7 @@ pub fn view<'a>(
 ) -> Element<'a, Message> {
     let title_row = entity_component::render_title_row(
         "Tax groups", 
-        Message::CreateNewMulti,
+        Message::CreateNew,
         605.0 // view width
     );
 
@@ -357,7 +311,7 @@ fn render_tax_group_row<'a>(
         let input = text_input("Tax group Name", &display_name)
             .on_input_maybe(
                 if editing {
-                    Some(|name| Message::UpdateMultiName(tax_group.id, name))
+                    Some(|name| Message::UpdateName(tax_group.id, name))
                 } else {
                     None
                 }

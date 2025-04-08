@@ -67,7 +67,7 @@ pub enum Screen {
     ItemGroups,
     PriceLevels,
     ProductClasses,
-    TaxGroups(tax_groups::Mode),
+    TaxGroups,
     SecurityLevels(security_levels::Mode),
     RevenueCategories(revenue_categories::Mode),
     ReportCategories(report_categories::Mode),
@@ -130,7 +130,6 @@ pub struct MenuBuilder {
     security_level_edit_state_vec: Vec<entity_component::EditState>,
     revenue_category_edit_state_vec: Vec<entity_component::EditState>,
     report_category_edit_state_vec: Vec<entity_component::EditState>,
-    tax_group_edit_state_vec: Vec<tax_groups::TaxGroupEditState>,
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -154,10 +153,7 @@ pub struct MenuBuilder {
  
     // Tax Groups
     tax_groups: BTreeMap<EntityId, TaxGroup>,
-    draft_tax_group: TaxGroup,
-    draft_tax_group_id: Option<EntityId>,
-    selected_tax_group_id: Option<EntityId>,
-    tax_group_edit_state: tax_groups::TaxGroupEditState,
+    tax_group_edit_state_vec: Vec<tax_groups::TaxGroupEditState>,
  
     // Security Levels
     security_levels: BTreeMap<EntityId, SecurityLevel>,
@@ -220,8 +216,6 @@ pub struct MenuBuilder {
             security_level_edit_state_vec: Vec::new(),
             revenue_category_edit_state_vec: Vec::new(),
             report_category_edit_state_vec: Vec::new(),
-            tax_group_edit_state_vec: Vec::new(),
-            
 
             // Items
             items: BTreeMap::new(),
@@ -245,10 +239,7 @@ pub struct MenuBuilder {
  
             // Tax Groups
             tax_groups: BTreeMap::new(),
-            draft_tax_group: TaxGroup::default(),
-            draft_tax_group_id: None,
-            selected_tax_group_id: None,
-            tax_group_edit_state: tax_groups::TaxGroupEditState::default(),
+            tax_group_edit_state_vec: Vec::new(),
  
             // Security Levels
             security_levels: BTreeMap::new(),
@@ -292,7 +283,6 @@ impl MenuBuilder {
 
     fn theme(&self) -> iced::Theme {
         self.theme.clone()
-        //iced_modern_theme::theme::Modern::dark_theme()
     }
 
     fn title(&self) -> String {
@@ -442,11 +432,9 @@ impl MenuBuilder {
                     .filter(|ig| ig.id != id)
                     .collect();
 
-                let action = item_groups::update(
-                    msg,
-                )
-                .map_operation(move |o| Operation::ItemGroups(id, o))
-                .map(move |m| Message::ItemGroups(id, m));
+                let action = item_groups::update(msg)
+                    .map_operation(move |o| Operation::ItemGroups(id, o))
+                    .map(move |m| Message::ItemGroups(id, m));
                 
                 let operation_task = if let Some(operation) = action.operation {
                     self.perform(operation)
@@ -464,11 +452,9 @@ impl MenuBuilder {
                     .filter(|pl| pl.id != id)
                     .collect();
 
-                let action = price_levels::update(
-                    msg
-                )
-                .map_operation(move |o| Operation::PriceLevels(id, o))
-                .map(move |m| Message::PriceLevels(id, m));
+                let action = price_levels::update(msg)
+                    .map_operation(move |o| Operation::PriceLevels(id, o))
+                    .map(move |m| Message::PriceLevels(id, m));
 
                 let operation_task = if let Some(operation) = action.operation {
                     self.perform(operation)
@@ -486,11 +472,9 @@ impl MenuBuilder {
                     .filter(|pc| pc.id != id)
                     .collect();
 
-                let action = product_classes::update(
-                    msg, 
-                )
-                .map_operation(move |o| Operation::ProductClasses(id, o))
-                .map(move |m| Message::ProductClasses(id, m));
+                let action = product_classes::update(msg)
+                    .map_operation(move |o| Operation::ProductClasses(id, o))
+                    .map(move |m| Message::ProductClasses(id, m));
 
                 let operation_task = if let Some(operation) = action.operation {
                     self.perform(operation)
@@ -503,61 +487,22 @@ impl MenuBuilder {
             Message::TaxGroups(id, msg) => {
                 let cloned_tax_groups = self.tax_groups.clone();
 
-                if id < 0 {  // New Tax Group case
-                    let other_tax_groups: Vec<&TaxGroup> = cloned_tax_groups
-                        .values()
-                        .filter(|tg| tg.id != id)
-                        .collect();
-    
-                    let action = tax_groups::update(
-                        &mut self.draft_tax_group, 
-                        msg, 
-                        &mut self.tax_group_edit_state,
-                        &other_tax_groups
-                    )
-                        .map_operation(move |o| Operation::TaxGroups(id, o))
-                        .map(move |m| Message::TaxGroups(id, m));
-    
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
+                let other_tax_groups: Vec<&TaxGroup> = cloned_tax_groups
+                    .values()
+                    .filter(|tg| tg.id != id)
+                    .collect();
+
+                let action = tax_groups::update(msg, )
+                    .map_operation(move |o| Operation::TaxGroups(id, o))
+                    .map(move |m| Message::TaxGroups(id, m));
+
+                let operation_task = if let Some(operation) = action.operation {
+                    self.perform(operation)
                 } else {
-                    let tax_group = if let Some(draft_id) = self.draft_tax_group_id {
-                        if draft_id == id {
-                            &mut self.draft_tax_group
-                        } else {
-                            self.tax_groups.get_mut(&id).expect("Tax Group should exist")
-                        }
-                    } else {
-                        self.tax_groups.get_mut(&id).expect("Tax Group should exist")
-                    };
-    
-                    let other_tax_groups: Vec<&TaxGroup> = cloned_tax_groups
-                        .values()
-                        .filter(|tg| tg.id != id)
-                        .collect();
-    
-                    let action = tax_groups::update(
-                        tax_group, 
-                        msg, 
-                        &mut self.tax_group_edit_state,
-                        &other_tax_groups
-                    )
-                        .map_operation(move |o| Operation::TaxGroups(id, o))
-                        .map(move |m| Message::TaxGroups(id, m));
-    
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
-                }
+                    Task::none()
+                };
+
+                operation_task.chain(action.task)
             },
             Message::SecurityLevels(id, msg) => {
                 let cloned_security_levels = self.security_levels.clone();
@@ -1029,8 +974,7 @@ impl MenuBuilder {
 
                         // Delete the tax group
                         self.tax_groups.remove(&deletion_info.entity_id);
-                        self.selected_tax_group_id = None;
-                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                        self.screen = Screen::TaxGroups;
                     }
                     _ => {println!("Oh No! You've tried to delete an unknown type: {}", deletion_info.entity_type);}
                 }
@@ -1172,11 +1116,11 @@ impl MenuBuilder {
                         )
                     ),
                 button("Tax Groups")
-                    .on_press(Message::Navigate(Screen::TaxGroups(tax_groups::Mode::View)))
+                    .on_press(Message::Navigate(Screen::TaxGroups))
                     .width(Length::Fill)
                     .style(
                         Modern::conditional_button_style(
-                            matches!(self.screen, Screen::TaxGroups(_)),
+                            matches!(self.screen, Screen::TaxGroups),
                             Modern::selected_button_style(Modern::system_button()),
                             Modern::system_button()
                         )
@@ -1364,52 +1308,12 @@ impl MenuBuilder {
                 )
                 .map(move |msg| Message::ProductClasses(-1, msg))
             }
-            Screen::TaxGroups(mode) => {
-                if let Some(id) = self.selected_tax_group_id {
-                    // Use the draft tax group if its ID matches the selected ID
-                    let tax_group = if self.draft_tax_group_id == Some(id) {
-                        &self.draft_tax_group
-                    } else {
-                        &self.tax_groups[&id]
-                    };
-                
-                    tax_groups::view(
-                        &self.tax_groups,
-                        &self.tax_group_edit_state_vec
-                    )
-                        .map(move |msg| Message::TaxGroups(id, msg))
-                } else if let Some((&first_id, first_tax_group)) = self.tax_groups.iter().next() {
-                    // No selected ID but there is at least one tax group; show the first one.
-                    tax_groups::view(
-                        &self.tax_groups,
-                        &self.tax_group_edit_state_vec
-                    )
-                        .map(move |msg| Message::TaxGroups(first_id.clone(), msg))
-                } else {
-                    // No selected ID and the collection is empty; show the empty state.
-                    container(
-                        column![
-                            text("Tax Groups")
-                                .size(24)
-                                .width(Length::Fill),
-                            vertical_space(),
-                            text("No tax groups have been created yet.")
-                                .width(Length::Fill),
-                            vertical_space(),
-                            button("Create New Tax Group")
-                                .on_press(Message::TaxGroups(-1, tax_groups::Message::CreateNew))
-                                .style(button::primary)
-                        ]
-                        .spacing(10)
-                        .max_width(500)
-                    )
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill)
-                    .padding(30)
-                    .into()
-                }
+            Screen::TaxGroups => {
+                tax_groups::view(
+                    &self.tax_groups,
+                    &self.tax_group_edit_state_vec
+                )
+                .map(move |msg| Message::TaxGroups(-1, msg))
             }
             Screen::SecurityLevels(mode) => {
                 if let Some(id) = self.selected_security_level_id {
@@ -1975,7 +1879,6 @@ impl MenuBuilder {
             Operation::ItemGroups(id, op) => {
                 match op {
                     item_groups::Operation::RequestDelete(id) => {
-                         println!("Deleting ItemGroup id: {}", id);
                         self.deletion_info = data_types::DeletionInfo { 
                             entity_type: "ItemGroup".to_string(),
                             entity_id: id,
@@ -1985,7 +1888,6 @@ impl MenuBuilder {
                         Task::none()
                     }
                     item_groups::Operation::CopyItemGroup(id) => {
-                        println!("Copying ItemGroup: {}", id);
                         let copy_item = self.item_groups.get(&id).unwrap();
                         let next_id = self.item_groups
                             .keys()
@@ -2004,7 +1906,6 @@ impl MenuBuilder {
                         Task::none()
                     }
                     item_groups::Operation::EditItemGroup(id) => {
-                        println!("Edit Item Group Operation on id: {}", id);
                         // First check if we already have an edit state for this item_group
                         let already_editing = self.item_group_edit_state_vec
                             .iter()
@@ -2054,7 +1955,6 @@ impl MenuBuilder {
                         Task::none()
                     },
                     item_groups::Operation::UpdateName(id, new_name) => {
-                        println!("Update Name on id: {}", id);
                         if let Some(edit_state) = self.item_group_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
@@ -2066,7 +1966,6 @@ impl MenuBuilder {
                         Task::none()
                     },
                     item_groups::Operation::UpdateIdRangeStart(id, new_range) => {
-                        println!("Edit Range Start on id: {}", id);
                         if let Some(edit_state) = self.item_group_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
@@ -2078,7 +1977,6 @@ impl MenuBuilder {
                         Task::none()
                     },
                     item_groups::Operation::UpdateIdRangeEnd(id, new_range) => {
-                        println!("Edit Range End on id: {}", id);
                         if let Some(edit_state) = self.item_group_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
@@ -2139,67 +2037,7 @@ impl MenuBuilder {
             }
             Operation::TaxGroups(id, op) => {
                 match op {
-                    tax_groups::Operation::Save(mut group) => {
-
-                        if group.id < 0 {
-                            let next_id = self.tax_groups
-                                .keys()
-                                .max()
-                                .map_or(1, |max_id|  max_id + 1);
-                            group.id = next_id;
-
-                            self.tax_groups.insert(next_id, group.clone());
-                            self.draft_tax_group_id = None;
-                            self.draft_tax_group = TaxGroup::default();
-                            self.selected_tax_group_id = Some(next_id);
-                        } else {
-                            self.tax_groups.insert(group.id, group.clone());
-                            self.selected_tax_group_id = Some(group.id);
-                        }
-                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
-
-                        if let Err(e) = self.save_state() {
-                            self.error_message = Some(e);
-                        } else {
-                            self.error_message = None;
-                        }
-                        
-                        Task::none()
-                    }
-                    tax_groups::Operation::StartEdit(id) => {
-                        // Start editing an existing Security Level
-                        self.draft_tax_group_id = Some(id);
-                        self.draft_tax_group = self.tax_groups[&id].clone();
-                        self.screen = Screen::TaxGroups(tax_groups::Mode::Edit);
-                        Task::none()
-                    }
-                    tax_groups::Operation::Cancel => {
-                        if self.draft_tax_group_id.is_some() {
-                            self.draft_tax_group_id = None;
-                            self.draft_tax_group = TaxGroup::default();
-                        }
-                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
-                        Task::none()
-                    }
-                    tax_groups::Operation::Back => {
-                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
-                        Task::none()
-                    }
-                    tax_groups::Operation::CreateNew(mut tax_group) => {
-                        let next_id = self.tax_groups
-                                .keys()
-                                .max()
-                                .map_or(1, |max_id|  max_id + 1);
-                            tax_group.id = next_id;
-                        
-                        self.draft_tax_group = tax_group;
-                        self.draft_tax_group_id = Some(-1);
-                        self.selected_tax_group_id = Some(-1);
-                        self.screen = Screen::TaxGroups(tax_groups::Mode::Edit);
-                        Task::none()
-                    },
                     tax_groups::Operation::RequestDelete(id) => {
-                        println!("Deleting TaxGroup id: {}", id);
                         self.deletion_info = data_types::DeletionInfo { 
                            entity_type: "TaxGroup".to_string(),
                            entity_id: id,
@@ -2209,7 +2047,6 @@ impl MenuBuilder {
                        Task::none()
                    }
                     tax_groups::Operation::CopyTaxGroup(id) => {
-                       println!("Copying TaxGroup: {}", id);
                         let copy_item = self.tax_groups.get(&id).unwrap();
                         let next_id = self.tax_groups
                             .keys()
@@ -2223,15 +2060,11 @@ impl MenuBuilder {
                         };
 
                        self.tax_groups.insert(next_id, new_item.clone());
-                       self.draft_tax_group_id = Some(next_id);
-                       self.draft_tax_group = new_item;
-                       self.selected_tax_group_id = Some(next_id);
-                       self.screen = Screen::TaxGroups(tax_groups::Mode::Edit);
+                       self.screen = Screen::TaxGroups;
 
                        Task::none()
                    }
                     tax_groups::Operation::EditTaxGroup(id) => {
-                        println!("Edit Tax Group Operation on id: {}", id);
                     // First check if we already have an edit state for this tax_group
                     let already_editing = self.tax_group_edit_state_vec
                         .iter()
@@ -2246,13 +2079,8 @@ impl MenuBuilder {
                         }
                     }
 
-                    self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                    self.screen = Screen::TaxGroups;
                     Task::none()
-                    },
-                    tax_groups::Operation::Select(id) => {
-                        self.selected_tax_group_id = Some(id);
-                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
-                        Task::none()
                     },
                     tax_groups::Operation::SaveAll(id, edit_state) => {
                         // First, find the edit state for this tax_group
@@ -2276,11 +2104,10 @@ impl MenuBuilder {
                             edit.base.id.parse::<i32>().unwrap() != id
                         });
 
-                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                        self.screen = Screen::TaxGroups;
                         Task::none()
                     },
-                    tax_groups::Operation::UpdateMultiName(id, new_name) => {
-                        println!("MultinameEdit on id: {}", id);
+                    tax_groups::Operation::UpdateName(id, new_name) => {
                         if let Some(edit_state) = self.tax_group_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
@@ -2288,11 +2115,10 @@ impl MenuBuilder {
                             edit_state.base.name = new_name;
                         }
     
-                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                        self.screen = Screen::TaxGroups;
                         Task::none()
                     },
                     tax_groups::Operation::UpdateTaxRate(id, new_rate) => {
-                        println!("MultinameEdit on id: {}", id);
                         if let Some(edit_state) = self.tax_group_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
@@ -2300,10 +2126,10 @@ impl MenuBuilder {
                             edit_state.rate = new_rate;
                         }
     
-                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                        self.screen = Screen::TaxGroups;
                         Task::none()
                     },
-                    tax_groups::Operation::CreateNewMulti => {
+                    tax_groups::Operation::CreateNew => {
                         let next_id = self.tax_groups
                             .keys()
                             .max()
@@ -2342,7 +2168,7 @@ impl MenuBuilder {
                         state.base.id.parse::<i32>().unwrap() != id
                         });
 
-                        self.screen = Screen::TaxGroups(tax_groups::Mode::View);
+                        self.screen = Screen::TaxGroups;
                         Task::none()
                     },
                 }

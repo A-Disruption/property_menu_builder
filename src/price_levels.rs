@@ -1,8 +1,4 @@
-use crate::data_types::{
-    EntityId,
-    ValidationError,
-    Currency
-};
+use crate::data_types::{ EntityId, ValidationError, Currency };
 use crate::Action;
 use crate::entity_component::{self, Entity, EditState as BaseEditState};
 use crate::icon;
@@ -11,7 +7,6 @@ use serde::{Serialize, Deserialize};
 use iced::{Element, Length};
 use iced::widget::{button, row, column, container, text, text_input, scrollable, tooltip};
 use std::collections::BTreeMap;
-use std::ops::Range;
 use rust_decimal::Decimal;
 
 #[derive(Debug, Clone)]
