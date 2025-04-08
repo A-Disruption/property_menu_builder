@@ -1,47 +1,30 @@
-use crate::data_types::{self, EntityId, ValidationError};
+use crate::data_types::{EntityId, ValidationError};
 use crate::Action;
 use crate::entity_component::{self, Entity, EditState};
-use crate::icon;
 use serde::{Serialize, Deserialize};
 use iced::Element;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    CreateNew,
     RequestDelete(EntityId),
     CopyChoiceGroup(EntityId),
     EditChoiceGroup(EntityId),
-    UpdateId(String),
-    UpdateName(String),
-    Select(EntityId),
     SaveAll(EntityId, EditState),
-    UpdateMultiName(EntityId, String),
-    CreateNewMulti,
+    UpdateName(EntityId, String),
+    CreateNew,
     CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
 pub enum Operation {
-    Save(ChoiceGroup),
-    StartEdit(EntityId),
-    Cancel,
-    Back,
-    CreateNew(ChoiceGroup),
     RequestDelete(EntityId),
     CopyChoiceGroup(EntityId),
     EditChoiceGroup(EntityId),
-    Select(EntityId),
     SaveAll(EntityId, EditState),
-    UpdateMultiName(EntityId, String),
-    CreateNewMulti,
+    UpdateName(EntityId, String),
+    CreateNew,
     CancelEdit(EntityId),
-}
-
-#[derive(Debug, Clone)]
-pub enum Mode {
-    View,
-    Edit,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -122,16 +105,9 @@ impl ChoiceGroup {
 }
 
 pub fn update(
-    choice_group: &mut ChoiceGroup,
     message: Message,
-    state: &mut EditState,
-    other_groups: &[&ChoiceGroup]
 ) -> Action<Operation, Message> {
     match message {
-        Message::CreateNew => {
-            let new_choice_group = ChoiceGroup::default();
-            Action::operation(Operation::CreateNew(new_choice_group))
-        },
         Message::RequestDelete(id) => {
             Action::operation(Operation::RequestDelete(id))
         },
@@ -141,30 +117,14 @@ pub fn update(
         Message::EditChoiceGroup(id) => {
             Action::operation(Operation::EditChoiceGroup(id))
         },
-        Message::Select(id) => {
-            Action::operation(Operation::Select(id))
-        },
-        Message::UpdateId(id) => {
-            if let Ok(id) = id.parse() {
-                choice_group.id = id;
-                Action::none()
-            } else {
-                state.id_validation_error = Some("Invalid ID format".to_string());
-                Action::none()
-            }
-        },
-        Message::UpdateName(name) => {
-            choice_group.name = name;
-            Action::none()
-        },
-        Message::CreateNewMulti => {
-            Action::operation(Operation::CreateNewMulti)
+        Message::CreateNew => {
+            Action::operation(Operation::CreateNew)
         },
         Message::SaveAll(id, edit_state) => {
             Action::operation(Operation::SaveAll(id, edit_state))
         }
-        Message::UpdateMultiName(id, new_name) => {
-            Action::operation(Operation::UpdateMultiName(id, new_name))
+        Message::UpdateName(id, new_name) => {
+            Action::operation(Operation::UpdateName(id, new_name))
         }
         Message::CancelEdit(id) => {
             Action::operation(Operation::CancelEdit(id))
@@ -178,7 +138,7 @@ pub fn view<'a>(
 ) -> Element<'a, Message> {
     entity_component::entity_view(
         "Choice Groups",
-        Message::CreateNewMulti,
+        Message::CreateNew,
         all_groups,
         edit_states,
         |choice_group, edit_states| render_choice_group_row(choice_group, edit_states)
@@ -197,7 +157,7 @@ fn render_choice_group_row<'a>(
         Message::CopyChoiceGroup,
         Message::RequestDelete,
         Message::CancelEdit,
-        Message::UpdateMultiName,
+        Message::UpdateName,
         "Choice Group Name"
     )
 }

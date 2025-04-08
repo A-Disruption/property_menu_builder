@@ -71,7 +71,7 @@ pub enum Screen {
     SecurityLevels,
     RevenueCategories,
     ReportCategories,
-    ChoiceGroups(choice_groups::Mode),
+    ChoiceGroups,
     PrinterLogicals(printer_logicals::Mode),
 }
 
@@ -126,7 +126,7 @@ pub struct MenuBuilder {
     error_message: Option<String>,
     toggle_theme: bool,
     printer_logical_edit_state_vec: Vec<entity_component::EditState>,
-    choice_group_edit_state_vec: Vec<entity_component::EditState>,
+    
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -166,10 +166,7 @@ pub struct MenuBuilder {
  
     // Choice Groups
     choice_groups: BTreeMap<EntityId, ChoiceGroup>,
-    draft_choice_group: ChoiceGroup,
-    draft_choice_group_id: Option<EntityId>,
-    selected_choice_group_id: Option<EntityId>,
-    choice_group_edit_state: entity_component::EditState,
+    choice_group_edit_state_vec: Vec<entity_component::EditState>,
  
     // Printer Logicals
     printer_logicals: BTreeMap<EntityId, PrinterLogical>,
@@ -200,7 +197,7 @@ pub struct MenuBuilder {
             error_message: None,
             toggle_theme: true,
             printer_logical_edit_state_vec: Vec::new(),
-            choice_group_edit_state_vec: Vec::new(),
+            
 
             // Items
             items: BTreeMap::new(),
@@ -240,10 +237,7 @@ pub struct MenuBuilder {
  
             // Choice Groups
             choice_groups: BTreeMap::new(),
-            draft_choice_group: ChoiceGroup::default(),
-            draft_choice_group_id: None,
-            selected_choice_group_id: None,
-            choice_group_edit_state: entity_component::EditState::default(),
+            choice_group_edit_state_vec: Vec::new(),
  
             // Printer Logicals
             printer_logicals: BTreeMap::new(),
@@ -544,20 +538,14 @@ impl MenuBuilder {
             Message::ChoiceGroups(id, msg) => {
                 let cloned_choice_groups = self.choice_groups.clone();
 
-                if id < 0 {  // New Choice Group case
-                    let other_choice_groups: Vec<&ChoiceGroup> = cloned_choice_groups
+                let other_choice_groups: Vec<&ChoiceGroup> = cloned_choice_groups
                     .values()
                     .filter(|c| c.id != id)
                     .collect();
 
-                    let action = choice_groups::update(
-                        &mut self.draft_choice_group, 
-                        msg, 
-                        &mut self.choice_group_edit_state, 
-                        &other_choice_groups
-                    )
-                    .map_operation(move |o| Operation::ChoiceGroups(id, o))
-                    .map(move |m| Message::ChoiceGroups(id, m));
+                    let action = choice_groups::update(msg)
+                        .map_operation(move |o| Operation::ChoiceGroups(id, o))
+                        .map(move |m| Message::ChoiceGroups(id, m));
 
                     let operation_task = if let Some(operation) = action.operation {
                         self.perform(operation)
@@ -566,39 +554,6 @@ impl MenuBuilder {
                     };
 
                 operation_task.chain(action.task)
-                } else {
-                    let choice_group = if let Some(draft_id) = self.draft_choice_group_id {
-                        if draft_id == id {
-                            &mut self.draft_choice_group
-                        } else {
-                            self.choice_groups.get_mut(&id).expect("Choice Group should exist")
-                        }
-                    } else {
-                        self.choice_groups.get_mut(&id).expect("Choice Group should exist")
-                    };
-    
-                    let other_choice_groups: Vec<&ChoiceGroup> = cloned_choice_groups
-                        .values()
-                        .filter(|c| c.id != id)
-                        .collect();
-    
-                    let action = choice_groups::update(
-                        choice_group, 
-                        msg, 
-                        &mut self.choice_group_edit_state, 
-                        &other_choice_groups
-                    )
-                    .map_operation(move |o| Operation::ChoiceGroups(id, o))
-                    .map(move |m| Message::ChoiceGroups(id, m));
-    
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
-                }
             },
             Message::PrinterLogicals(id, msg) => {
                 let cloned_printers = self.printer_logicals.clone();
@@ -697,8 +652,7 @@ impl MenuBuilder {
 
                         // Delete the choice group
                         self.choice_groups.remove(&deletion_info.entity_id);
-                        self.selected_choice_group_id = None;
-                        self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                        self.screen = Screen::ChoiceGroups;
                     }
                     "ItemGroup" => {
                         // Find all items using this item group
@@ -1011,11 +965,11 @@ impl MenuBuilder {
                         )
                     ),
                 button("Choice Groups")
-                    .on_press(Message::Navigate(Screen::ChoiceGroups(choice_groups::Mode::View)))
+                    .on_press(Message::Navigate(Screen::ChoiceGroups))
                     .width(Length::Fill)
                     .style(
                         Modern::conditional_button_style(
-                            matches!(self.screen, Screen::ChoiceGroups(_)),
+                            matches!(self.screen, Screen::ChoiceGroups),
                             Modern::selected_button_style(Modern::system_button()),
                             Modern::system_button()
                         )
@@ -1192,52 +1146,11 @@ impl MenuBuilder {
                 )
                 .map(move |msg| Message::ReportCategories(-1, msg))
             }
-            Screen::ChoiceGroups(mode) => {
-                if let Some(id) = self.selected_choice_group_id {
-                    // Use the draft if its ID matches; otherwise, use the stored choice group.
-                    let choice_group = if self.draft_choice_group_id == Some(id) {
-                        &self.draft_choice_group
-                    } else {
-                        &self.choice_groups[&id]
-                    };
-                
-                    choice_groups::view(
-                        &self.choice_groups,
-                        &self.choice_group_edit_state_vec)
-                    .map(move |msg| Message::ChoiceGroups(id, msg))
-
-                } else if let Some((&first_id, first_choice_group)) = self.choice_groups.iter().next() {
-                    // No selected choice group, but there is at least one available: show its view.
-                    choice_groups::view(
-                        &self.choice_groups,
-                        &self.choice_group_edit_state_vec)
-                    .map(move |msg| Message::ChoiceGroups(first_id.clone(), msg))
-
-                } else {
-                    // No selected choice group and no choice groups available: show the empty state.
-                    container(
-                        column![
-                            text("Choice Groups")
-                                .size(24)
-                                .width(Length::Fill),
-                            vertical_space(),
-                            text("No choice groups have been created yet.")
-                                .width(Length::Fill),
-                            vertical_space(),
-                            button("Create New Choice Group")
-                                .on_press(Message::ChoiceGroups(-1, choice_groups::Message::CreateNew))
-                                .style(button::primary)
-                        ]
-                        .spacing(10)
-                        .max_width(500)
-                    )
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill)
-                    .padding(30)
-                    .into()
-                }
+            Screen::ChoiceGroups => {
+                choice_groups::view(
+                    &self.choice_groups,
+                    &self.choice_group_edit_state_vec)
+                .map(move |msg| Message::ChoiceGroups(-1, msg))
             }
             Screen::PrinterLogicals(mode) => {
                 if let Some(id) = self.selected_printer_id {
@@ -2316,7 +2229,6 @@ impl MenuBuilder {
             Operation::ProductClasses(id, op) => {
                 match op {
                     product_classes::Operation::RequestDelete(id) => {
-                        println!("Deleting ProductClass id: {}", id);
                         self.deletion_info = data_types::DeletionInfo { 
                            entity_type: "ProductClass".to_string(),
                            entity_id: id,
@@ -2326,7 +2238,6 @@ impl MenuBuilder {
                        Task::none()
                    }
                     product_classes::Operation::CopyProductClass(id) => {
-                       println!("Copying ProductClass: {}", id);
                         let copy_item = self.product_classes.get(&id).unwrap();
                         let next_id = self.product_classes
                             .keys()
@@ -2345,7 +2256,6 @@ impl MenuBuilder {
                        Task::none()
                    }
                     product_classes::Operation::EditProductClass(id) => {
-                        println!("Edit Product Class Operation on id: {}", id);
                         // First check if we already have an edit state for this product_class
                         let already_editing = self.product_class_edit_state_vec
                             .iter()
@@ -2392,7 +2302,6 @@ impl MenuBuilder {
                         Task::none()
                     },
                     product_classes::Operation::UpdateName(id, new_name) => {
-                        println!("MultinameEdit on id: {}", id);
                         if let Some(edit_state) = self.product_class_edit_state_vec
                         .iter_mut()
                         .find(|state| state.id.parse::<i32>().unwrap() == id) 
@@ -2453,66 +2362,6 @@ impl MenuBuilder {
                 }
             }    
             Operation::ChoiceGroups(id, op) => match op {
-                choice_groups::Operation::Save(mut choice_group) => {
-                    if choice_group.id < 0 {
-                        // Only generate new ID for new items
-                        let next_id = self.choice_groups
-                            .keys()
-                            .max()
-                            .map_or(1, |max_id| max_id + 1);
-                        choice_group.id = next_id;
-                        
-                        // Insert the new choice group
-                        self.choice_groups.insert(next_id, choice_group.clone());
-                        self.draft_choice_group_id = None;
-                        self.draft_choice_group = ChoiceGroup::default();
-                        self.selected_choice_group_id = Some(next_id); // Update selection
-                    } else {
-                        // Updating existing choice group - keep same ID
-                        self.choice_groups.insert(choice_group.id, choice_group.clone());
-                        self.selected_choice_group_id = Some(choice_group.id); // Keep selection
-                    }
-                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
-
-                    if let Err(e) = self.save_state() {
-                        self.error_message = Some(e);
-                    } else {
-                        self.error_message = None;
-                    }
-
-                    Task::none()
-                }
-                choice_groups::Operation::StartEdit(choice_group_id) => {
-                    // Start editing existing choice group
-                    self.draft_choice_group_id = Some(choice_group_id);
-                    self.draft_choice_group = self.choice_groups[&choice_group_id].clone();
-                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::Edit);
-                    Task::none()
-                }
-                choice_groups::Operation::Cancel => {
-                    if self.draft_choice_group_id.is_some() {
-                        self.draft_choice_group_id = None;
-                        self.draft_choice_group = ChoiceGroup::default();
-                    }
-                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
-                    Task::none()
-                }
-                choice_groups::Operation::Back => {
-                    self.screen = Screen::Items(items::Mode::View);
-                    Task::none()
-                }
-                choice_groups::Operation::CreateNew(mut choice_group) => {
-                    let next_id = self.choice_groups
-                                .keys()
-                                .max()
-                                .map_or(1, |max_id| max_id + 1);
-                            choice_group.id = next_id;
-                    self.draft_choice_group = choice_group;
-                    self.draft_choice_group_id = Some(-1);
-                    self.selected_choice_group_id = Some(-1);
-                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::Edit);
-                    Task::none()
-                },
                 choice_groups::Operation::RequestDelete(id) => {
 
                     self.deletion_info = data_types::DeletionInfo { 
@@ -2524,7 +2373,6 @@ impl MenuBuilder {
                     Task::none()
                 },
                 choice_groups::Operation::CopyChoiceGroup(id) => {
-                    println!("Copying ChoiceGroup: {}", id);
                     let copy_item = self.choice_groups.get(&id).unwrap();
                     let next_id = self.choice_groups
                         .keys()
@@ -2538,15 +2386,11 @@ impl MenuBuilder {
                     };
 
                     self.choice_groups.insert(next_id, new_item.clone());
-                    self.draft_choice_group_id = Some(next_id);
-                    self.draft_choice_group = new_item;
-                    self.selected_choice_group_id = Some(next_id);
-                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::Edit);
+                    self.screen = Screen::ChoiceGroups;
 
                     Task::none()
                 }
                 choice_groups::Operation::EditChoiceGroup(id) => {
-                    println!("Edit Choice Group Operation on id: {}", id);
                     // First check if we already have an edit state for this choice_group
                     let already_editing = self.choice_group_edit_state_vec
                         .iter()
@@ -2561,22 +2405,15 @@ impl MenuBuilder {
                                 id: choice_group.id.to_string(),
                                 id_validation_error: None,
                                 name_validation_error: None,
-                                //next_id: choice_group.id,
-                                //validation_error: None,
                             };
                             
                             self.choice_group_edit_state_vec.push(edit_state);
                         }
                     }
 
-                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    self.screen = Screen::ChoiceGroups;
                     Task::none()
 
-                },
-                choice_groups::Operation::Select(choice_group_id) => {
-                    self.selected_choice_group_id = Some(choice_group_id);
-                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
-                    Task::none()
                 },
                 choice_groups::Operation::SaveAll(id, edit_state) => {
                     // First, find the edit state for this choice_group
@@ -2597,11 +2434,10 @@ impl MenuBuilder {
                         edit.id.parse::<i32>().unwrap() != id
                     });
 
-                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    self.screen = Screen::ChoiceGroups;
                     Task::none()
                 },
-                choice_groups::Operation::UpdateMultiName(id, new_name) => {
-                    println!("MultinameEdit on id: {}", id);
+                choice_groups::Operation::UpdateName(id, new_name) => {
                     if let Some(edit_state) = self.choice_group_edit_state_vec
                     .iter_mut()
                     .find(|state| state.id.parse::<i32>().unwrap() == id) 
@@ -2609,10 +2445,10 @@ impl MenuBuilder {
                         edit_state.name = new_name;
                     }
 
-                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    self.screen = Screen::ChoiceGroups;
                     Task::none()
                 },
-                choice_groups::Operation::CreateNewMulti => {
+                choice_groups::Operation::CreateNew => {
                     let next_id = self.choice_groups
                         .keys()
                         .max()
@@ -2634,8 +2470,6 @@ impl MenuBuilder {
                         id: choice_group.id.to_string(),
                         id_validation_error: None,
                         name_validation_error: None,
-                        //next_id: choice_group.id,
-                        //validation_error: None,
                     };
                     
                     //Add new choice_group edit_state to app state
@@ -2658,7 +2492,7 @@ impl MenuBuilder {
                     state.id.parse::<i32>().unwrap() != id
                     });
 
-                    self.screen = Screen::ChoiceGroups(choice_groups::Mode::View);
+                    self.screen = Screen::ChoiceGroups;
                     Task::none()
                 },
             },    
