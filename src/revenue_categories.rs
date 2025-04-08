@@ -1,7 +1,4 @@
-use crate::data_types::{
-    EntityId,
-    ValidationError,
-};
+use crate::data_types::{ EntityId, ValidationError };
 use crate::Action;
 use crate::entity_component::{self, Entity, EditState};
 use serde::{Serialize, Deserialize};
@@ -10,40 +7,24 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    CreateNew,
     RequestDelete(EntityId),
     CopyRevenueCategory(EntityId),
     EditRevenueCategory(EntityId),
-    UpdateId(String),
-    UpdateName(String),
-    Select(EntityId),
     SaveAll(EntityId, EditState),
-    UpdateMultiName(EntityId, String),
-    CreateNewMulti,
+    UpdateName(EntityId, String),
+    CreateNew,
     CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
 pub enum Operation {
-    Save(RevenueCategory),
-    StartEdit(EntityId),
-    Cancel,
-    Back,
-    CreateNew(RevenueCategory),
     RequestDelete(EntityId),
     CopyRevenueCategory(EntityId),
     EditRevenueCategory(EntityId),
-    Select(EntityId),
     SaveAll(EntityId, EditState),
-    UpdateMultiName(EntityId, String),
-    CreateNewMulti,
+    UpdateName(EntityId, String),
+    CreateNew,
     CancelEdit(EntityId),
-}
-
-#[derive(Debug, Clone)]
-pub enum Mode {
-    View,
-    Edit,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -134,16 +115,9 @@ impl RevenueCategory {
 }
 
 pub fn update(
-    category: &mut RevenueCategory,
     message: Message,
-    state: &mut EditState,
-    other_categories: &[&RevenueCategory]
 ) -> Action<Operation, Message> {
     match message {
-        Message::CreateNew => {
-            let new_revenue_category = RevenueCategory::default();
-            Action::operation(Operation::CreateNew(new_revenue_category))
-        },
         Message::RequestDelete(id) => {
             Action::operation(Operation::RequestDelete(id))
         },
@@ -154,30 +128,14 @@ pub fn update(
             println!("Editing ID: {}", id);
             Action::operation(Operation::EditRevenueCategory(id))
         }
-        Message::Select(id) => {
-            Action::operation(Operation::Select(id))
-        },
-        Message::UpdateId(id) => {
-            if let Ok(id) = id.parse() {
-                category.id = id;
-                Action::none()
-            } else {
-                state.id_validation_error = Some("Invalid ID format".to_string());
-                Action::none()
-            }
-        }
-        Message::UpdateName(name) => {
-            category.name = name;
-            Action::none()
-        }
-        Message::CreateNewMulti => {
-            Action::operation(Operation::CreateNewMulti)
+        Message::CreateNew => {
+            Action::operation(Operation::CreateNew)
         }
         Message::SaveAll(id, edit_state) => {
             Action::operation(Operation::SaveAll(id, edit_state))
         }
-        Message::UpdateMultiName(id, new_name) => {
-            Action::operation(Operation::UpdateMultiName(id, new_name))
+        Message::UpdateName(id, new_name) => {
+            Action::operation(Operation::UpdateName(id, new_name))
         }
         Message::CancelEdit(id) => {
             Action::operation(Operation::CancelEdit(id))
@@ -191,7 +149,7 @@ pub fn view<'a>(
 ) -> Element<'a, Message> {
     entity_component::entity_view(
         "Revenue Categories",
-        Message::CreateNewMulti,
+        Message::CreateNew,
         all_categories,
         edit_states,
         |category, edit_states| render_category_row(category, edit_states),
@@ -210,7 +168,7 @@ fn render_category_row<'a>(
         Message::CopyRevenueCategory,
         Message::RequestDelete,
         Message::CancelEdit,
-        Message::UpdateMultiName,
+        Message::UpdateName,
         "Revenue Category Name"
     )
 }

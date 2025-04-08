@@ -69,7 +69,7 @@ pub enum Screen {
     ProductClasses,
     TaxGroups,
     SecurityLevels,
-    RevenueCategories(revenue_categories::Mode),
+    RevenueCategories,
     ReportCategories(report_categories::Mode),
     ChoiceGroups(choice_groups::Mode),
     PrinterLogicals(printer_logicals::Mode),
@@ -127,8 +127,7 @@ pub struct MenuBuilder {
     toggle_theme: bool,
     printer_logical_edit_state_vec: Vec<entity_component::EditState>,
     choice_group_edit_state_vec: Vec<entity_component::EditState>,
-    security_level_edit_state_vec: Vec<entity_component::EditState>,
-    revenue_category_edit_state_vec: Vec<entity_component::EditState>,
+    
     report_category_edit_state_vec: Vec<entity_component::EditState>,
 
     // Items
@@ -157,17 +156,11 @@ pub struct MenuBuilder {
  
     // Security Levels
     security_levels: BTreeMap<EntityId, SecurityLevel>,
-/*     draft_security_level: SecurityLevel,
-    draft_security_level_id: Option<EntityId>,
-    selected_security_level_id: Option<EntityId>,
-    security_level_edit_state: entity_component::EditState, */
- 
+    security_level_edit_state_vec: Vec<entity_component::EditState>,
+
     // Revenue Categories
     revenue_categories: BTreeMap<EntityId, RevenueCategory>,
-    draft_revenue_category: RevenueCategory,
-    draft_revenue_category_id: Option<EntityId>,
-    selected_revenue_category_id: Option<EntityId>,
-    revenue_category_edit_state: entity_component::EditState,
+    revenue_category_edit_state_vec: Vec<entity_component::EditState>,
  
     // Report Categories
     report_categories: BTreeMap<EntityId, ReportCategory>,
@@ -213,9 +206,7 @@ pub struct MenuBuilder {
             toggle_theme: true,
             printer_logical_edit_state_vec: Vec::new(),
             choice_group_edit_state_vec: Vec::new(),
-            security_level_edit_state_vec: Vec::new(),
-            revenue_category_edit_state_vec: Vec::new(),
-            report_category_edit_state_vec: Vec::new(),
+            revenue_category_edit_state_vec: Vec::new(), 
 
             // Items
             items: BTreeMap::new(),
@@ -243,17 +234,11 @@ pub struct MenuBuilder {
  
             // Security Levels
             security_levels: BTreeMap::new(),
-/*             draft_security_level: SecurityLevel::default(),
-            draft_security_level_id: None,
-            selected_security_level_id: None,
-            security_level_edit_state: entity_component::EditState::default(), */
+            security_level_edit_state_vec: Vec::new(),
  
             // Revenue Categories
             revenue_categories: BTreeMap::new(),
-            draft_revenue_category: RevenueCategory::default(),
-            draft_revenue_category_id: None,
-            selected_revenue_category_id: None,
-            revenue_category_edit_state: entity_component::EditState::default(),
+            report_category_edit_state_vec: Vec::new(),
  
             // Report Categories
             report_categories: BTreeMap::new(),
@@ -527,61 +512,22 @@ impl MenuBuilder {
             Message::RevenueCategories(id, msg) => {
                 let cloned_revenue_categories = self.revenue_categories.clone();
 
-                if id < 0 {  // New Revenue Category case
-                    let other_revenue_categories: Vec<&RevenueCategory> = cloned_revenue_categories
-                        .values()
-                        .filter(|rc| rc.id != id)
-                        .collect();
-    
-                    let action = revenue_categories::update(
-                        &mut self.draft_revenue_category, 
-                        msg, 
-                        &mut self.revenue_category_edit_state,
-                        &other_revenue_categories
-                    )
+                let other_revenue_categories: Vec<&RevenueCategory> = cloned_revenue_categories
+                    .values()
+                    .filter(|rc| rc.id != id)
+                    .collect();
+
+                let action = revenue_categories::update(msg)
                     .map_operation(move |o| Operation::RevenueCategories(id, o))
                     .map(move |m| Message::RevenueCategories(id, m));
-    
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
+
+                let operation_task = if let Some(operation) = action.operation {
+                    self.perform(operation)
                 } else {
-                    let revenue_category = if let Some(draft_id) = self.draft_revenue_category_id {
-                        if draft_id == id {
-                            &mut self.draft_revenue_category
-                        } else {
-                            self.revenue_categories.get_mut(&id).expect("Revenue Category should exist")
-                        }
-                    } else {
-                        self.revenue_categories.get_mut(&id).expect("Revenue Category should exist")
-                    };
-    
-                    let other_revenue_categories: Vec<&RevenueCategory> = cloned_revenue_categories
-                        .values()
-                        .filter(|rc| rc.id != id)
-                        .collect();
-    
-                    let action = revenue_categories::update(
-                        revenue_category, 
-                        msg, 
-                        &mut self.revenue_category_edit_state,
-                        &other_revenue_categories
-                    )
-                    .map_operation(move |o| Operation::RevenueCategories(id, o))
-                    .map(move |m| Message::RevenueCategories(id, m));
-    
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
-                }
+                    Task::none()
+                };
+
+                operation_task.chain(action.task)
             },
             Message::ReportCategories(id, msg) => {
                 let cloned_report_categories = self.report_categories.clone();
@@ -903,8 +849,7 @@ impl MenuBuilder {
 
                         // Delete the revenue category
                         self.revenue_categories.remove(&deletion_info.entity_id);
-                        self.selected_revenue_category_id = None;
-                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
+                        self.screen = Screen::RevenueCategories;
                     }
                     "SecurityLevel" => {
                         // Find all items using this security level
@@ -1096,11 +1041,11 @@ impl MenuBuilder {
                         )
                     ),
                 button("Revenue Categories")
-                    .on_press(Message::Navigate(Screen::RevenueCategories(revenue_categories::Mode::View)))
+                    .on_press(Message::Navigate(Screen::RevenueCategories))
                     .width(Length::Fill)
                     .style(
                         Modern::conditional_button_style(
-                            matches!(self.screen, Screen::RevenueCategories(_)),
+                            matches!(self.screen, Screen::RevenueCategories),
                             Modern::selected_button_style(Modern::system_button()),
                             Modern::system_button()
                         )
@@ -1282,52 +1227,12 @@ impl MenuBuilder {
                 )
                 .map(move |msg| Message::SecurityLevels(-1, msg))
             }
-            Screen::RevenueCategories(mode) => {
-                if let Some(id) = self.selected_revenue_category_id {
-                    // Use the draft if its ID matches; otherwise, use the stored revenue category.
-                    let revenue_category = if self.draft_revenue_category_id == Some(id) {
-                        &self.draft_revenue_category
-                    } else {
-                        &self.revenue_categories[&id]
-                    };
-                
-                    revenue_categories::view(
-                        &self.revenue_categories,
-                        &self.revenue_category_edit_state_vec
-                    )
-                        .map(move |msg| Message::RevenueCategories(id, msg))
-                } else if let Some((&first_id, first_revenue_category)) = self.revenue_categories.iter().next() {
-                    // No selected revenue category, but there is at least one: show the view for the first one.
-                    revenue_categories::view(
-                        &self.revenue_categories,
-                        &self.revenue_category_edit_state_vec
-                    )
-                        .map(move |msg| Message::RevenueCategories(first_id.clone(), msg))
-                } else {
-                    // No selected revenue category and the collection is empty: show the empty state.
-                    container(
-                        column![
-                            text("Revenue Categories")
-                                .size(24)
-                                .width(Length::Fill),
-                            vertical_space(),
-                            text("No revenue categories have been created yet.")
-                                .width(Length::Fill),
-                            vertical_space(),
-                            button("Create New Revenue Category")
-                                .on_press(Message::RevenueCategories(-1, revenue_categories::Message::CreateNew))
-                                .style(button::primary)
-                        ]
-                        .spacing(10)
-                        .max_width(500)
-                    )
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill)
-                    .padding(30)
-                    .into()
-                }
+            Screen::RevenueCategories => {
+                revenue_categories::view(
+                    &self.revenue_categories,
+                    &self.revenue_category_edit_state_vec
+                )
+                .map(move |msg| Message::RevenueCategories(-1, msg))
             }
             Screen::ReportCategories(mode) => {
                 if let Some(id) = self.selected_report_category_id {
@@ -2230,66 +2135,7 @@ impl MenuBuilder {
             }    
             Operation::RevenueCategories(id, op) => {
                 match op {
-                    revenue_categories::Operation::Save(mut category) => {
-                        if category.id < 0 {
-                            let next_id = self.revenue_categories
-                                .keys()
-                                .max()
-                                .map_or(1, |max_id| max_id + 1);
-                            category.id = next_id;
-
-                            self.revenue_categories.insert(next_id, category.clone());
-                            self.draft_revenue_category_id = None;
-                            self.draft_revenue_category = RevenueCategory::default();
-                            self.selected_revenue_category_id = Some(next_id);
-                        } else {
-                            self.revenue_categories.insert(category.id, category.clone());
-                            self.selected_revenue_category_id = Some(category.id);
-                        }
-                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
-
-                        if let Err(e) = self.save_state() {
-                            self.error_message = Some(e);
-                        } else {
-                            self.error_message = None;
-                        }
-
-                        Task::none()
-                    }
-                    revenue_categories::Operation::StartEdit(id) => {
-                        // Start editing an existing revenue category
-                        self.draft_revenue_category_id = Some(id);
-                        self.draft_revenue_category = self.revenue_categories[&id].clone();
-                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::Edit);
-                        Task::none()
-                    }
-                    revenue_categories::Operation::Cancel => {
-                        if self.draft_revenue_category_id.is_some() {
-                            self.draft_revenue_category_id = None;
-                            self.draft_revenue_category = RevenueCategory::default();
-                        }
-                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
-                        Task::none()
-                    }
-                    revenue_categories::Operation::Back => {
-                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
-                        Task::none()
-                    }
-                    revenue_categories::Operation::CreateNew(mut revenue_category) => {
-                        let next_id = self.revenue_categories
-                            .keys()
-                            .max()
-                            .map_or(1, |max_id| max_id + 1);
-                        revenue_category.id = next_id;
-
-                        self.draft_revenue_category = revenue_category;
-                        self.draft_revenue_category_id = Some(-1);
-                        self.selected_revenue_category_id = Some(-1);
-                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::Edit);
-                        Task::none()
-                    },
                     revenue_categories::Operation::RequestDelete(id) => {
-                        println!("Deleting RevenueCategory id: {}", id);
                         self.deletion_info = data_types::DeletionInfo { 
                            entity_type: "RevenueCategory".to_string(),
                            entity_id: id,
@@ -2299,7 +2145,6 @@ impl MenuBuilder {
                        Task::none()
                    }
                     revenue_categories::Operation::CopyRevenueCategory(id) => {
-                       println!("Copying RevenueCategory: {}", id);
                         let copy_item = self.revenue_categories.get(&id).unwrap();
                        let next_id = self.revenue_categories
                            .keys()
@@ -2313,15 +2158,11 @@ impl MenuBuilder {
                        };
 
                        self.revenue_categories.insert(next_id, new_item.clone());
-                       self.draft_revenue_category_id = Some(next_id);
-                       self.draft_revenue_category = new_item;
-                       self.selected_revenue_category_id = Some(next_id);
-                       self.screen = Screen::RevenueCategories(revenue_categories::Mode::Edit);
+                       self.screen = Screen::RevenueCategories;
 
                        Task::none()
                    }
                    revenue_categories::Operation::EditRevenueCategory(id) => {
-                    println!("Edit Choice Group Operation on id: {}", id);
                     // First check if we already have an edit state for this revenue_category
                     let already_editing = self.revenue_category_edit_state_vec
                         .iter()
@@ -2342,14 +2183,9 @@ impl MenuBuilder {
                         }
                     }
 
-                    self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
+                    self.screen = Screen::RevenueCategories;
                     Task::none()
                    },
-                    revenue_categories::Operation::Select(id) => {
-                        self.selected_revenue_category_id = Some(id);
-                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
-                        Task::none()
-                    },
                     revenue_categories::Operation::SaveAll(id, edit_state) => {
                         // First, find the edit state for this revenue_category
                         if let Some(edit_state) = self.revenue_category_edit_state_vec
@@ -2369,11 +2205,10 @@ impl MenuBuilder {
                         edit.id.parse::<i32>().unwrap() != id
                         });
 
-                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
+                        self.screen = Screen::RevenueCategories;
                         Task::none()
                     },
-                    revenue_categories::Operation::UpdateMultiName(id, new_name) => {
-                        println!("MultinameEdit on id: {}", id);
+                    revenue_categories::Operation::UpdateName(id, new_name) => {
                         if let Some(edit_state) = self.revenue_category_edit_state_vec
                         .iter_mut()
                         .find(|state| state.id.parse::<i32>().unwrap() == id) 
@@ -2381,10 +2216,10 @@ impl MenuBuilder {
                             edit_state.name = new_name;
                         }
     
-                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
+                        self.screen = Screen::RevenueCategories;
                         Task::none()
                     },
-                    revenue_categories::Operation::CreateNewMulti => {
+                    revenue_categories::Operation::CreateNew => {
                         let next_id = self.revenue_categories
                             .keys()
                             .max()
@@ -2428,7 +2263,7 @@ impl MenuBuilder {
                         state.id.parse::<i32>().unwrap() != id
                         });
 
-                        self.screen = Screen::RevenueCategories(revenue_categories::Mode::View);
+                        self.screen = Screen::RevenueCategories;
                         Task::none()
                     },
                 }
