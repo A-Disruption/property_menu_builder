@@ -7,40 +7,24 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    CreateNew,
     RequestDelete(EntityId),
     CopyPrinterLogical(EntityId),
     EditPrinterLogical(EntityId),
-    UpdateId(String),
-    UpdateName(String),
-    Select(EntityId),
     SaveMultiTest(EntityId, EditState),
-    UpdateMultiName(EntityId, String),
-    CreateNewMulti,
+    UpdateName(EntityId, String),
+    CreateNew,
     CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
 pub enum Operation {
-    Save(PrinterLogical),
-    StartEdit(EntityId),
-    Cancel,
-    Back,
-    CreateNew(PrinterLogical),
     RequestDelete(EntityId),
     CopyPrinterLogical(EntityId),
     EditPrinterLogical(EntityId),
-    Select(EntityId),
     SaveMultiTest(EntityId, EditState),
-    UpdateMultiName(EntityId, String),
-    CreateNewMulti,
+    UpdateName(EntityId, String),
+    CreateNew,
     CancelEdit(EntityId),
-}
-
-#[derive(Debug, Clone)]
-pub enum Mode {
-    View,
-    Edit,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -131,16 +115,9 @@ impl PrinterLogical {
 }
 
 pub fn update(
-    printer: &mut PrinterLogical,
     message: Message,
-    state: &mut EditState,
-    other_printers: &[&PrinterLogical]
 ) -> Action<Operation, Message> {
     match message {
-        Message::CreateNew => {
-            let new_printer_logical = PrinterLogical::default();
-            Action::operation(Operation::CreateNew(new_printer_logical))
-        },
         Message::RequestDelete(id) => {
             Action::operation(Operation::RequestDelete(id))
         },
@@ -151,30 +128,14 @@ pub fn update(
             println!("Editing ID: {}", id);
             Action::operation(Operation::EditPrinterLogical(id))
         }
-        Message::Select(id) => {
-            Action::operation(Operation::Select(id))
-        },
-        Message::UpdateId(id) => {
-            if let Ok(id) = id.parse() {
-                printer.id = id;
-                Action::none()
-            } else {
-                state.id_validation_error = Some("Invalid ID format".to_string());
-                Action::none()
-            }
-        }
-        Message::UpdateName(name) => {
-            printer.name = name;
-            Action::none()
-        }
-        Message::CreateNewMulti => {
-            Action::operation(Operation::CreateNewMulti)
+        Message::CreateNew => {
+            Action::operation(Operation::CreateNew)
         }
         Message::SaveMultiTest(id, edit_state) => {
             Action::operation(Operation::SaveMultiTest(id, edit_state))
         }
-        Message::UpdateMultiName(id, new_name) => {
-            Action::operation(Operation::UpdateMultiName(id, new_name))
+        Message::UpdateName(id, new_name) => {
+            Action::operation(Operation::UpdateName(id, new_name))
         }
         Message::CancelEdit(id) => {
             Action::operation(Operation::CancelEdit(id))
@@ -188,7 +149,7 @@ pub fn view<'a>(
 ) -> Element<'a, Message> {
     entity_component::entity_view(
         "Printer Logicals",
-        Message::CreateNewMulti,
+        Message::CreateNew,
         all_printers,
         edit_states,
         |printer, edit_states| render_printer_row(printer, edit_states),
@@ -207,7 +168,7 @@ fn render_printer_row<'a>(
         Message::CopyPrinterLogical,
         Message::RequestDelete,
         Message::CancelEdit,
-        Message::UpdateMultiName,
+        Message::UpdateName,
         "Printer Name"
     )
 }

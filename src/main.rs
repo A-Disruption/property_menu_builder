@@ -72,7 +72,7 @@ pub enum Screen {
     RevenueCategories,
     ReportCategories,
     ChoiceGroups,
-    PrinterLogicals(printer_logicals::Mode),
+    PrinterLogicals,
 }
 
 #[derive(Debug, Clone)]
@@ -125,8 +125,6 @@ pub struct MenuBuilder {
     show_modal: bool,
     error_message: Option<String>,
     toggle_theme: bool,
-    printer_logical_edit_state_vec: Vec<entity_component::EditState>,
-    
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -170,11 +168,7 @@ pub struct MenuBuilder {
  
     // Printer Logicals
     printer_logicals: BTreeMap<EntityId, PrinterLogical>,
-    draft_printer: PrinterLogical,
-    draft_printer_id: Option<EntityId>,
-    selected_printer_id: Option<EntityId>,
-    printer_edit_state: entity_component::EditState,
-
+    printer_logical_edit_state_vec: Vec<entity_component::EditState>,
  }
  
  impl Default for MenuBuilder {
@@ -196,8 +190,6 @@ pub struct MenuBuilder {
             deletion_info: data_types::DeletionInfo::new(),
             error_message: None,
             toggle_theme: true,
-            printer_logical_edit_state_vec: Vec::new(),
-            
 
             // Items
             items: BTreeMap::new(),
@@ -241,10 +233,7 @@ pub struct MenuBuilder {
  
             // Printer Logicals
             printer_logicals: BTreeMap::new(),
-            draft_printer: PrinterLogical::default(),
-            draft_printer_id: None,
-            selected_printer_id: None,
-            printer_edit_state: entity_component::EditState::default(),
+            printer_logical_edit_state_vec: Vec::new(),
         }
     }
  }
@@ -558,63 +547,22 @@ impl MenuBuilder {
             Message::PrinterLogicals(id, msg) => {
                 let cloned_printers = self.printer_logicals.clone();
 
-                if id < 0 {  // New Choice Group case
-                    // Get other printers for validation
-                    let other_printers: Vec<&PrinterLogical> = cloned_printers
-                        .values()
-                        .filter(|p| p.id != id)
-                        .collect();
-                
-                    let action = printer_logicals::update(
-                        &mut self.draft_printer, 
-                        msg, 
-                        &mut self.printer_edit_state,
-                        &other_printers
-                    )
+                let other_printers: Vec<&PrinterLogical> = cloned_printers
+                    .values()
+                    .filter(|p| p.id != id)
+                    .collect();
+            
+                let action = printer_logicals::update(msg)
                     .map_operation(move |o| Operation::PrinterLogicals(id, o))
                     .map(move |m| Message::PrinterLogicals(id, m));
-                
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-                
-                    operation_task.chain(action.task)
+            
+                let operation_task = if let Some(operation) = action.operation {
+                    self.perform(operation)
                 } else {
-                        let printer = if let Some(draft_id) = self.draft_printer_id {
-                        if draft_id == id {
-                            &mut self.draft_printer
-                        } else {
-                            self.printer_logicals.get_mut(&id).expect("Printer should exist")
-                        }
-                    } else {
-                        self.printer_logicals.get_mut(&id).expect("Printer should exist")
-                    };
-                
-                    // Get other printers for validation
-                    let other_printers: Vec<&PrinterLogical> = cloned_printers
-                        .values()
-                        .filter(|p| p.id != id)
-                        .collect();
-                
-                    let action = printer_logicals::update(
-                        printer, 
-                        msg, 
-                        &mut self.printer_edit_state,
-                        &other_printers
-                    )
-                    .map_operation(move |o| Operation::PrinterLogicals(id, o))
-                    .map(move |m| Message::PrinterLogicals(id, m));
-                
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-                
-                    operation_task.chain(action.task)
-                }
+                    Task::none()
+                };
+            
+                operation_task.chain(action.task)
             }
             Message::Navigate(screen) => {
                 self.screen = screen;
@@ -707,8 +655,7 @@ impl MenuBuilder {
 
                         // Delete the printer logical
                         self.printer_logicals.remove(&deletion_info.entity_id);
-                        self.selected_printer_id = None;
-                        self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
+                        self.screen = Screen::PrinterLogicals;
                     }
                     "ProductClass" => {
                         // Find all items using this product class
@@ -975,11 +922,11 @@ impl MenuBuilder {
                         )
                     ),
                 button("Printer Logicals")
-                    .on_press(Message::Navigate(Screen::PrinterLogicals(printer_logicals::Mode::View)))
+                    .on_press(Message::Navigate(Screen::PrinterLogicals))
                     .width(Length::Fill)
                     .style(
                         Modern::conditional_button_style(
-                            matches!(self.screen, Screen::PrinterLogicals(_)),
+                            matches!(self.screen, Screen::PrinterLogicals),
                             Modern::selected_button_style(Modern::system_button()),
                             Modern::system_button()
                         )
@@ -1098,52 +1045,45 @@ impl MenuBuilder {
             Screen::ItemGroups => {
                 item_groups::view(
                     &self.item_groups,
-                    &self.item_group_edit_state_vec
-                )
+                    &self.item_group_edit_state_vec)
                 .map(move |msg| Message::ItemGroups(-1, msg)) // Default ID for new messages
             }
             Screen::PriceLevels => {
                 price_levels::view(
                     &self.price_levels,
-                    &self.price_level_edit_state_vec
-                )
+                    &self.price_level_edit_state_vec)
                 .map(move |msg| Message::PriceLevels(-1, msg))
             }
             Screen::ProductClasses => {
 
                 product_classes::view(
                     &self.product_classes,
-                    &self.product_class_edit_state_vec
-                )
+                    &self.product_class_edit_state_vec)
                 .map(move |msg| Message::ProductClasses(-1, msg))
             }
             Screen::TaxGroups => {
                 tax_groups::view(
                     &self.tax_groups,
-                    &self.tax_group_edit_state_vec
-                )
+                    &self.tax_group_edit_state_vec)
                 .map(move |msg| Message::TaxGroups(-1, msg))
             }
             Screen::SecurityLevels => {
                 security_levels::view(
                     &self.security_levels,
-                    &self.security_level_edit_state_vec
-                )
+                    &self.security_level_edit_state_vec)
                 .map(move |msg| Message::SecurityLevels(-1, msg))
             }
             Screen::RevenueCategories => {
                 revenue_categories::view(
                     &self.revenue_categories,
-                    &self.revenue_category_edit_state_vec
-                )
+                    &self.revenue_category_edit_state_vec)
                 .map(move |msg| Message::RevenueCategories(-1, msg))
             }
             Screen::ReportCategories => {
 
                 report_categories::view(
                     &self.report_categories,
-                    &self.report_category_edit_state_vec
-                )
+                    &self.report_category_edit_state_vec)
                 .map(move |msg| Message::ReportCategories(-1, msg))
             }
             Screen::ChoiceGroups => {
@@ -1152,53 +1092,11 @@ impl MenuBuilder {
                     &self.choice_group_edit_state_vec)
                 .map(move |msg| Message::ChoiceGroups(-1, msg))
             }
-            Screen::PrinterLogicals(mode) => {
-                if let Some(id) = self.selected_printer_id {
-                    // Use the draft if its ID matches; otherwise, use the stored printer logical.
-                    let printer = if self.draft_printer_id == Some(id) {
-                        &self.draft_printer
-                    } else {
-                        &self.printer_logicals[&id]
-                    };
-                
-                    printer_logicals::view(
-                        &self.printer_logicals, 
-                        &self.printer_logical_edit_state_vec)
-                        .map(move |msg| Message::PrinterLogicals(id, msg))
-                } else if let Some((&first_id, first_printer)) = self.printer_logicals.iter().next() {
-                    // No selected printer, but there is at least one available: show its view.
-                    printer_logicals::view(
-                        &self.printer_logicals, 
-                        &self.printer_logical_edit_state_vec)
-                        .map(move |msg| Message::PrinterLogicals(first_id.clone(), msg))
-                } else {
-                    // No selected printer and no printer logicals available: show the empty state.
-                    container(
-                        column![
-                            text("Printer Logicals")
-                                .size(24)
-                                .width(Length::Fill),
-                            vertical_space(),
-                            text("No printer logicals have been created yet.")
-                                .width(Length::Fill),
-                            vertical_space(),
-                            button("Create New Printer Logical")
-                                .on_press(Message::PrinterLogicals(
-                                    -1,
-                                    printer_logicals::Message::CreateNew,
-                                ))
-                                .style(button::primary)
-                        ]
-                        .spacing(10)
-                        .max_width(500)
-                    )
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill)
-                    .padding(30)
-                    .into()
-                }
+            Screen::PrinterLogicals => {
+                printer_logicals::view(
+                    &self.printer_logicals, 
+                    &self.printer_logical_edit_state_vec)
+                .map(move |msg| Message::PrinterLogicals(-1, msg))
             }
         };
 
@@ -2497,67 +2395,7 @@ impl MenuBuilder {
                 },
             },    
             Operation::PrinterLogicals(id, op) => match op {
-                printer_logicals::Operation::Save(mut printer) => {
-
-                    if printer.id < 0 {
-                        let next_id = self.printer_logicals
-                            .keys()
-                            .max()
-                            .map_or(1, |max_id| max_id + 1);
-                        printer.id = next_id;
-
-                        self.printer_logicals.insert(next_id, printer.clone());
-                        self.draft_printer_id = None;
-                        self.draft_printer = PrinterLogical::default();
-                        self.selected_printer_id = Some(next_id);
-                    } else {
-                        self.printer_logicals.insert(printer.id, printer.clone());
-                        self.selected_printer_id = Some(printer.id);
-                    }
-                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
-
-                    if let Err(e) = self.save_state() {
-                        self.error_message = Some(e);
-                    } else {
-                        self.error_message = None;
-                    }
-
-                    Task::none()
-                 }
-                 printer_logicals::Operation::StartEdit(printer_id) => {
-                    // Start editing existing printer
-                    self.draft_printer_id = Some(printer_id);
-                    self.draft_printer = self.printer_logicals[&printer_id].clone();
-                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::Edit);
-                    Task::none()
-                 }
-                 printer_logicals::Operation::Cancel => {
-                    if self.draft_printer_id.is_some() {
-                        self.draft_printer_id = None;
-                        self.draft_printer = PrinterLogical::default();
-                    }
-                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
-                    Task::none()
-                 }
-                 printer_logicals::Operation::Back => {
-                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
-                    Task::none()
-                 }
-                 printer_logicals::Operation::CreateNew(mut printer_logical) => {
-                    let next_id = self.printer_logicals
-                            .keys()
-                            .max()
-                            .map_or(1, |max_id| max_id + 1);
-                    printer_logical.id = next_id;
-                    
-                    self.draft_printer = printer_logical;
-                    self.draft_printer_id = Some(next_id);
-                    self.selected_printer_id = Some(next_id);
-                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::Edit);
-                    Task::none()
-                 },
                  printer_logicals::Operation::RequestDelete(id) => {
-                    println!("Deleting PrinterLogical id: {}", id);
                         self.deletion_info = data_types::DeletionInfo { 
                        entity_type: "PrinterLogical".to_string(),
                        entity_id: id,
@@ -2567,7 +2405,6 @@ impl MenuBuilder {
                    Task::none()
                 }
                 printer_logicals::Operation::CopyPrinterLogical(id) => {
-                   println!("Copying PrinterLogical: {}", id);
                     let copy_item = self.printer_logicals.get(&id).unwrap();
                     let next_id = self.printer_logicals
                         .keys()
@@ -2581,15 +2418,11 @@ impl MenuBuilder {
                     };
 
                    self.printer_logicals.insert(next_id, new_item.clone());
-                   self.draft_printer_id = Some(next_id);
-                   self.draft_printer = new_item;
-                   self.selected_printer_id = Some(next_id);
-                   self.screen = Screen::PrinterLogicals(printer_logicals::Mode::Edit);
+                   self.screen = Screen::PrinterLogicals;
 
                    Task::none()
                 }
                 printer_logicals::Operation::EditPrinterLogical(id) => {
-                    println!("Edit Printer Operation on id: {}", id);
                     // First check if we already have an edit state for this printer
                     let already_editing = self.printer_logical_edit_state_vec
                         .iter()
@@ -2610,10 +2443,10 @@ impl MenuBuilder {
                         }
                     }
 
-                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
+                    self.screen = Screen::PrinterLogicals;
                     Task::none()
                 }
-                printer_logicals::Operation::CreateNewMulti => {
+                printer_logicals::Operation::CreateNew => {
                     let next_id = self.printer_logicals
                         .keys()
                         .max()
@@ -2642,11 +2475,6 @@ impl MenuBuilder {
 
                     Task::none()
                 }
-                printer_logicals::Operation::Select(printer_logical_id) => {
-                    self.selected_printer_id = Some(printer_logical_id);
-                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
-                    Task::none()
-                },
                 printer_logicals::Operation::SaveMultiTest(id, edit_state) => {
 
                     // First, find the edit state for this printer
@@ -2667,7 +2495,7 @@ impl MenuBuilder {
                         edit.id.parse::<i32>().unwrap() != id
                     });
 
-                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
+                    self.screen = Screen::PrinterLogicals;
                     Task::none()
                 }
                 printer_logicals::Operation::CancelEdit(id) => {
@@ -2685,11 +2513,10 @@ impl MenuBuilder {
                     state.id.parse::<i32>().unwrap() != id
                     });
 
-                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
+                    self.screen = Screen::PrinterLogicals;
                     Task::none()
                 }
-                printer_logicals::Operation::UpdateMultiName(id, new_name) => {
-                    println!("MultinameEdit on id: {}", id);
+                printer_logicals::Operation::UpdateName(id, new_name) => {
                     if let Some(edit_state) = self.printer_logical_edit_state_vec
                     .iter_mut()
                     .find(|state| state.id.parse::<i32>().unwrap() == id) 
@@ -2705,13 +2532,12 @@ impl MenuBuilder {
 
                     }
 
-                    self.screen = Screen::PrinterLogicals(printer_logicals::Mode::View);
+                    self.screen = Screen::PrinterLogicals;
                     Task::none()
                 }
             },
             Operation::PriceLevels(id, op) => match op {
                 price_levels::Operation::RequestDelete(id) => {
-                    println!("Deleting PriceLevel id: {}", id);
                         self.deletion_info = data_types::DeletionInfo { 
                        entity_type: "PriceLevel".to_string(),
                        entity_id: id,
@@ -2721,7 +2547,6 @@ impl MenuBuilder {
                    Task::none()
                }
                 price_levels::Operation::CopyPriceLevel(id) => {
-                    println!("Copying PriceLevel: {}", id);
                     let copy_item = self.price_levels.get(&id).unwrap();
                     let next_id = self.price_levels
                         .keys()
@@ -2740,7 +2565,6 @@ impl MenuBuilder {
                    Task::none()
                }
                 price_levels::Operation::EditPriceLevel(id) => {
-                    println!("Edit Price Level Operation on id: {}", id);
                     // First check if we already have an edit state for this price_level
                     let already_editing = self.price_level_edit_state_vec
                         .iter()
