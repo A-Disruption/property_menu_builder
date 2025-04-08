@@ -16,40 +16,24 @@ use rust_decimal::Decimal;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    CreateNew,
     RequestDelete(EntityId),
     CopyPriceLevel(EntityId),
     EditPriceLevel(EntityId),
-    UpdateId(String),
-    UpdateName(String),
-    Select(EntityId),
     SaveAll(EntityId, PriceLevelEditState),
-    UpdateMultiName(EntityId, String),
-    CreateNewMulti,
+    UpdateName(EntityId, String),
+    CreateNew,
     CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
 pub enum Operation {
-    Save(PriceLevel),
-    StartEdit(EntityId),
-    Cancel,
-    Back,
-    CreateNew(PriceLevel),
     RequestDelete(EntityId),
     CopyPriceLevel(EntityId),
     EditPriceLevel(EntityId),
-    Select(EntityId),
     SaveAll(EntityId, PriceLevelEditState),
-    UpdateMultiName(EntityId, String),
-    CreateNewMulti,
+    UpdateName(EntityId, String),
+    CreateNew,
     CancelEdit(EntityId),
-}
-
-#[derive(Debug, Clone)]
-pub enum Mode {
-    View,
-    Edit,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -212,16 +196,9 @@ impl PriceLevel {
 }
 
 pub fn update(
-    price_level: &mut PriceLevel,
     message: Message,
-    state: &mut PriceLevelEditState,
-    other_groups: &[&PriceLevel]
 ) -> Action<Operation, Message> {
     match message {
-        Message::CreateNew => {
-            let new_price_level = PriceLevel::default();
-            Action::operation(Operation::CreateNew(new_price_level))
-        },
         Message::RequestDelete(id) => {
             Action::operation(Operation::RequestDelete(id))
         },
@@ -231,30 +208,14 @@ pub fn update(
         Message::EditPriceLevel(id) => {
             Action::operation(Operation::EditPriceLevel(id))
         },
-        Message::Select(id) => {
-            Action::operation(Operation::Select(id))
-        },
-        Message::UpdateId(id) => {
-            if let Ok(id) = id.parse() {
-                price_level.id = id;
-                Action::none()
-            } else {
-                state.base.id_validation_error = Some("Invalid ID format".to_string());
-                Action::none()
-            }
-        },
-        Message::UpdateName(name) => {
-            price_level.name = name;
-            Action::none()
-        },
-        Message::CreateNewMulti => {
-            Action::operation(Operation::CreateNewMulti)
+        Message::CreateNew => {
+            Action::operation(Operation::CreateNew)
         },
         Message::SaveAll(id, edit_state) => {
             Action::operation(Operation::SaveAll(id, edit_state))
         }
-        Message::UpdateMultiName(id, new_name) => {
-            Action::operation(Operation::UpdateMultiName(id, new_name))
+        Message::UpdateName(id, new_name) => {
+            Action::operation(Operation::UpdateName(id, new_name))
         }
         Message::CancelEdit(id) => {
             Action::operation(Operation::CancelEdit(id))
@@ -268,7 +229,7 @@ pub fn view<'a>(
 ) -> Element<'a, Message> {
     let title_row = entity_component::render_title_row(
         "Price Levels", 
-        Message::CreateNewMulti,
+        Message::CreateNew,
         505.0 // view width
     );
 
@@ -351,7 +312,7 @@ fn render_price_level_row<'a>(
         let input = text_input("Item Group Name", &display_name)
             .on_input_maybe(
                 if editing {
-                    Some(|name| Message::UpdateMultiName(price_level.id, name))
+                    Some(|name| Message::UpdateName(price_level.id, name))
                 } else {
                     None
                 }

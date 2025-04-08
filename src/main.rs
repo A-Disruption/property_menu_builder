@@ -65,7 +65,7 @@ pub enum Screen {
     Settings(settings::AppSettings),
     Items(items::Mode),
     ItemGroups,
-    PriceLevels(price_levels::Mode),
+    PriceLevels,
     ProductClasses(product_classes::Mode),
     TaxGroups(tax_groups::Mode),
     SecurityLevels(security_levels::Mode),
@@ -120,7 +120,6 @@ pub struct MenuBuilder {
     screen: Screen,
     settings: settings::AppSettings,
     theme: iced::Theme,
-    //theme: iced_modern_theme::theme::Modern,
     file_manager: persistence::FileManager,
     deletion_info: data_types::DeletionInfo,
     show_modal: bool,
@@ -132,7 +131,6 @@ pub struct MenuBuilder {
     security_level_edit_state_vec: Vec<entity_component::EditState>,
     revenue_category_edit_state_vec: Vec<entity_component::EditState>,
     report_category_edit_state_vec: Vec<entity_component::EditState>,
-    price_level_edit_state_vec: Vec<price_levels::PriceLevelEditState>,
     tax_group_edit_state_vec: Vec<tax_groups::TaxGroupEditState>,
 
     // Items
@@ -149,11 +147,8 @@ pub struct MenuBuilder {
  
     // Price Levels
     price_levels: BTreeMap<EntityId, PriceLevel>,
-    draft_price_level: PriceLevel,
-    draft_price_level_id: Option<EntityId>,
-    selected_price_level_id: Option<EntityId>,
-    price_level_edit_state: price_levels::PriceLevelEditState,
- 
+    price_level_edit_state_vec: Vec<price_levels::PriceLevelEditState>,
+
     // Product Classes
     product_classes: BTreeMap<EntityId, ProductClass>,
     draft_product_class: ProductClass,
@@ -218,7 +213,6 @@ pub struct MenuBuilder {
         Self {
             screen: Screen::Items(items::Mode::View),
             settings: settings::AppSettings::default(),
-            //theme: iced::Theme::SolarizedDark,
             theme: iced_modern_theme::Modern::dark_theme(),
             file_manager: file_manager,
             show_modal: false,
@@ -231,8 +225,6 @@ pub struct MenuBuilder {
             security_level_edit_state_vec: Vec::new(),
             revenue_category_edit_state_vec: Vec::new(),
             report_category_edit_state_vec: Vec::new(),
-            item_group_edit_state_vec: Vec::new(),
-            price_level_edit_state_vec: Vec::new(),
             tax_group_edit_state_vec: Vec::new(),
             
 
@@ -246,13 +238,11 @@ pub struct MenuBuilder {
  
             // Item Groups
             item_groups: BTreeMap::new(),
- 
+            item_group_edit_state_vec: Vec::new(),
+
             // Price Levels 
             price_levels: BTreeMap::new(),
-            draft_price_level: PriceLevel::default(),
-            draft_price_level_id: None,
-            selected_price_level_id: None,
-            price_level_edit_state: price_levels::PriceLevelEditState::default(),
+            price_level_edit_state_vec: Vec::new(),
  
             // Product Classes
             product_classes: BTreeMap::new(),
@@ -477,61 +467,24 @@ impl MenuBuilder {
             Message::PriceLevels(id, msg) => {
                 let cloned_price_levels = self.price_levels.clone();
 
-                if id < 0 {  // New price level case
-                    let other_price_levels: Vec<&PriceLevel> = cloned_price_levels
-                        .values()
-                        .filter(|pl| pl.id != id)
-                        .collect();
-    
-                    let action = price_levels::update(
-                        &mut self.draft_price_level, 
-                        msg, 
-                        &mut self.price_level_edit_state,
-                        &other_price_levels
-                    )
-                        .map_operation(move |o| Operation::PriceLevels(id, o))
-                        .map(move |m| Message::PriceLevels(id, m));
-    
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
+                let other_price_levels: Vec<&PriceLevel> = cloned_price_levels
+                    .values()
+                    .filter(|pl| pl.id != id)
+                    .collect();
+
+                let action = price_levels::update(
+                    msg
+                )
+                .map_operation(move |o| Operation::PriceLevels(id, o))
+                .map(move |m| Message::PriceLevels(id, m));
+
+                let operation_task = if let Some(operation) = action.operation {
+                    self.perform(operation)
                 } else {
-                    let price_level = if let Some(draft_id) = self.draft_price_level_id {
-                        if draft_id == id {
-                            &mut self.draft_price_level
-                        } else {
-                            self.price_levels.get_mut(&id).expect("Price Level should exist")
-                        }
-                    } else {
-                        self.price_levels.get_mut(&id).expect("Price Level should exist")
-                    };
-    
-                    let other_price_levels: Vec<&PriceLevel> = cloned_price_levels
-                        .values()
-                        .filter(|pl| pl.id != id)
-                        .collect();
-    
-                    let action = price_levels::update(
-                        price_level, 
-                        msg, 
-                        &mut self.price_level_edit_state,
-                        &other_price_levels
-                    )
-                        .map_operation(move |o| Operation::PriceLevels(id, o))
-                        .map(move |m| Message::PriceLevels(id, m));
-    
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
-                }
+                    Task::none()
+                };
+                
+                operation_task.chain(action.task)
             },
             Message::ProductClasses(id, msg) => {
                 let cloned_product_classes = self.product_classes.clone();
@@ -1027,8 +980,7 @@ impl MenuBuilder {
 
                         // Delete the price level
                         self.price_levels.remove(&deletion_info.entity_id);
-                        self.selected_price_level_id = None;
-                        self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                        self.screen = Screen::PriceLevels;
                     }
                     "PrinterLogical" => {
                         // Clean up references in all items
@@ -1249,11 +1201,11 @@ impl MenuBuilder {
                         )
                     ),
                 button("Price Levels")
-                    .on_press(Message::Navigate(Screen::PriceLevels(price_levels::Mode::View)))
+                    .on_press(Message::Navigate(Screen::PriceLevels))
                     .width(Length::Fill)
                     .style(
                         Modern::conditional_button_style(
-                            matches!(self.screen, Screen::PriceLevels(_)),
+                            matches!(self.screen, Screen::PriceLevels),
                             Modern::selected_button_style(Modern::system_button()),
                             Modern::system_button()
                         )
@@ -1446,52 +1398,12 @@ impl MenuBuilder {
                 )
                 .map(move |msg| Message::ItemGroups(-1, msg)) // Default ID for new messages
             }
-            Screen::PriceLevels(mode) => {
-                if let Some(id) = self.selected_price_level_id {
-                    // Use the draft if its ID matches; otherwise, use the stored price level.
-                    let price_level = if self.draft_price_level_id == Some(id) {
-                        &self.draft_price_level
-                    } else {
-                        &self.price_levels[&id]
-                    };
-                
-                    price_levels::view(
-                        &self.price_levels,
-                        &self.price_level_edit_state_vec
-                    )
-                        .map(move |msg| Message::PriceLevels(id, msg))
-                } else if let Some((&first_id, first_price_level)) = self.price_levels.iter().next() {
-                    // No selected price level, but there is at least one: show the first one.
-                    price_levels::view( 
-                        &self.price_levels,
-                        &self.price_level_edit_state_vec
-                    )
-                        .map(move |msg| Message::PriceLevels(first_id.clone(), msg))
-                } else {
-                    // No selected price level and the collection is empty: show the empty state.
-                    container(
-                        column![
-                            text("Price Levels")
-                                .size(24)
-                                .width(Length::Fill),
-                            vertical_space(),
-                            text("No price levels have been created yet.")
-                                .width(Length::Fill),
-                            vertical_space(),
-                            button("Create New Price Level")
-                                .on_press(Message::PriceLevels(-1, price_levels::Message::CreateNew))
-                                .style(button::primary)
-                        ]
-                        .spacing(10)
-                        .max_width(500)
-                    )
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill)
-                    .padding(30)
-                    .into()
-                }
+            Screen::PriceLevels => {
+                price_levels::view(
+                    &self.price_levels,
+                    &self.price_level_edit_state_vec
+                )
+                    .map(move |msg| Message::PriceLevels(-1, msg))
             }
             Screen::ProductClasses(mode) => {
                 if let Some(id) = self.selected_product_class_id {
@@ -3771,65 +3683,6 @@ impl MenuBuilder {
                 }
             },
             Operation::PriceLevels(id, op) => match op {
-                price_levels::Operation::Save(mut level) => {
-                    if level.id < 0 {
-                        let next_id = self.price_levels
-                            .keys()
-                            .max()
-                            .map_or(1, |max_id| max_id + 1);
-                        level.id = next_id;
-
-                        self.price_levels.insert(id, level);
-                        self.draft_price_level_id = None;
-                        self.draft_price_level = PriceLevel::default();
-                        self.selected_price_level_id = Some(next_id);
-                    } else {
-                        self.price_levels.insert(level.id, level.clone());
-                        self.selected_price_level_id = Some(level.id);
-                    }
-                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
-
-                    if let Err(e) = self.save_state() {
-                        self.error_message = Some(e);
-                    } else {
-                        self.error_message = None;
-                    }
-                    
-                    Task::none()
-                }
-                price_levels::Operation::StartEdit(id) => {
-                    //start editing existing price level
-                    self.draft_price_level_id = Some(id);
-                    self.draft_price_level = self.price_levels[&id].clone();
-                    self.screen = Screen::PriceLevels(price_levels::Mode::Edit);
-                    Task::none()
-                }
-                price_levels::Operation::Cancel => {
-                    if self.draft_price_level_id.is_some() {
-                        self.draft_price_level_id = None;
-                        self.draft_price_level = PriceLevel::default();
-                    }
-                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
-                    Task::none()
-                }
-                price_levels::Operation::Back => {
-                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
-                    Task::none()
-                }
-                price_levels::Operation::CreateNew(mut price_level) => {
-
-                    let next_id = self.price_levels
-                        .keys()
-                        .max()
-                        .map_or(1, |max_id| max_id + 1);
-                    price_level.id = next_id;
-
-                    self.draft_price_level = price_level;
-                    self.draft_price_level_id = Some(-1);
-                    self.selected_price_level_id = Some(-1);
-                    self.screen = Screen::PriceLevels(price_levels::Mode::Edit);
-                    Task::none()
-                },
                 price_levels::Operation::RequestDelete(id) => {
                     println!("Deleting PriceLevel id: {}", id);
                         self.deletion_info = data_types::DeletionInfo { 
@@ -3855,10 +3708,7 @@ impl MenuBuilder {
                     };
 
                    self.price_levels.insert(next_id, new_item.clone());
-                   self.draft_price_level_id = Some(next_id);
-                   self.draft_price_level = new_item;
-                   self.selected_price_level_id = Some(next_id);
-                   self.screen = Screen::PriceLevels(price_levels::Mode::Edit);
+                   self.screen = Screen::PriceLevels;
 
                    Task::none()
                }
@@ -3878,12 +3728,7 @@ impl MenuBuilder {
                         }
                     }
 
-                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
-                    Task::none()
-                },
-                price_levels::Operation::Select(price_level_id) => {
-                    self.selected_price_level_id = Some(price_level_id);
-                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    self.screen = Screen::PriceLevels;
                     Task::none()
                 },
                 price_levels::Operation::SaveAll(id, edit_state) => {
@@ -3905,28 +3750,27 @@ impl MenuBuilder {
                         edit.base.id.parse::<i32>().unwrap() != id
                     });
 
-                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    self.screen = Screen::PriceLevels;
                     Task::none()
                 },
-                price_levels::Operation::UpdateMultiName(id, new_name) => {
-                    println!("MultinameEdit on id: {}", id);
-                    if let Some(edit_state) = self.price_level_edit_state_vec
-                    .iter_mut()
-                    .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
-                    { // Update the name
-                        edit_state.base.name = new_name;
-                    }
+                price_levels::Operation::UpdateName(id, new_name) => {
 
-                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    if let Some(edit_state) = self.price_level_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
+                            { // Update the name
+                            edit_state.base.name = new_name;
+                        }
+
+                    self.screen = Screen::PriceLevels;
                     Task::none()
                 },
-                price_levels::Operation::CreateNewMulti => {
+                price_levels::Operation::CreateNew => {
                     let next_id = self.price_levels
                         .keys()
                         .max()
                         .map_or(1, |max_id| max_id + 1);
 
-                    //Create a new PriceLevel
                     let price_level = PriceLevel {
                         id: next_id,
                         name: String::new(),
@@ -3934,13 +3778,10 @@ impl MenuBuilder {
                         price: Decimal::new(000, 2),
                     };
 
-                    //Add new PriceLevel to the app state
                     self.price_levels.insert(next_id, price_level.clone());
 
-                    //Create a new edit_state for the new price_level
-                        let edit_state = price_levels::PriceLevelEditState::new(&price_level);
+                    let edit_state = price_levels::PriceLevelEditState::new(&price_level);
                     
-                    //Add new price_level edit_state to app state
                     self.price_level_edit_state_vec.push(edit_state);
 
                     Task::none()
@@ -3948,19 +3789,18 @@ impl MenuBuilder {
                 price_levels::Operation::CancelEdit(id) => {
                     // Find the edit state and reset it before removing
                     if let Some(edit_state) = self.price_level_edit_state_vec
-                    .iter_mut()
-                    .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
-                    {
-                    // Reset the data to original values if needed
-                    edit_state.reset();
-                    }
+                        .iter_mut()
+                        .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
+                        {   // Reset the data to original values if needed
+                            edit_state.reset();
+                        }
 
                     // Remove the edit state from the vec
                     self.price_level_edit_state_vec.retain(|state| {
                     state.base.id.parse::<i32>().unwrap() != id
                     });
 
-                    self.screen = Screen::PriceLevels(price_levels::Mode::View);
+                    self.screen = Screen::PriceLevels;
                     Task::none()
                 },
             },
@@ -3982,7 +3822,6 @@ impl MenuBuilder {
             printer_logicals: self.printer_logicals.values().cloned().collect(),
             settings: self.settings.clone(),
         };
-        //println!("State Information: {:?}", state);
 
         if self.settings.create_backups {
             self.file_manager.create_backup(std::path::Path::new(&self.settings.file_path))?;
@@ -3993,7 +3832,7 @@ impl MenuBuilder {
 
     fn handle_save_error(&mut self, error: String) {
         self.error_message = Some(error);
-        // Optionally switch to settings screen to show error
+        // Switch to settings screen to show error
         self.screen = Screen::Settings(self.settings.clone());
     }
 
