@@ -45,7 +45,7 @@ use crate::{
     printer_logicals::PrinterLogical,
 };
 
-use data_types::{DeletionInfo, EntityId, ItemPrice, ValidationError};
+use data_types::{EntityId, ItemPrice};
 pub use action::Action;
 
 fn main() -> iced::Result {
@@ -64,7 +64,7 @@ fn main() -> iced::Result {
 pub enum Screen {
     Settings(settings::AppSettings),
     Items(items::Mode),
-    ItemGroups(item_groups::Mode),
+    ItemGroups,
     PriceLevels(price_levels::Mode),
     ProductClasses(product_classes::Mode),
     TaxGroups(tax_groups::Mode),
@@ -132,7 +132,6 @@ pub struct MenuBuilder {
     security_level_edit_state_vec: Vec<entity_component::EditState>,
     revenue_category_edit_state_vec: Vec<entity_component::EditState>,
     report_category_edit_state_vec: Vec<entity_component::EditState>,
-    item_group_edit_state_vec: Vec<item_groups::ItemGroupEditState>,
     price_level_edit_state_vec: Vec<price_levels::PriceLevelEditState>,
     tax_group_edit_state_vec: Vec<tax_groups::TaxGroupEditState>,
 
@@ -146,10 +145,7 @@ pub struct MenuBuilder {
  
     // Item Groups 
     item_groups: BTreeMap<EntityId, ItemGroup>,
-    draft_item_group: ItemGroup,
-    draft_item_group_id: Option<EntityId>,
-    selected_item_group_id: Option<EntityId>,
-    item_group_edit_state: item_groups::ItemGroupEditState,
+    item_group_edit_state_vec: Vec<item_groups::ItemGroupEditState>,
  
     // Price Levels
     price_levels: BTreeMap<EntityId, PriceLevel>,
@@ -250,10 +246,6 @@ pub struct MenuBuilder {
  
             // Item Groups
             item_groups: BTreeMap::new(),
-            draft_item_group: ItemGroup::default(),
-            draft_item_group_id: None,
-            selected_item_group_id: None,
-            item_group_edit_state: item_groups::ItemGroupEditState::default(),
  
             // Price Levels 
             price_levels: BTreeMap::new(),
@@ -458,70 +450,29 @@ impl MenuBuilder {
                 }
 
 
-
-                
             },
             Message::ItemGroups(id, msg) => {
                 let cloned_item_groups = self.item_groups.clone();
 
-                if id < 0 {  // New item group case
-                    let other_item_groups: Vec<&ItemGroup> = cloned_item_groups
+                // Get a list of all other item groups for validation
+                let other_item_groups: Vec<&ItemGroup> = cloned_item_groups
                     .values()
                     .filter(|ig| ig.id != id)
                     .collect();
-    
-                    let action = item_groups::update(
-                        &mut self.draft_item_group, 
-                        msg, 
-                        &mut self.item_group_edit_state,
-                        &other_item_groups
-                    )
-                        .map_operation(move |o| Operation::ItemGroups(id, o))
-                        .map(move |m| Message::ItemGroups(id, m));
-    
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
 
-                } else {
-                    let group = if let Some(draft_id) = self.draft_item_group_id {
-                        if draft_id == id {
-                            &mut self.draft_item_group
-                        } else {
-                            self.item_groups.get_mut(&id).expect("Item Group should exist")
-                        }
-                    } else {
-                        self.item_groups.get_mut(&id).expect("Item Group should exist")
-                    };
-    
-                    let other_item_groups: Vec<&ItemGroup> = cloned_item_groups
-                    .values()
-                    .filter(|ig| ig.id != id)
-                    .collect();
-    
-                    let action = item_groups::update(
-                        group, 
-                        msg, 
-                        &mut self.item_group_edit_state,
-                        &other_item_groups
-                    )
-                        .map_operation(move |o| Operation::ItemGroups(id, o))
-                        .map(move |m| Message::ItemGroups(id, m));
-    
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
-                }
-
+                let action = item_groups::update(
+                    msg,
+                )
+                .map_operation(move |o| Operation::ItemGroups(id, o))
+                .map(move |m| Message::ItemGroups(id, m));
                 
+                let operation_task = if let Some(operation) = action.operation {
+                    self.perform(operation)
+                } else {
+                    Task::none()
+                };
+                
+                operation_task.chain(action.task)
             },
             Message::PriceLevels(id, msg) => {
                 let cloned_price_levels = self.price_levels.clone();
@@ -1054,8 +1005,7 @@ impl MenuBuilder {
 
                         // Delete the item group
                         self.item_groups.remove(&deletion_info.entity_id);
-                        self.selected_item_group_id = None;
-                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        self.screen = Screen::ItemGroups;
                     }
                     "Item" => {
                         //Delete the item
@@ -1289,11 +1239,11 @@ impl MenuBuilder {
                         )
                     ),
                 button("Item Groups")
-                    .on_press(Message::Navigate(Screen::ItemGroups(item_groups::Mode::View)))
+                    .on_press(Message::Navigate(Screen::ItemGroups))
                     .width(Length::Fill)
                     .style(
                         Modern::conditional_button_style(
-                            matches!(self.screen, Screen::ItemGroups(_)),
+                            matches!(self.screen, Screen::ItemGroups),
                             Modern::selected_button_style(Modern::system_button()),
                             Modern::system_button()
                         )
@@ -1489,52 +1439,12 @@ impl MenuBuilder {
                     .into()
                 }
             }
-            Screen::ItemGroups(mode) => {
-                if let Some(id) = self.selected_item_group_id {
-                    // Use the draft if its ID matches; otherwise, use the stored item group.
-                    let item_group = if self.draft_item_group_id == Some(id) {
-                        &self.draft_item_group
-                    } else {
-                        &self.item_groups[&id]
-                    };
-                
-                    item_groups::view(
-                        &self.item_groups,
-                        &self.item_group_edit_state_vec
-                    )
-                        .map(move |msg| Message::ItemGroups(id, msg))
-                } else if let Some((&first_id, first_item_group)) = self.item_groups.iter().next() {
-                    // No selected item group, but there is at least one available: show its view.
-                    item_groups::view(
-                        &self.item_groups,
-                        &self.item_group_edit_state_vec
-                    )
-                        .map(move |msg| Message::ItemGroups(first_id.clone(), msg))
-                } else {
-                    // No selected item group and the collection is empty: show the empty state.
-                    container(
-                        column![
-                            text("Item Groups")
-                                .size(24)
-                                .width(Length::Fill),
-                            vertical_space(),
-                            text("No item groups have been created yet.")
-                                .width(Length::Fill),
-                            vertical_space(),
-                            button("Create New Item Group")
-                                .on_press(Message::ItemGroups(-1, item_groups::Message::CreateNew))
-                                .style(button::primary)
-                        ]
-                        .spacing(10)
-                        .max_width(500)
-                    )
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill)
-                    .padding(30)
-                    .into()
-                }
+            Screen::ItemGroups => {
+                item_groups::view(
+                    &self.item_groups,
+                    &self.item_group_edit_state_vec
+                )
+                .map(move |msg| Message::ItemGroups(-1, msg)) // Default ID for new messages
             }
             Screen::PriceLevels(mode) => {
                 if let Some(id) = self.selected_price_level_id {
@@ -2241,66 +2151,6 @@ impl MenuBuilder {
             } 
             Operation::ItemGroups(id, op) => {
                 match op {
-                    item_groups::Operation::Save(mut group) => {
-                        if group.id < 0 {
-                            //Generate new ID only for new items
-                            let next_id = self.item_groups
-                                .keys()
-                                .max()
-                                .map_or(1, |max_id| max_id + 1);
-                            group.id = next_id;
-
-                            self.item_groups.insert(next_id, group.clone());
-                            self.draft_item_group_id = None;
-                            self.draft_item_group = ItemGroup::default();
-                            self.selected_item_group_id = Some(group.id);
-                        } else {
-                            self.item_groups.insert(group.id, group.clone());
-                            self.selected_item_group_id = Some(group.id);
-                        }
-                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
-
-                        if let Err(e) = self.save_state() {
-                            self.error_message = Some(e);
-                        } else {
-                            self.error_message = None;
-                        }
-
-                        Task::none()
-                    }
-                    item_groups::Operation::StartEdit(id) => {
-                        // Start editing an existing Item group
-                        self.draft_item_group_id = Some(id);
-                        self.draft_item_group = self.item_groups[&id].clone();
-                        self.screen = Screen::ItemGroups(item_groups::Mode::Edit);
-                        Task::none()
-                    }
-                    item_groups::Operation::Cancel => {
-                        if self.draft_item_group_id.is_some() {
-                            self.draft_item_group_id = None;
-                            self.draft_item_group = ItemGroup::default();
-                        }
-                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
-                        Task::none()
-                    }
-                    item_groups::Operation::Back => {
-                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
-                        Task::none()
-                    }
-                    item_groups::Operation::CreateNew(mut group) => {
-
-                        let next_id = self.item_groups
-                            .keys()
-                            .max()
-                            .map_or(1, |max_id| max_id + 1);
-                        group.id = next_id;
-
-                        self.draft_item_group = group;
-                        self.draft_item_group_id = Some(-1);
-                        self.selected_item_group_id = Some(-1);
-                        self.screen = Screen::ItemGroups(item_groups::Mode::Edit);
-                        Task::none()
-                    },
                     item_groups::Operation::RequestDelete(id) => {
                          println!("Deleting ItemGroup id: {}", id);
                         self.deletion_info = data_types::DeletionInfo { 
@@ -2326,10 +2176,7 @@ impl MenuBuilder {
                         };
 
                         self.item_groups.insert(next_id, new_item.clone());
-                        self.draft_item_group_id = Some(next_id);
-                        self.draft_item_group = new_item;
-                        self.selected_item_group_id = Some(next_id);
-                        self.screen = Screen::ItemGroups(item_groups::Mode::Edit);
+                        self.screen = Screen::ItemGroups;
 
                         Task::none()
                     }
@@ -2349,12 +2196,7 @@ impl MenuBuilder {
                             }
                         }
 
-                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
-                        Task::none()
-                    },
-                    item_groups::Operation::Select(item_group_id) => {
-                        self.selected_item_group_id = Some(item_group_id);
-                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        self.screen = Screen::ItemGroups;
                         Task::none()
                     },
                     item_groups::Operation::SaveAll(id, edit_state) => {
@@ -2385,11 +2227,11 @@ impl MenuBuilder {
                             edit.base.id.parse::<i32>().unwrap() != id
                         });
 
-                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        self.screen = Screen::ItemGroups;
                         Task::none()
                     },
-                    item_groups::Operation::UpdateMultiName(id, new_name) => {
-                        println!("MultinameEdit on id: {}", id);
+                    item_groups::Operation::UpdateName(id, new_name) => {
+                        println!("Update Name on id: {}", id);
                         if let Some(edit_state) = self.item_group_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
@@ -2397,7 +2239,7 @@ impl MenuBuilder {
                             edit_state.base.name = new_name;
                         }
     
-                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        self.screen = Screen::ItemGroups;
                         Task::none()
                     },
                     item_groups::Operation::UpdateIdRangeStart(id, new_range) => {
@@ -2409,7 +2251,7 @@ impl MenuBuilder {
                             edit_state.id_range_start = new_range;
                         }
     
-                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        self.screen = Screen::ItemGroups;
                         Task::none()
                     },
                     item_groups::Operation::UpdateIdRangeEnd(id, new_range) => {
@@ -2421,10 +2263,10 @@ impl MenuBuilder {
                             edit_state.id_range_end = new_range;
                         }
     
-                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        self.screen = Screen::ItemGroups;
                         Task::none()
                     },
-                    item_groups::Operation::CreateNewMulti => {
+                    item_groups::Operation::CreateNew => {
                         let next_id = self.item_groups
                             .keys()
                             .max()
@@ -2466,7 +2308,7 @@ impl MenuBuilder {
                         state.base.id.parse::<i32>().unwrap() != id
                         });
 
-                        self.screen = Screen::ItemGroups(item_groups::Mode::View);
+                        self.screen = Screen::ItemGroups;
                         Task::none()
                     },
                     

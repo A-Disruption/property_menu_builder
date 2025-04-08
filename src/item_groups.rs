@@ -1,4 +1,4 @@
-use crate::data_types::{self, EntityId, ValidationError, Validatable};
+use crate::data_types::{EntityId, ValidationError};
 use crate::Action;
 use crate::entity_component::{self, Entity, EditState as BaseEditState};
 use crate::icon;
@@ -11,44 +11,28 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    CreateNew,
     RequestDelete(EntityId),
     CopyItemGroup(EntityId),
     EditItemGroup(EntityId),
-    UpdateId(String),
-    UpdateName(String),
-    Select(EntityId),
     SaveAll(EntityId, ItemGroupEditState),
-    UpdateMultiName(EntityId, String),
+    UpdateName(EntityId, String),
     UpdateIdRangeStart(EntityId, String),
     UpdateIdRangeEnd(EntityId, String),
-    CreateNewMulti,
+    CreateNew,
     CancelEdit(EntityId),
 }
 
 #[derive(Debug, Clone)]
 pub enum Operation {
-    Save(ItemGroup),
-    StartEdit(EntityId),
-    Cancel,
-    Back,
-    CreateNew(ItemGroup),
     RequestDelete(EntityId),
     CopyItemGroup(EntityId),
     EditItemGroup(EntityId),
-    Select(EntityId),
     SaveAll(EntityId, ItemGroupEditState),
-    UpdateMultiName(EntityId, String),
+    UpdateName(EntityId, String),
     UpdateIdRangeStart(EntityId, String),
     UpdateIdRangeEnd(EntityId, String),
-    CreateNewMulti,
+    CreateNew,
     CancelEdit(EntityId),
-}
-
-#[derive(Debug, Clone)]
-pub enum Mode {
-    View,
-    Edit,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -200,16 +184,9 @@ fn ranges_overlap<T: Ord>(range1: &std::ops::RangeInclusive<T>, range2: &std::op
 }
 
 pub fn update(
-    item_group: &mut ItemGroup,
     message: Message,
-    state: &mut ItemGroupEditState,
-    other_groups: &[&ItemGroup]
 ) -> Action<Operation, Message> {
     match message {
-        Message::CreateNew => {
-            let new_item_group = ItemGroup::default();
-            Action::operation(Operation::CreateNew(new_item_group))
-        },
         Message::RequestDelete(id) => {
             Action::operation(Operation::RequestDelete(id))
         },
@@ -219,30 +196,14 @@ pub fn update(
         Message::EditItemGroup(id) => {
             Action::operation(Operation::EditItemGroup(id))
         },
-        Message::Select(id) => {
-            Action::operation(Operation::Select(id))
-        },
-        Message::UpdateId(id) => {
-            if let Ok(id) = id.parse() {
-                item_group.id = id;
-                Action::none()
-            } else {
-                state.base.id_validation_error = Some("Invalid ID format".to_string());
-                Action::none()
-            }
-        },
-        Message::UpdateName(name) => {
-            item_group.name = name;
-            Action::none()
-        },
-        Message::CreateNewMulti => {
-            Action::operation(Operation::CreateNewMulti)
+        Message::CreateNew => {
+            Action::operation(Operation::CreateNew)
         },
         Message::SaveAll(id, edit_state) => {
             Action::operation(Operation::SaveAll(id, edit_state))
         }
-        Message::UpdateMultiName(id, new_name) => {
-            Action::operation(Operation::UpdateMultiName(id, new_name))
+        Message::UpdateName(id, new_name) => {
+            Action::operation(Operation::UpdateName(id, new_name))
         }
         Message::UpdateIdRangeStart(id, new_start) => {
             Action::operation(Operation::UpdateIdRangeStart(id, new_start))
@@ -262,7 +223,7 @@ pub fn view<'a>(
 ) -> Element<'a, Message> {
     let title_row = entity_component::render_title_row(
         "Item Groups", 
-        Message::CreateNewMulti,
+        Message::CreateNew,
         805.0 // view width
     );
 
@@ -358,7 +319,7 @@ fn render_item_group_row<'a>(
         let input = text_input("Item Group Name", &display_name)
             .on_input_maybe(
                 if editing {
-                    Some(|name| Message::UpdateMultiName(item_group.id, name))
+                    Some(|name| Message::UpdateName(item_group.id, name))
                 } else {
                     None
                 }

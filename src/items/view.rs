@@ -154,20 +154,10 @@ pub fn view<'a>(
                         .width(200)
                     ],
                 ].spacing(10).padding(10),
-/*                ],
- 
-                info_column(
-                    "Tar Weight".to_string(),
-                    weight_str
-                ) */
-
             ]
-/*             .spacing(10)
-            .padding(10) */
             .wrap()
         ]
         .width(Length::Fill)
-//        .spacing(10)
     )
     .width(Length::Fill)
     .style(Modern::sheet_container())
@@ -183,7 +173,6 @@ pub fn view<'a>(
                         prices.iter()
                             .filter_map(|item_price| {
                                 price_levels.get(&item_price.price_level_id).map(|price_level|{
-                                    //let label = format!("{}: ${}", price_level.name, item_price.price);
                                     let label2 = row![
                                         text(price_level.name.clone() + ": ").style(Modern::primary_text()),
                                         text("$".to_string() + item_price.price.to_string().as_str()),
@@ -197,18 +186,6 @@ pub fn view<'a>(
                     row![button(text("No Price Level Assigned")).style(Modern::gray_button())].wrap()
                 }
             ],
-/*             row![
-                if let Some(ref levels) = item.price_levels {
-                    row(
-                        levels.iter()
-                            .filter_map(|id| price_levels.get(id))
-                            .map(|level| button(&*level.name).style(Modern::gray_button()).into() )
-                            .collect::<Vec<_>>()
-                    ).wrap()
-                } else {
-                    row![text_input("", "None")].width(250).wrap()
-                }
-            ], */
         ]
     )
     .style(Modern::sheet_container())
@@ -290,7 +267,7 @@ pub fn view<'a>(
                         .collect::<Vec<_>>()
                 ).spacing(10).wrap()
             } else {
-                row![text_input("", "None")].width(250).wrap()
+                row![button(text("No Printer Logicals Assigned")).style(Modern::gray_button())].wrap()
             }
         ]
     )
@@ -338,7 +315,7 @@ pub fn view<'a>(
                         .collect::<Vec<_>>()
                 ).spacing(10).wrap()
             } else {
-                row![text_input("", "None")].width(250).wrap()
+                row![button(text("No Choice Group Assigned")).style(Modern::gray_button())].wrap()
             }
         ]
     )
@@ -370,18 +347,6 @@ pub fn view<'a>(
         .spacing(20)
     )
     .padding(10)
-    .into()
-}
-
-fn info_row(label: String, value: String) -> Element<'static, Message> {
-    container(
-        column![
-            text(label).width(Length::Shrink).style(Modern::primary_text()),
-            text_input(&value, &value).width(200).style(Modern::inline_text_input())
-        ]
-        .spacing(10)
-        .padding(10)
-    )
     .into()
 }
 

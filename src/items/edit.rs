@@ -280,12 +280,9 @@ pub fn view<'a>(
                     ],
                 ].spacing(10).padding(10),
             ]
-/*             .spacing(10)
-            .padding(10) */
             .wrap(),
         ]
         .width(Length::Fill)
-//        .spacing(10)
     )
     .style(Modern::sheet_container())
     .width(Length::Fill)
