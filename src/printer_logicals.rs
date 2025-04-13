@@ -10,7 +10,7 @@ pub enum Message {
     RequestDelete(EntityId),
     CopyPrinterLogical(EntityId),
     EditPrinterLogical(EntityId),
-    SaveMultiTest(EntityId, EditState),
+    Save(EntityId, EditState),
     UpdateName(EntityId, String),
     CreateNew,
     CancelEdit(EntityId),
@@ -21,7 +21,7 @@ pub enum Operation {
     RequestDelete(EntityId),
     CopyPrinterLogical(EntityId),
     EditPrinterLogical(EntityId),
-    SaveMultiTest(EntityId, EditState),
+    Save(EntityId, EditState),
     UpdateName(EntityId, String),
     CreateNew,
     CancelEdit(EntityId),
@@ -125,14 +125,13 @@ pub fn update(
             Action::operation(Operation::CopyPrinterLogical(id))
         },
         Message::EditPrinterLogical(id) => {
-            println!("Editing ID: {}", id);
             Action::operation(Operation::EditPrinterLogical(id))
         }
         Message::CreateNew => {
             Action::operation(Operation::CreateNew)
         }
-        Message::SaveMultiTest(id, edit_state) => {
-            Action::operation(Operation::SaveMultiTest(id, edit_state))
+        Message::Save(id, edit_state) => {
+            Action::operation(Operation::Save(id, edit_state))
         }
         Message::UpdateName(id, new_name) => {
             Action::operation(Operation::UpdateName(id, new_name))
@@ -164,7 +163,7 @@ fn render_printer_row<'a>(
         printer,
         edit_states,
         Message::EditPrinterLogical,
-        Message::SaveMultiTest,
+        Message::Save,
         Message::CopyPrinterLogical,
         Message::RequestDelete,
         Message::CancelEdit,

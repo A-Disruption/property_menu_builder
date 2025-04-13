@@ -1,8 +1,7 @@
-use crate::data_types::{self, EntityId, Validatable, ValidationError};
-use crate::Action;
+use crate::data_types::{EntityId, ValidationError};
 use crate::icon;
 use iced_modern_theme::Modern;
-use iced::{Alignment, Element, Length};
+use iced::{Element, Length};
 use iced::widget::{button, column, container, row, text, scrollable, text_input, tooltip, TextInput};
 use std::collections::BTreeMap;
 
@@ -126,12 +125,6 @@ where
                     ]
                     .padding(5)
                     .into()
-/*                     container(
-                        row_renderer(entity, edit_states)
-                    )
-                    .style(Modern::card_container())
-                    .padding(5)
-                    .into() */
                 )
                 .collect::<Vec<_>>()
         )

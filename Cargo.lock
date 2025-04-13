@@ -2060,7 +2060,7 @@ dependencies = [
 [[package]]
 name = "iced_modern_theme"
 version = "0.1.6"
-source = "git+https://github.com/KainTwinam/iced-modern-theme.git#ca342aed223dee4ab4644daf366f95bdbf356be2"
+source = "git+https://github.com/KainTwinam/iced-modern-theme.git#75e09cf2fe9cd7dfb322aa25256a55cc8cf0a412"
 dependencies = [
  "iced",
  "palette",

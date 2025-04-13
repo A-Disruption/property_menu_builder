@@ -14,7 +14,7 @@ pub enum Message {
     RequestDelete(EntityId),
     CopyItemGroup(EntityId),
     EditItemGroup(EntityId),
-    SaveAll(EntityId, ItemGroupEditState),
+    Save(EntityId, ItemGroupEditState),
     UpdateName(EntityId, String),
     UpdateIdRangeStart(EntityId, String),
     UpdateIdRangeEnd(EntityId, String),
@@ -27,7 +27,7 @@ pub enum Operation {
     RequestDelete(EntityId),
     CopyItemGroup(EntityId),
     EditItemGroup(EntityId),
-    SaveAll(EntityId, ItemGroupEditState),
+    Save(EntityId, ItemGroupEditState),
     UpdateName(EntityId, String),
     UpdateIdRangeStart(EntityId, String),
     UpdateIdRangeEnd(EntityId, String),
@@ -50,9 +50,9 @@ impl ItemGroupEditState {
         Self {
             base: BaseEditState::new(item_group),
             id_range_start: item_group.id_range.start.to_string(),
-            original_id_range_start: item_group.id_range.start.to_string(),
+            original_id_range_start: item_group.id_range.start.clone().to_string(),
             id_range_end: item_group.id_range.end.to_string(),
-            original_id_range_end: item_group.id_range.end.to_string(),
+            original_id_range_end: item_group.id_range.end.clone().to_string(),
             range_validation_error: None,
         }
     }
@@ -140,7 +140,7 @@ impl ItemGroup {
         Self::default()
     }
 
-    fn validate(&self, other_groups: &[&ItemGroup]) -> Result<(), ValidationError> {
+    pub fn validate(&self, other_groups: &[&ItemGroup]) -> Result<(), ValidationError> {
         if !(1..=999).contains(&self.id) {
             return Err(ValidationError::InvalidId(
                 "Item group ID must be between 1 and 999".to_string()
@@ -199,8 +199,8 @@ pub fn update(
         Message::CreateNew => {
             Action::operation(Operation::CreateNew)
         },
-        Message::SaveAll(id, edit_state) => {
-            Action::operation(Operation::SaveAll(id, edit_state))
+        Message::Save(id, edit_state) => {
+            Action::operation(Operation::Save(id, edit_state))
         }
         Message::UpdateName(id, new_name) => {
             Action::operation(Operation::UpdateName(id, new_name))
@@ -391,7 +391,7 @@ fn render_item_group_row<'a>(
         button(if editing { icon::save().size(14) } else { icon::edit().size(14) })
             .on_press(
                 if editing { 
-                    Message::SaveAll(item_group.id, edit_state.unwrap().clone()) 
+                    Message::Save(item_group.id, edit_state.unwrap().clone()) 
                 } else { 
                     Message::EditItemGroup(item_group.id) 
                 }

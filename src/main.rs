@@ -43,6 +43,7 @@ use crate::{
     report_categories::ReportCategory,
     choice_groups::ChoiceGroup,
     printer_logicals::PrinterLogical,
+    data_types::ValidationError,
 };
 
 use data_types::{EntityId, ItemPrice};
@@ -737,6 +738,7 @@ impl MenuBuilder {
 
                 self.deletion_info = data_types::DeletionInfo::new();
                 self.show_modal = false;
+                self.save_state().expect("Failed to save to file.");
                 Task::none()
             }
             Message::CancelDelete => {
@@ -1469,34 +1471,88 @@ impl MenuBuilder {
                         self.screen = Screen::ItemGroups;
                         Task::none()
                     },
-                    item_groups::Operation::SaveAll(id, edit_state) => {
+                    item_groups::Operation::Save(id, edit_state) => {
                         // First, find the edit state for this item_group
                         if let Some(edit_state) = self.item_group_edit_state_vec
                             .iter()
                             .find(|state| state.base.id.parse::<i32>().unwrap() == id)
                         {
-                            // Clone the edit state name since we'll need it after removing the edit state
-                            let new_name = edit_state.base.name.clone();
-
-                            let start = edit_state.id_range_start.parse::<i32>().expect("Should be an i32, why dis happen??");
-                            let end = edit_state.id_range_end.parse::<i32>().expect("Should be an i32, why dis happen??");
-
-                            let new_range = Range {
-                                start: start,
-                                end: end
-                            };
-                            
-                            // Get a mutable reference to the item_group and update it
-                            if let Some(item_group) = self.item_groups.get_mut(&id) {
-                                item_group.name = new_name;
-                                item_group.id_range = new_range;
+                            // Parse range values
+                            if let (Ok(start), Ok(end)) = (
+                                edit_state.id_range_start.parse::<i32>(), 
+                                edit_state.id_range_end.parse::<i32>()
+                            ) {
+                                // Create a temporary ItemGroup with the new values for validation
+                                let updated_group = item_groups::ItemGroup {
+                                    id: id,
+                                    name: edit_state.base.name.clone(),
+                                    id_range: Range {
+                                        start: start,
+                                        end: end
+                                    }
+                                };
+                                
+                                // Get a list of other groups for validation
+                                let other_groups: Vec<&item_groups::ItemGroup> = self.item_groups.values()
+                                    .filter(|g| g.id != id)  // Exclude the current group
+                                    .collect();
+                                
+                                // Validate the updated group
+                                match updated_group.validate(&other_groups) {
+                                    Ok(()) => {
+                                        // Validation passed, update the item_group
+                                        if let Some(item_group) = self.item_groups.get_mut(&id) {
+                                            item_group.name = edit_state.base.name.clone();
+                                            item_group.id_range = Range {
+                                                start: start,
+                                                end: end
+                                            };
+                                        }
+                                        
+                                        // Remove the edit state
+                                        self.item_group_edit_state_vec.retain(|edit| {
+                                            edit.base.id.parse::<i32>().unwrap() != id
+                                        });
+                                    },
+                                    Err(error) => {
+                                        // Validation failed, update the edit state with the error
+                                        if let Some(edit_state) = self.item_group_edit_state_vec
+                                            .iter_mut()
+                                            .find(|state| state.base.id.parse::<i32>().unwrap() == id)
+                                        {
+                                            match error {
+                                                ValidationError::InvalidId(msg) | 
+                                                ValidationError::DuplicateId(msg) => {
+                                                    edit_state.base.id_validation_error = Some(msg);
+                                                },
+                                                ValidationError::EmptyName(msg) | 
+                                                ValidationError::NameTooLong(msg) => {
+                                                    edit_state.base.name_validation_error = Some(msg);
+                                                },
+                                                ValidationError::RangeOverlap(msg) |
+                                                ValidationError::InvalidValue(msg) => {
+                                                    edit_state.range_validation_error = Some(msg);
+                                                },
+                                                _ => {
+                                                    // Fall back for other validation errors
+                                                    edit_state.range_validation_error = Some(format!("{:?}", error));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Invalid range format
+                                if let Some(edit_state) = self.item_group_edit_state_vec
+                                    .iter_mut()
+                                    .find(|state| state.base.id.parse::<i32>().unwrap() == id)
+                                {
+                                    edit_state.range_validation_error = Some("Invalid range format".to_string());
+                                }
                             }
                         }
 
-                        self.item_group_edit_state_vec.retain(|edit| {
-                            edit.base.id.parse::<i32>().unwrap() != id
-                        });
-
+                        self.save_state().expect("Failed to save to file.");
                         self.screen = Screen::ItemGroups;
                         Task::none()
                     },
@@ -1504,8 +1560,15 @@ impl MenuBuilder {
                         if let Some(edit_state) = self.item_group_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
-                        { // Update the name
-                            edit_state.base.name = new_name;
+                        { 
+                            //check if name var is less than 17 characters
+                            if new_name.len() < 17 {
+                                // Update the name
+                                edit_state.base.name = new_name;
+                            } else {
+                                //set validation error message if it's longer than 16 characters
+                                edit_state.base.name_validation_error = Some("Must be less than 16 characters".to_string());
+                            }
                         }
     
                         self.screen = Screen::ItemGroups;
@@ -1561,13 +1624,23 @@ impl MenuBuilder {
                         Task::none()
                     },
                     item_groups::Operation::CancelEdit(id) => {
+                        let item_group = self.item_groups.get(&id).expect("I created an editstate without an item_group?");
+
                         // Find the edit state and reset it before removing
                         if let Some(edit_state) = self.item_group_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
-                        {
-                        // Reset the data to original values if needed
-                        edit_state.reset();
+                        { // If all editable fields are blank, and the ItemGroup never had a name saved, delete ItemGroup without confirmation.
+                            if (    !(edit_state.base.name.len()        > 0) 
+                                ||  !(edit_state.id_range_end.len()     > 0) 
+                                ||  !(edit_state.id_range_start.len()   > 0)) 
+                                &&  item_group.name.len() < 1
+                            {
+                                self.item_groups.remove(&id);
+                            }
+
+                            // Reset the data to original values if needed
+                            edit_state.reset();
                         }
 
                         // Remove the edit state from the vec
@@ -1629,6 +1702,7 @@ impl MenuBuilder {
                     Task::none()
                     },
                     tax_groups::Operation::SaveAll(id, edit_state) => {
+
                         // First, find the edit state for this tax_group
                         if let Some(edit_state) = self.tax_group_edit_state_vec
                             .iter()
@@ -1650,6 +1724,7 @@ impl MenuBuilder {
                             edit.base.id.parse::<i32>().unwrap() != id
                         });
 
+                        self.save_state().expect("Failed to save to file.");
                         self.screen = Screen::TaxGroups;
                         Task::none()
                     },
@@ -1657,8 +1732,15 @@ impl MenuBuilder {
                         if let Some(edit_state) = self.tax_group_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
-                        { // Update the name
-                            edit_state.base.name = new_name;
+                        { 
+                            //check if name var is less than 17 characters
+                            if new_name.len() < 17 {
+                                // Update the name
+                                edit_state.base.name = new_name;
+                            } else {
+                                //set validation error message if it's longer than 16 characters
+                                edit_state.base.name_validation_error = Some("Must be less than 16 characters".to_string());
+                            }
                         }
     
                         self.screen = Screen::TaxGroups;
@@ -1668,7 +1750,8 @@ impl MenuBuilder {
                         if let Some(edit_state) = self.tax_group_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
-                        { // Update the name
+                        { 
+                            // Update the tax_rate
                             edit_state.rate = new_rate;
                         }
     
@@ -1700,13 +1783,23 @@ impl MenuBuilder {
                         Task::none()
                     },
                     tax_groups::Operation::CancelEdit(id) => {
+                        let tax_group = self.tax_groups.get(&id).expect("I created and editstate without a TaxGroup?");
+
+
                         // Find the edit state and reset it before removing
                         if let Some(edit_state) = self.tax_group_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
                         {
-                        // Reset the data to original values if needed
-                        edit_state.reset();
+                            if (    !(edit_state.base.name.len()    > 0)
+                                ||  !(edit_state.rate.len()         > 0 ))
+                                && tax_group.name.len() < 1 
+                            {
+                                self.tax_groups.remove(&id);
+                            }
+
+                            // Reset the data to original values if needed
+                            edit_state.reset();
                         }
 
                         // Remove the edit state from the vec
@@ -1791,6 +1884,7 @@ impl MenuBuilder {
                             edit.id.parse::<i32>().unwrap() != id
                         });
 
+                        self.save_state().expect("Failed to save to file.");
                         self.screen = Screen::SecurityLevels;
                         Task::none()
                     },
@@ -1798,8 +1892,15 @@ impl MenuBuilder {
                         if let Some(edit_state) = self.security_level_edit_state_vec
                         .iter_mut()
                         .find(|state| state.id.parse::<i32>().unwrap() == id) 
-                        { // Update the name
-                            edit_state.name = new_name;
+                        { 
+                            //check if name var is less than 17 characters
+                            if new_name.len() < 17 {
+                                // Update the name
+                                edit_state.name = new_name;
+                            } else {
+                                //set validation error message if it's longer than 16 characters
+                                edit_state.name_validation_error = Some("Must be less than 16 characters".to_string());
+                            }
                         }
     
                         self.screen = Screen::SecurityLevels;
@@ -1835,22 +1936,28 @@ impl MenuBuilder {
                         Task::none()
                     },
                     security_levels::Operation::CancelEdit(id) => {
-                    // Find the edit state and reset it before removing
-                    if let Some(edit_state) = self.security_level_edit_state_vec
-                    .iter_mut()
-                    .find(|state| state.id.parse::<i32>().unwrap() == id) 
-                    {
-                    // Reset the data to original values if needed
-                    edit_state.reset();
-                    }
+                        let security_level = self.security_levels.get(&id).expect("I created an editstate without a SecurityLevel?");
 
-                    // Remove the edit state from the vec
-                    self.security_level_edit_state_vec.retain(|state| {
-                    state.id.parse::<i32>().unwrap() != id
-                    });
+                        // Find the edit state and reset it before removing
+                        if let Some(edit_state) = self.security_level_edit_state_vec
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        {
+                            if security_level.name.len() < 1 
+                            {
+                                self.security_levels.remove(&id);
+                            }
+                            // Reset the data to original values if needed
+                            edit_state.reset();
+                        }
 
-                    self.screen = Screen::SecurityLevels;
-                    Task::none()
+                        // Remove the edit state from the vec
+                        self.security_level_edit_state_vec.retain(|state| {
+                        state.id.parse::<i32>().unwrap() != id
+                        });
+
+                        self.screen = Screen::SecurityLevels;
+                        Task::none()
                     },
                 }
             }    
@@ -1891,7 +1998,7 @@ impl MenuBuilder {
 
                     // Only create new edit state if we're not already editing this revenue_category
                     if !already_editing {
-                        if let Some(revenue_category) = self.report_categories.get(&id) {
+                        if let Some(revenue_category) = self.revenue_categories.get(&id) {
                             let edit_state = entity_component::EditState {
                                 name: revenue_category.name.clone(),
                                 original_name: revenue_category.name.clone(),
@@ -1926,6 +2033,7 @@ impl MenuBuilder {
                         edit.id.parse::<i32>().unwrap() != id
                         });
 
+                        self.save_state().expect("Failed to save to file.");
                         self.screen = Screen::RevenueCategories;
                         Task::none()
                     },
@@ -1933,8 +2041,15 @@ impl MenuBuilder {
                         if let Some(edit_state) = self.revenue_category_edit_state_vec
                         .iter_mut()
                         .find(|state| state.id.parse::<i32>().unwrap() == id) 
-                        { // Update the name
-                            edit_state.name = new_name;
+                        { 
+                            //check if name var is less than 17 characters
+                            if new_name.len() < 17 {
+                                // Update the name
+                                edit_state.name = new_name;
+                            } else {
+                                //set validation error message if it's longer than 16 characters
+                                edit_state.name_validation_error = Some("Must be less than 16 characters".to_string());
+                            }
                         }
     
                         self.screen = Screen::RevenueCategories;
@@ -1970,13 +2085,20 @@ impl MenuBuilder {
                         Task::none()
                     },
                     revenue_categories::Operation::CancelEdit(id) => {
+                        let revenue_category = self.revenue_categories.get(&id).expect("I created an editstate without a RevenueCategory?");
+
                         // Find the edit state and reset it before removing
                         if let Some(edit_state) = self.revenue_category_edit_state_vec
                         .iter_mut()
                         .find(|state| state.id.parse::<i32>().unwrap() == id) 
                         {
-                        // Reset the data to original values if needed
-                        edit_state.reset();
+                            if revenue_category.name.len() < 1 
+                            {
+                                self.revenue_categories.remove(&id);
+                            }
+
+                            // Reset the data to original values if needed
+                            edit_state.reset();
                         }
 
                         // Remove the edit state from the vec
@@ -2061,6 +2183,7 @@ impl MenuBuilder {
                         edit.id.parse::<i32>().unwrap() != id
                     });
 
+                    self.save_state().expect("Failed to save to file.");
                     self.screen = Screen::ReportCategories;
                     Task::none()
                     },
@@ -2068,8 +2191,15 @@ impl MenuBuilder {
                         if let Some(edit_state) = self.report_category_edit_state_vec
                         .iter_mut()
                         .find(|state| state.id.parse::<i32>().unwrap() == id) 
-                        { // Update the name
-                            edit_state.name = new_name;
+                        { 
+                            //check if name var is less than 17 characters
+                            if new_name.len() < 17 {
+                                // Update the name
+                                edit_state.name = new_name;
+                            } else {
+                                //set validation error message if it's longer than 16 characters
+                                edit_state.name_validation_error = Some("Must be less than 16 characters".to_string());
+                            }
                         }
     
                         self.screen = Screen::ReportCategories;
@@ -2105,13 +2235,20 @@ impl MenuBuilder {
                         Task::none()
                     },
                     report_categories::Operation::CancelEdit(id) => {
+                        let report_category = self.report_categories.get(&id).expect("I created an editstate without a ReportCategory?");
+
                         // Find the edit state and reset it before removing
                         if let Some(edit_state) = self.report_category_edit_state_vec
                         .iter_mut()
                         .find(|state| state.id.parse::<i32>().unwrap() == id) 
                         {
-                        // Reset the data to original values if needed
-                        edit_state.reset();
+                            if report_category.name.len() < 1 
+                            {
+                                self.report_categories.remove(&id);
+                            }
+
+                            // Reset the data to original values if needed
+                            edit_state.reset();
                         }
 
                         // Remove the edit state from the vec
@@ -2196,6 +2333,7 @@ impl MenuBuilder {
                             edit.id.parse::<i32>().unwrap() != id
                         });
 
+                        self.save_state().expect("Failed to save to file.");
                         self.screen = Screen::ProductClasses;
                         Task::none()
                     },
@@ -2203,8 +2341,15 @@ impl MenuBuilder {
                         if let Some(edit_state) = self.product_class_edit_state_vec
                         .iter_mut()
                         .find(|state| state.id.parse::<i32>().unwrap() == id) 
-                        { // Update the name
-                            edit_state.name = new_name;
+                        { 
+                            //check if name var is less than 17 characters
+                            if new_name.len() < 17 {
+                                // Update the name
+                                edit_state.name = new_name;
+                            } else {
+                                //set validation error message if it's longer than 16 characters
+                                edit_state.name_validation_error = Some("Must be less than 16 characters".to_string());
+                            }
                         }
     
                         self.screen = Screen::ProductClasses;
@@ -2240,13 +2385,20 @@ impl MenuBuilder {
                         Task::none()
                     },
                     product_classes::Operation::CancelEdit(id) => {
+                        let product_class = self.product_classes.get(&id).expect("I created an editstate without a ProductClass?");
+
                         // Find the edit state and reset it before removing
                         if let Some(edit_state) = self.product_class_edit_state_vec
                         .iter_mut()
                         .find(|state| state.id.parse::<i32>().unwrap() == id) 
                         {
-                        // Reset the data to original values if needed
-                        edit_state.reset();
+                            if product_class.name.len() < 1 
+                            {
+                                self.product_classes.remove(&id);
+                            }
+
+                            // Reset the data to original values if needed
+                            edit_state.reset();
                         }
 
                         // Remove the edit state from the vec
@@ -2332,6 +2484,7 @@ impl MenuBuilder {
                         edit.id.parse::<i32>().unwrap() != id
                     });
 
+                    self.save_state().expect("Failed to save to file.");
                     self.screen = Screen::ChoiceGroups;
                     Task::none()
                 },
@@ -2339,8 +2492,15 @@ impl MenuBuilder {
                     if let Some(edit_state) = self.choice_group_edit_state_vec
                     .iter_mut()
                     .find(|state| state.id.parse::<i32>().unwrap() == id) 
-                    { // Update the name
-                        edit_state.name = new_name;
+                    { 
+                        //check if name var is less than 17 characters
+                        if new_name.len() < 17 {
+                            // Update the name
+                            edit_state.name = new_name;
+                        } else {
+                            //set validation error message if it's longer than 16 characters
+                            edit_state.name_validation_error = Some("Must be less than 16 characters".to_string());
+                        }
                     }
 
                     self.screen = Screen::ChoiceGroups;
@@ -2376,13 +2536,20 @@ impl MenuBuilder {
                     Task::none()
                 },
                 choice_groups::Operation::CancelEdit(id) => {
+                    let choice_group = self.choice_groups.get(&id).expect("I created an editstate without a ChoiceGroup?");
+
                     // Find the edit state and reset it before removing
                     if let Some(edit_state) = self.choice_group_edit_state_vec
                     .iter_mut()
                     .find(|state| state.id.parse::<i32>().unwrap() == id) 
                     {
-                    // Reset the data to original values if needed
-                    edit_state.reset();
+                        if choice_group.name.len() < 1 
+                        {
+                            self.choice_groups.remove(&id);
+                        }
+
+                        // Reset the data to original values if needed
+                        edit_state.reset();
                     }
 
                     // Remove the edit state from the vec
@@ -2395,14 +2562,15 @@ impl MenuBuilder {
                 },
             },    
             Operation::PrinterLogicals(id, op) => match op {
-                 printer_logicals::Operation::RequestDelete(id) => {
-                        self.deletion_info = data_types::DeletionInfo { 
+                printer_logicals::Operation::RequestDelete(id) => {
+                    self.deletion_info = data_types::DeletionInfo { 
                        entity_type: "PrinterLogical".to_string(),
                        entity_id: id,
                        affected_items: Vec::new()
-                   };
-                        self.show_modal = true;
-                   Task::none()
+                    };
+                    
+                    self.show_modal = true;
+                    Task::none()
                 }
                 printer_logicals::Operation::CopyPrinterLogical(id) => {
                     let copy_item = self.printer_logicals.get(&id).unwrap();
@@ -2417,10 +2585,10 @@ impl MenuBuilder {
                         ..copy_item.clone()
                     };
 
-                   self.printer_logicals.insert(next_id, new_item.clone());
-                   self.screen = Screen::PrinterLogicals;
+                    self.printer_logicals.insert(next_id, new_item.clone());
+                    self.screen = Screen::PrinterLogicals;
 
-                   Task::none()
+                    Task::none()
                 }
                 printer_logicals::Operation::EditPrinterLogical(id) => {
                     // First check if we already have an edit state for this printer
@@ -2475,7 +2643,7 @@ impl MenuBuilder {
 
                     Task::none()
                 }
-                printer_logicals::Operation::SaveMultiTest(id, edit_state) => {
+                printer_logicals::Operation::Save(id, edit_state) => {
 
                     // First, find the edit state for this printer
                     if let Some(edit_state) = self.printer_logical_edit_state_vec
@@ -2495,22 +2663,30 @@ impl MenuBuilder {
                         edit.id.parse::<i32>().unwrap() != id
                     });
 
+                    self.save_state().expect("Failed to save to file.");
                     self.screen = Screen::PrinterLogicals;
                     Task::none()
                 }
                 printer_logicals::Operation::CancelEdit(id) => {
+                    let printer_logical = self.printer_logicals.get(&id).expect("I created an editstate without a PrinterLogical?");
+
                     // Find the edit state and reset it before removing
                     if let Some(edit_state) = self.printer_logical_edit_state_vec
-                    .iter_mut()
-                    .find(|state| state.id.parse::<i32>().unwrap() == id) 
-                    {
-                    // Reset the data to original values if needed
-                    edit_state.reset();
-                    }
+                        .iter_mut()
+                        .find(|state| state.id.parse::<i32>().unwrap() == id) 
+                        {
+                            if printer_logical.name.len() < 1
+                            {
+                                self.printer_logicals.remove(&id);
+                            }
 
-                    // Remove the edit state from the vec
-                    self.printer_logical_edit_state_vec.retain(|state| {
-                    state.id.parse::<i32>().unwrap() != id
+                            // Reset the data to original values if needed
+                            edit_state.reset();
+                        }
+
+                        // Remove the edit state from the vec
+                        self.printer_logical_edit_state_vec.retain(|state| {
+                        state.id.parse::<i32>().unwrap() != id
                     });
 
                     self.screen = Screen::PrinterLogicals;
@@ -2527,7 +2703,7 @@ impl MenuBuilder {
                             edit_state.name = new_name;
                         } else {
                             //set validation error message if it's longer than 16 characters
-                            edit_state.name_validation_error = Some("Can't have more than 16 characters".to_string());
+                            edit_state.name_validation_error = Some("Must be less than 16 characters".to_string());
                         }
 
                     }
@@ -2538,13 +2714,13 @@ impl MenuBuilder {
             },
             Operation::PriceLevels(id, op) => match op {
                 price_levels::Operation::RequestDelete(id) => {
-                        self.deletion_info = data_types::DeletionInfo { 
+                    self.deletion_info = data_types::DeletionInfo { 
                        entity_type: "PriceLevel".to_string(),
                        entity_id: id,
                        affected_items: Vec::new()
-                   };
-                        self.show_modal = true;
-                   Task::none()
+                    };
+                    self.show_modal = true;
+                    Task::none()
                }
                 price_levels::Operation::CopyPriceLevel(id) => {
                     let copy_item = self.price_levels.get(&id).unwrap();
@@ -2601,6 +2777,7 @@ impl MenuBuilder {
                         edit.base.id.parse::<i32>().unwrap() != id
                     });
 
+                    self.save_state().expect("Failed to save to file.");
                     self.screen = Screen::PriceLevels;
                     Task::none()
                 },
@@ -2609,8 +2786,15 @@ impl MenuBuilder {
                     if let Some(edit_state) = self.price_level_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
-                            { // Update the name
-                            edit_state.base.name = new_name;
+                        { 
+                            //check if name var is less than 17 characters
+                            if new_name.len() < 17 {
+                                // Update the name
+                                edit_state.base.name = new_name;
+                            } else {
+                                //set validation error message if it's longer than 16 characters
+                                edit_state.base.name_validation_error = Some("Must be less than 16 characters".to_string());
+                            }
                         }
 
                     self.screen = Screen::PriceLevels;
@@ -2638,11 +2822,19 @@ impl MenuBuilder {
                     Task::none()
                 },
                 price_levels::Operation::CancelEdit(id) => {
+                    let price_level = self.price_levels.get(&id).expect("I created an editstate without a PriceLevel?");
+
                     // Find the edit state and reset it before removing
                     if let Some(edit_state) = self.price_level_edit_state_vec
                         .iter_mut()
                         .find(|state| state.base.id.parse::<i32>().unwrap() == id) 
-                        {   // Reset the data to original values if needed
+                        {
+                            if price_level.name.len() < 1 
+                            {
+                                self.price_levels.remove(&id);
+                            }   
+                            
+                            // Reset the data to original values if needed
                             edit_state.reset();
                         }
 
@@ -2761,4 +2953,3 @@ fn handle_event(event: event::Event, _: event::Status, _: iced::window::Id) -> O
         _ => None,
     }
 }
-
