@@ -122,14 +122,14 @@ pub fn view<'a>(
                     text_input("Item Name", &item.name)
                         .on_input(Message::UpdateName)
                         .style(Modern::inline_text_input())
-                        .width(200)
+                        .width(400)
                         .padding(5)
                 ].spacing(10).padding(10),
                 column![
                     text("Base Price").style(Modern::primary_text()),
                     text_input(
                         "Base Price",
-                        &item.cost_amount.map_or(String::new(), |c| c.to_string())
+                        &item.default_price.map_or(String::new(), |c| c.to_string())
                     )
                     .on_input(Message::UpdateCostAmount)
                     .style(Modern::inline_text_input())
@@ -479,7 +479,7 @@ pub fn view<'a>(
                     row(
                         selected_groups
                             .iter()
-                            .filter_map(|id| choice_groups.get(id))
+                            .filter_map(|id| choice_groups.get(&id.0))
                             .map(|group| {
                                 container(
                                     button(
@@ -525,7 +525,7 @@ pub fn view<'a>(
                 row(
                     selected_logicals
                         .iter()
-                        .filter_map(|id| printer_logicals.get(id))
+                        .filter_map(|id| printer_logicals.get(&id.0))
                         .map(|logical| {
                             container(
                                 button(

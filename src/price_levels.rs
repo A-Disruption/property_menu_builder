@@ -304,7 +304,7 @@ fn render_price_level_row<'a>(
 
     // Name input with validation
     let name_input: Element<'_, Message> = {
-        let input = text_input("Item Group Name", &display_name)
+        let input = text_input("Price Level Name", &display_name)
             .on_input_maybe(
                 if editing {
                     Some(|name| Message::UpdateName(price_level.id, name))

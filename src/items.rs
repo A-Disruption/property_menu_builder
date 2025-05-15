@@ -1,19 +1,17 @@
 pub mod edit;
 pub mod view;
-pub mod prepare_export;
-pub mod prepare_exports2;
+pub mod import_items;
+mod Import_Items;
 
 use std::collections::BTreeMap;
 use crate::data_types::{
     self, EntityId, ValidationError, ItemPrice
 };
-pub use prepare_export::export_to_csv;
-pub use prepare_exports2::export_to_csv2;
 use crate::Action;
 use iced_modern_theme::Modern;
 use iced::{Alignment, Element, Length};
 use serde::{Serialize, Deserialize};
-use iced::widget::{button, combo_box, container, column, row, text};
+use iced::widget::{button, combo_box, container, column, row, text, scrollable};
 use rust_decimal::Decimal;
 use crate::{
     tax_groups::TaxGroup,
@@ -125,10 +123,10 @@ pub struct EditState {
     pub language_iso_code: String,
 
     // Related Items
-    pub choice_groups: Vec<EntityId>,
+    pub choice_groups: Vec<(EntityId, i32)>,
     pub choice_groups_combo: combo_box::State<ChoiceGroup>,
     pub choice_group_selection: Option<ChoiceGroup>,
-    pub printer_logicals: Vec<EntityId>,
+    pub printer_logicals: Vec<(EntityId, bool)>,
     pub printer_logicals_combo: combo_box::State<PrinterLogical>,
     pub printer_logicals_selection: Option<PrinterLogical>,
 
@@ -275,8 +273,9 @@ pub struct Item {
     pub button1: String,
     pub button2: Option<String>,
     pub printer_text: String,
-    pub price_levels: Option<Vec<EntityId>>,
-    pub item_prices: Option<Vec<ItemPrice>>,
+    pub price_levels: Option<Vec<EntityId>>, //initial setup, before storing price level IDs with Price per item.
+    pub default_price: Option<Decimal>,
+    pub item_prices: Option<Vec<ItemPrice>>, //actually the price levels in the code
     pub product_class: Option<EntityId>,
     pub revenue_category: Option<EntityId>,
     pub tax_group: Option<EntityId>,
@@ -298,8 +297,8 @@ pub struct Item {
     pub customer_receipt: String,
     pub allow_price_override: bool,
     pub reserved2: bool,
-    pub choice_groups: Option<Vec<EntityId>>,
-    pub printer_logicals: Option<Vec<EntityId>>,
+    pub choice_groups: Option<Vec<(EntityId, i32)>>,  // i32, to track sequence number for the choice groups, per item
+    pub printer_logicals: Option<Vec<(EntityId, bool)>>, // bool to track if a printer is primary or not
     pub covers: i32,
     pub store_id: i32,
     pub kitchen_video: String,
@@ -320,6 +319,7 @@ impl Default for Item {
             button1: String::new(),
             button2: None,
             printer_text: String::new(),
+            default_price: None,
             price_levels: None,
             item_prices: None,
             product_class: None,
@@ -473,7 +473,7 @@ impl Item {
         }
 
         if let Some(ref groups) = self.choice_groups {
-            for group_id in groups {
+            for (group_id, _) in groups {
                 if !context.available_choice_groups.contains_key(group_id) {
                     return Err(ValidationError::InvalidReference(
                         "Referenced choice group does not exist".to_string()
@@ -484,7 +484,7 @@ impl Item {
 
         if let Some(ref printers) = self.printer_logicals {
             for printer_id in printers {
-                if !context.available_printer_logicals.contains_key(printer_id) {
+                if !context.available_printer_logicals.contains_key(&printer_id.0) {
                     return Err(ValidationError::InvalidReference(
                         "Referenced printer logical does not exist".to_string()
                     ));
@@ -561,12 +561,16 @@ pub fn update(
             }
             edit::Message::ChoiceGroupSelected(group_id) => {
                 match &mut item.choice_groups {
-                    Some(groups) => {
-                        if groups.contains(&group_id) {}else {
-                            groups.push(group_id);
+                    Some(choice_groups) => {
+                        if choice_groups.iter().any(|(id, _)| *id == group_id ) {
+                            // do nothing, it's already selected
+                        } else {
+                            //add group to the selected groups list
+                            let next_sequence: i32 = choice_groups.len().try_into().unwrap_or_else(|_| { i32::MAX });
+                            choice_groups.push((group_id, next_sequence ))
                         }
                     }
-                    None => item.choice_groups = Some(vec![group_id]),
+                    None => { item.choice_groups = Some(vec![(group_id, 0)]) } // add the choice group as the first item in the sequence
                 }
                 Action::none()
             }
@@ -581,11 +585,17 @@ pub fn update(
             edit::Message::PrinterLogicalSelected(printer_id) => {
                 match &mut item.printer_logicals {
                     Some(printers) => {
-                        if printers.contains(&printer_id){}else{
-                            printers.push(printer_id);
+                        if printers.iter().any(|(id, _)| *id == printer_id) {
+                            // Printer already exists, do nothing
+                        } else {
+                            // Add new printer with false as it's not the first one
+                            printers.push((printer_id, false));
                         }
                     }
-                    None => item.printer_logicals = Some(vec![printer_id]),
+                    None => {
+                        // This is the first printer being added, so set boolean to true
+                        item.printer_logicals = Some(vec![(printer_id, true)]);
+                    }
                 }
                 Action::none()
             }
@@ -793,41 +803,60 @@ pub fn update(
 
             // Related Items
             edit::Message::AddChoiceGroup(group_id) => {
-                if let Some(ref mut groups) = item.choice_groups {
-                    if !groups.contains(&group_id) {
-                        groups.push(group_id);
+                match &mut item.choice_groups {
+                    Some(choice_groups) => {
+                        if choice_groups.iter().any(|(id, _)| *id == group_id ) {
+                            // Don't add the choice group, it already exists
+                        }
+                        else {
+                            //get the sequence number
+                            let next_sequence: i32 = choice_groups.len().try_into().unwrap_or_else(|_| { i32::MAX });
+                            //Add the choice group
+                            choice_groups.push((group_id, next_sequence))
+                        }
                     }
-                } else {
-                    item.choice_groups = Some(vec![group_id]);
+                    None => { item.choice_groups = Some(vec![(group_id, 0)]) } // add the choice group as the first item in the sequence
                 }
                 Action::none()
             }
             edit::Message::RemoveChoiceGroup(group_id) => {
-                println!("Remove a Choice Group: {}", group_id.clone());
-                if let Some(ref mut groups) = item.choice_groups {
-                    groups.retain(|&id| id != group_id);
-                    if groups.is_empty() {
-                        item.choice_groups = None;
+                match &mut item.choice_groups {
+                    Some(choice_groups) => {
+                        if choice_groups.iter().any(|(id, _)| *id == group_id ) {
+                            choice_groups.retain(|&(id, _)| id != group_id)
+                        } 
+                        else {} //choice group doesn't exist, do nothing
                     }
+                    None => {} //no choice group, do nothing
                 }
                 Action::none()
             }
             edit::Message::AddPrinterLogical(printer_id) => {
-                if let Some(ref mut printers) = item.printer_logicals {
-                    if !printers.contains(&printer_id) {
-                        printers.push(printer_id);
+                match &mut item.printer_logicals {
+                    Some(printers) => {
+                        if printers.iter().any(|(id, _)| *id == printer_id ) {
+                            // Printer already exists, do nothing
+                        } else {
+                            // Add new printer with false as it's not the first one
+                            printers.push((printer_id, false));
+                        }
                     }
-                } else {
-                    item.printer_logicals = Some(vec![printer_id]);
+                    None => {
+                        // This is the first printer being added, so set boolean to true
+                        item.printer_logicals = Some(vec![(printer_id, true)]);
+                    }
                 }
                 Action::none()
             }
             edit::Message::RemovePrinterLogical(printer_id) => {
-                if let Some(ref mut printers) = item.printer_logicals {
-                    printers.retain(|&id| id != printer_id);
-                    if printers.is_empty() {
-                        item.printer_logicals = None;
+                match &mut item.printer_logicals {
+                    Some(printers) => {
+                        if printers.iter().any(|(id, _)| *id == printer_id ) {
+                            // Keep all Ids, not matching the id we want to remove.
+                            printers.retain(|&(id, _)| id != printer_id);
+                        } else {} // Printer doesn't exist, do nothing
                     }
+                    None => {} // Printer doesn't exist, do nothing
                 }
                 Action::none()
             }
@@ -912,32 +941,34 @@ pub fn view<'a>(
     ]
     .padding(5);
 
-    let items_list = column(
-        filtered_items
-            .iter()
-            .map(|an_item| {
-                button(
-                    list_item(
-                        an_item.name.as_str(),
-                        button(icon::copy().size(14))
-                            .on_press(Message::CopyItem(an_item.id)),
-                        button(icon::trash().size(14))
-                            .on_press(Message::RequestDelete(an_item.id)),
+    let items_list = scrollable(
+        column(
+            filtered_items
+                .iter()
+                .map(|an_item| {
+                    button(
+                        list_item(
+                            an_item.name.as_str(),
+                            button(icon::copy().size(14))
+                                .on_press(Message::CopyItem(an_item.id)),
+                            button(icon::trash().size(14))
+                                .on_press(Message::RequestDelete(an_item.id)),
+                        )
                     )
-                )
-                .on_press(Message::Select(an_item.id))
-                .style(
-                    Modern::conditional_button_style(
-                        an_item.id == item.id,
-                        Modern::selected_button_style(Modern::system_button()),
-                        Modern::system_button()
-                    )
-                ).into()
-            })
-            .collect::<Vec<_>>()
-    )
-    .spacing(5)
-    .width(iced::Length::Fixed(250.0));
+                    .on_press(Message::Select(an_item.id))
+                    .style(
+                        Modern::conditional_button_style(
+                            an_item.id == item.id,
+                            Modern::selected_button_style(Modern::system_button()),
+                            Modern::system_button()
+                        )
+                    ).into()
+                })
+                .collect::<Vec<_>>()
+        )
+        .spacing(5)
+        .width(iced::Length::Fixed(250.0))
+    ).height(Length::Fill);
 
     let content = match mode {
         Mode::View => view::view(
@@ -1089,7 +1120,7 @@ fn matches_search(
     //Match on each choice_group's name
     if let Some(cg_ids) = &item.choice_groups {
         for cg_id in cg_ids {
-            if let Some(cg) = choice_groups.get(cg_id) {
+            if let Some(cg) = choice_groups.get(&cg_id.0) {
                 if cg.name.to_lowercase().contains(&query_lower) {
                     return true;
                 }
@@ -1099,7 +1130,7 @@ fn matches_search(
 
     //Match on each printer_logical's name
     if let Some(pl_ids) = &item.printer_logicals {
-        for pl_id in pl_ids {
+        for (pl_id, _) in pl_ids {
             if let Some(pl) = printer_logicals.get(pl_id) {
                 if pl.name.to_lowercase().contains(&query_lower) {
                     return true;
@@ -1125,7 +1156,7 @@ fn matches_search(
 
 pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, Message>,delete_button: iced::widget::Button<'a, Message>) -> Element<'a, Message> {
     let button_content = row![
-        text(list_text).center(),
+        text(list_text).size(12).align_x(iced::Alignment::Start).width(150),
         iced::widget::horizontal_space(),
         copy_button.style(Modern::primary_button()),
         delete_button.style(Modern::danger_button())

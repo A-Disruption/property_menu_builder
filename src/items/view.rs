@@ -52,12 +52,13 @@ pub fn view<'a>(
     let basic_info = container(
         column![
                 row![
-                    info_column(
+                    long_info_column(
                         "Item Name".to_string(),
                         item.name.clone()),
                     info_column(
                         "Base Price".to_string(),
-                        item.cost_amount.map_or("Not Set".to_string(), |c| format!("${:.2}", c))),
+                        //item.default_price.map_or("Not Set".to_string(), |c| format!("${:.2}", c))),
+                        item.default_price.map_or("$0.00".to_string(), |c| format!("${}", c))),
                 ].wrap(),
                 row![
                     info_column(
@@ -262,7 +263,7 @@ pub fn view<'a>(
             if let Some(ref printers) = item.printer_logicals {
                 row(
                     printers.iter()
-                        .filter_map(|id| printer_logicals.get(id))
+                        .filter_map(|id| printer_logicals.get(&id.0))
                         .map(|printer| button( &*printer.name).style(Modern::gray_button()).into())
                         .collect::<Vec<_>>()
                 ).spacing(10).wrap()
@@ -310,7 +311,7 @@ pub fn view<'a>(
             if let Some(ref groups) = item.choice_groups {
                 row(
                     groups.iter()
-                        .filter_map(|id| choice_groups.get(id))
+                        .filter_map(|id| choice_groups.get(&id.0))
                         .map(|group| button(&*group.name).style(Modern::gray_button()).into() )
                         .collect::<Vec<_>>()
                 ).spacing(10).wrap()
@@ -355,6 +356,18 @@ fn info_column(label: String, value: String) -> Element<'static, Message> {
         column![
             text(label).width(Length::Shrink).style(Modern::primary_text()),
             text_input(&value, &value).width(200).style(Modern::inline_text_input())
+        ]
+        .spacing(10)
+        .padding(10)
+    )
+    .into()
+}
+
+fn long_info_column(label: String, value: String) -> Element<'static, Message> {
+    container(
+        column![
+            text(label).width(Length::Shrink).style(Modern::primary_text()),
+            text_input(&value, &value).width(420).style(Modern::inline_text_input())
         ]
         .spacing(10)
         .padding(10)

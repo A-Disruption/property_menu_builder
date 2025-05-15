@@ -1,3 +1,4 @@
+// #![windows_subsystem = "windows"]
 use iced::advanced::graphics::core::window;
 use iced::{event, Alignment};
 use iced::keyboard::{self, Key, Modifiers};
@@ -33,6 +34,7 @@ mod entity_component;
 mod icon;
 
 use crate::{
+    items::import_items,
     items::{Item, ViewContext},
     item_groups::ItemGroup,
     price_levels::PriceLevel,
@@ -94,12 +96,14 @@ pub enum Message {
     ConfirmDelete(data_types::DeletionInfo),
     CancelDelete,
     ToggleTheme(bool),
-    ExportCSVSelected(Option<String>),
     ExportComplete(String),
     ExportFailed(String),
     ExportCSV(PathBuf),
-    ErrorExportingCSV(String),
     PrepareExport,
+    FileDropped(PathBuf),
+    ImportItemsOverwriteExisting,
+    ImportItemsIntoExisting,
+    CancelItemImport,
 }
 
 #[derive(Debug)]
@@ -124,8 +128,10 @@ pub struct MenuBuilder {
     file_manager: persistence::FileManager,
     deletion_info: data_types::DeletionInfo,
     show_modal: bool,
+    show_item_import_confirmation: bool,
     error_message: Option<String>,
     toggle_theme: bool,
+    import_item_path: PathBuf,
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -187,10 +193,12 @@ pub struct MenuBuilder {
             settings: settings::AppSettings::default(),
             theme: iced_modern_theme::Modern::dark_theme(),
             file_manager: file_manager,
+            show_item_import_confirmation: false,
             show_modal: false,
             deletion_info: data_types::DeletionInfo::new(),
             error_message: None,
             toggle_theme: true,
+            import_item_path: PathBuf::new(),
 
             // Items
             items: BTreeMap::new(),
@@ -590,7 +598,7 @@ impl MenuBuilder {
                         for (_, item) in self.items.iter_mut() {
                             if let Some(groups) = &mut item.choice_groups {
                                 // Remove this specific choice group ID from the Item.choice_groups vec
-                                groups.retain(|&group_id| group_id != deletion_info.entity_id);
+                                groups.retain(|&group_id| group_id.0 != deletion_info.entity_id);
                                 
                                 // If vec is empty after removal, set to None
                                 if groups.is_empty() {
@@ -645,7 +653,7 @@ impl MenuBuilder {
                         for (_, item) in self.items.iter_mut() {
                             if let Some(printers) = &mut item.printer_logicals {
                                 // Remove this specific printer logical ID from the Item.printer_logicals vec
-                                printers.retain(|&printer_id| printer_id != deletion_info.entity_id);
+                                printers.retain(|&(printer_id, _)| printer_id != deletion_info.entity_id);
                                 
                                 // If vec is empty after removal, set to None
                                 if printers.is_empty() {
@@ -756,30 +764,6 @@ impl MenuBuilder {
                 self.toggle_theme = !self.toggle_theme;
                 Task::none()
             }
-            Message::ExportCSVSelected(maybe_path) => {
-                println!("Handling ExportCSVSelected: {:?}", maybe_path);
-                
-                if let Some(path) = maybe_path {
-                    // User selected a file path, perform export
-                    match self.export_items_to_csv(&path) {
-                        Ok(_) => {
-                            println!("Successfully exported items to {}", path);
-                            self.error_message = None;
-                            // Return a message to handle success
-                            return Task::perform(async {}, move |_| Message::ExportComplete(path.clone()));
-                        }
-                        Err(e) => {
-                            println!("Export failed: {}", e);
-                            self.error_message = Some(format!("Export failed: {}", e));
-                            // Return a message to handle failure
-                            return Task::perform(async {}, move |_| Message::ExportFailed(e.clone()));
-                        }
-                    }
-                } else {
-                    println!("No path selected, export canceled");
-                }
-                Task::none()
-            },
             Message::ExportComplete(path) => {
                 println!("Export completed: {}", path);
                 self.error_message = Some(format!("Export successful: {}", path));
@@ -793,40 +777,75 @@ impl MenuBuilder {
             },
 
             Message::ExportCSV(path) => {
-                match self.export_items_to_csv2(path.clone()) {
-                    Ok(_) => {
-                        println!("Successfully exported items to {:?}", path);
-                            self.error_message = None;
-                            // Return a message to handle success
-                            return Task::perform(async {}, move |_| Message::ExportComplete(path.display().to_string()));
-                    },
-                    Err(e) => {
-                        println!("Export failed: {}", e);
-                            self.error_message = Some(format!("Export failed: {}", e));
-                            // Return a message to handle failure
-                            return Task::perform(async {}, move |_| Message::ExportFailed(e.clone()));
+
+                Task::none() 
+            }
+
+            Message::PrepareExport => {
+                
+                Task::none()
+            }
+
+            Message::FileDropped(path) => {
+
+                println!("File Dropped: {:?}", &path);
+                self.import_item_path = path.clone();
+                if import_items::is_csv_or_txt(path.clone()) {
+                    match import_items::verify_csv_format(path) {
+                        Ok(_) => {
+                            self.show_item_import_confirmation = true;
+                            println!("File format confirmed.")
+                        }
+                        Err(e) => {println!("{:?}", e);}
                     }
                 }
+
                 Task::none()
             }
-            Message::ErrorExportingCSV(error) => {
-                println!("{}", error);
+            Message::ImportItemsOverwriteExisting => {
+                println!("File Path to import items: {:?}", &self.import_item_path.clone());
+
+                //clear existing data, keep settings
+                let default = MenuBuilder::default();
+                let settings = self.settings.clone();
+                let import_path = &self.import_item_path.clone();
+                *self = default;
+                self.settings = settings;
+
+                //import items from the import file.
+                match import_items::collect_item_information(import_path) {
+                    Ok(imported_items) => { 
+                        println!("It worked!");
+                        self.items = imported_items;
+                    },
+                    Err(e) => { println!("Error collecting item information!: {}", e); }
+                };
+                println!("{:?}", self.items.last_entry());
+
+                import_items::ensure_all_referenced_entities_exist(
+                    &self.items,
+                    &mut self.price_levels,
+                    &mut self.product_classes,
+                    &mut self.revenue_categories,
+                    &mut self.tax_groups,
+                    &mut self.security_levels,
+                    &mut self.report_categories,
+                    &mut self.item_groups,
+                    &mut self.choice_groups,
+                    &mut self.printer_logicals,
+                );
+
+                self.show_item_import_confirmation = false;
                 Task::none()
-            }
-            Message::PrepareExport => {
-                println!("Prepare Export");
-
-                let future = AsyncFileDialog::new()
-                .add_filter("csv", &["csv"])
-                .set_file_name("InfoGenesis_Items_Export.csv")
-                .save_file();
-
-                return Task::perform(
-                    future,
-                    |file_handler| 
-                    Message::ExportCSV(file_handler.unwrap().path().to_path_buf())
-                )
-            }
+            },
+            Message::ImportItemsIntoExisting => {
+                self.show_item_import_confirmation = false;
+                Task::none()
+            },
+            Message::CancelItemImport => {
+                self.show_item_import_confirmation = false;
+                Task::none()
+            },
         }   
     }
 
@@ -1124,6 +1143,36 @@ impl MenuBuilder {
             ).style(Modern::separated_container())
         ).padding(250);
 
+        let import_items_confirmation = container(
+            container(
+                column![
+                    vertical_space().height(10),
+                    row![
+                        iced::widget::horizontal_space().width(6),
+                        text("Import Items").style(Modern::primary_text()).size(18),
+                        iced::widget::horizontal_space().width(6),
+                    ],
+                    iced::widget::vertical_space().height(10),
+                    row![
+                        iced::widget::horizontal_space().width(6),
+                        text("Do you want to overwrite existing data, or import into the existing database?").style(Modern::secondary_text()).size(14),
+                        iced::widget::horizontal_space().width(6),
+                    ],
+                    
+                    iced::widget::vertical_space().height(15),
+                    row![
+                        iced::widget::horizontal_space().width(6),
+                        button("New Database").on_press(Message::ImportItemsOverwriteExisting).style(Modern::warning_button()),
+                        iced::widget::horizontal_space(),
+                        button("Add to existing").on_press(Message::ImportItemsIntoExisting).style(Modern::primary_button()),
+                        iced::widget::horizontal_space(),
+                        button("Cancel").on_press(Message::CancelItemImport).style(Modern::system_button()),
+                        iced::widget::horizontal_space().width(6),
+                    ]
+                ].width(335).height(135)
+            ).style(Modern::accent_container())
+        ).padding(250);
+
         //iced::widget::stack
         let app_view = row![
             sidebar,
@@ -1132,12 +1181,19 @@ impl MenuBuilder {
                 .padding(20),
         ];
         
-        if self.show_modal {
+        
+        if self.show_modal { //Show Deletion confirmation popup
             stack![
                 app_view,
                 opaque(delete_confirmation_popup)
             ].into()
-        } else {
+        } else if self.show_item_import_confirmation { // Show Item Import Confirmation popup
+            stack![
+                app_view,
+                opaque(import_items_confirmation)
+            ].into()
+        }
+        else {
             app_view.into()
         }
      }
@@ -1183,77 +1239,6 @@ impl MenuBuilder {
                     settings::Operation::ExportItemsToCSV => {
                         println!("Team?");
                         Task::done(Message::PrepareExport)
-                        // Spawn an async task that opens the save file dialog.
-/*                         return Task::perform(
-                            async move {
-
-                                // Log current thread info
-                                println!("Running on thread: {:?}", std::thread::current());
-                                println!("Thread ID: {:?}", std::thread::current().id());
-                                println!("Thread name: {:?}", std::thread::current().name());
-
-                                AsyncFileDialog::new()
-                                    .add_filter("csv", &["csv"])
-                                    .set_file_name("Infogenesis_Items_Import.csv")
-                                    .save_file()
-                                    .await
-                            },
-                            move |file_handle| {
-                                if let Some(file) = file_handle {
-                                    let path = file.path().to_path_buf();
-                                    // Use the cloned, thread-safe data to perform the export.
-                                    match items::export_to_csv2(&items, &path, Some(&item_groups)) {
-                                        Ok(()) => Message::ExportComplete(path.display().to_string()),
-                                        Err(e) => Message::ExportFailed(e),
-                                    }
-                                } else {
-                                    Message::ErrorExportingCSV("File Not Selected".into())
-                                }
-                            }
-                        ) */
-
-                        
-
-/*                         return Task::perform(  // somewhat working, but messages aren't being triggered
-                            //future
-                            AsyncFileDialog::new()
-                            .add_filter("csv", &["csv"])
-                            .set_file_name("Infogenesis_Items_Import.csv")
-                            .save_file(),
-
-                            //return message
-                            |filehandle| if let Some(path) = filehandle {
-                                let path1 = path.path();
-                                println!("Doing the ExportCSV");
-                                Message::ExportCSV(path1.to_path_buf())
-                            } else {
-                                println!("No Team :(");
-                                Message::ErrorExportingCSV("File Not Selected".to_string())
-                            }
-                        ); */
-                        
-                        
-/*                         return Task::perform(async  {//move {
-                            println!("Starting async dialog");
-                            
-                            if let Some(file) = AsyncFileDialog::new()
-                            .add_filter("csv", &["csv"])
-                            .set_file_name("Infogenesis_Items_Import.csv")
-                            .save_file()
-                            .await
-                                { 
-                                    println!("Team!!");
-                                    let path = file.path();
-                                    Message::ExportCSV(path.to_path_buf())
-                                }
-                            else {
-                                println!("No Team :(");
-                                Message::ErrorExportingCSV("File Not Selected".to_string())
-                            }
-                        },
-                        |message| message
-                    )
-                        .into() */
                     }
                 }
             }
@@ -2118,27 +2103,27 @@ impl MenuBuilder {
                            entity_type: "ReportCategory".to_string(),
                            entity_id: id,
                            affected_items: Vec::new()
-                       };
+                        };
                         self.show_modal = true;
-                       Task::none()
+                        Task::none()
                    }
                     report_categories::Operation::CopyReportCategory(id) => {
                         let copy_item = self.report_categories.get(&id).unwrap();
-                       let next_id = self.report_categories
-                           .keys()
-                           .max()
-                           .map_or(1, |max_id| max_id + 1);
+                        let next_id = self.report_categories
+                            .keys()
+                            .max()
+                            .map_or(1, |max_id| max_id + 1);
                        
-                       let new_item = ReportCategory {
-                           id: next_id,
-                           name: copy_item.name.clone() + "(" + next_id.to_string().as_str() + ")",
-                           ..copy_item.clone()
-                       };
+                        let new_item = ReportCategory {
+                            id: next_id,
+                            name: copy_item.name.clone() + "(" + next_id.to_string().as_str() + ")",
+                            ..copy_item.clone()
+                        };
 
-                       self.report_categories.insert(next_id, new_item.clone());
-                       self.screen = Screen::ReportCategories;
+                        self.report_categories.insert(next_id, new_item.clone());
+                        self.screen = Screen::ReportCategories;
 
-                       Task::none()
+                        Task::none()
                    }
                     report_categories::Operation::EditReportCategory(id) => {
                         // First check if we already have an edit state for this report_category
@@ -2167,25 +2152,25 @@ impl MenuBuilder {
                     report_categories::Operation::SaveAll(id, edit_state) => {
                         // First, find the edit state for this report_category
                         if let Some(edit_state) = self.report_category_edit_state_vec
-                        .iter()
-                        .find(|state| state.id.parse::<i32>().unwrap() == id)
-                    {
-                        // Clone the edit state name since we'll need it after removing the edit state
-                        let new_name = edit_state.name.clone();
+                            .iter()
+                            .find(|state| state.id.parse::<i32>().unwrap() == id)
+                        {
+                            // Clone the edit state name since we'll need it after removing the edit state
+                            let new_name = edit_state.name.clone();
                         
-                        // Get a mutable reference to the report_category and update it
-                        if let Some(report_category) = self.report_categories.get_mut(&id) {
-                            report_category.name = new_name;
+                            // Get a mutable reference to the report_category and update it
+                            if let Some(report_category) = self.report_categories.get_mut(&id) {
+                                report_category.name = new_name;
+                            }
                         }
-                    }
 
-                    self.report_category_edit_state_vec.retain(|edit| {
-                        edit.id.parse::<i32>().unwrap() != id
-                    });
+                        self.report_category_edit_state_vec.retain(|edit| {
+                            edit.id.parse::<i32>().unwrap() != id
+                        });
 
-                    self.save_state().expect("Failed to save to file.");
-                    self.screen = Screen::ReportCategories;
-                    Task::none()
+                        self.save_state().expect("Failed to save to file.");
+                        self.screen = Screen::ReportCategories;
+                        Task::none()
                     },
                     report_categories::Operation::UpdateName(id, new_name) => {
                         if let Some(edit_state) = self.report_category_edit_state_vec
@@ -2268,9 +2253,9 @@ impl MenuBuilder {
                            entity_type: "ProductClass".to_string(),
                            entity_id: id,
                            affected_items: Vec::new()
-                       };
+                        };
                         self.show_modal = true;
-                       Task::none()
+                        Task::none()
                    }
                     product_classes::Operation::CopyProductClass(id) => {
                         let copy_item = self.product_classes.get(&id).unwrap();
@@ -2623,7 +2608,7 @@ impl MenuBuilder {
                     //Create a new PrinterLogical
                     let printer = PrinterLogical {
                         id: next_id,
-                        name: String::new()
+                        name: String::new(),
                     };
 
                     //Add new PrinterLogical to the app state
@@ -2918,15 +2903,6 @@ impl MenuBuilder {
         Ok(())
     }
 
-    fn export_items_to_csv(&self, path: &str) -> Result<(), String> {
-        items::export_to_csv(&self.items, path)
-    }
-
-    fn export_items_to_csv2(&self, path: PathBuf) -> Result<(), String> {
-        println!("Exporting Items to {:?}", path);
-        items::export_to_csv2(&self.items, &path, Some(&self.item_groups))
-    }
-
     fn subscription(&self) -> Subscription<Message> {
         event::listen_with(handle_event)
     }
@@ -2946,6 +2922,9 @@ fn handle_event(event: event::Event, _: event::Status, _: iced::window::Id) -> O
                 Key::Named(keyboard::key::Named::Tab) => Some(Message::HotKey(HotKey::Tab(modifiers))),
                 _ => None,
             }
+        }
+        event::Event::Window(window::Event::FileDropped(path)) => {
+            Some(Message::FileDropped(path))
         }
 /*         event::Event::Window(window::Event::Resized(size)) => {
             Some(Message::AppResized(size))
