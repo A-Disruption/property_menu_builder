@@ -1,11 +1,9 @@
 use iced::widget::{button, checkbox, column, container, row, text, text_input};
-use iced::{Element, Length, Theme};
+use iced::Element;
 pub use iced::window::Settings;
 use iced_modern_theme::Modern;
-use crate::HotKey;
 use serde::{Serialize, Deserialize};
 use crate::persistence;
-use std::fs::File;
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -131,15 +129,6 @@ pub fn view<'a>(
                 .style(Modern::primary_button()),
         ]
         .spacing(10),
-
-/* 
-         iced::widget::pick_list(
-            ThemeChoice::ALL,
-            Some(settings.app_theme),
-            |m| Message::ThemeChanged(m)
-        ).style(Modern::pick_list()),
-         */
-
     ].spacing(10);
 
     let setting_container = container(

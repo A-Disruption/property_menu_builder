@@ -11,9 +11,11 @@ use persistence::FileManager;
 use price_levels::PriceLevelType;
 use std::collections::BTreeMap;
 use rust_decimal::Decimal;
-use rfd::AsyncFileDialog;
-use std::path::PathBuf;
+use rfd::{AsyncFileDialog, FileHandle};
+use std::path::{PathBuf, Path};
 use std::ops::Range;
+use std::sync::Arc;
+use tokio;
 use iced_modern_theme::Modern;
 
 mod action;
@@ -34,7 +36,7 @@ mod entity_component;
 mod icon;
 
 use crate::{
-    items::import_items,
+    items::{import_items, export_items,}, //export_items::Error},
     items::{Item, ViewContext},
     item_groups::ItemGroup,
     price_levels::PriceLevel,
@@ -98,12 +100,16 @@ pub enum Message {
     ToggleTheme(bool),
     ExportComplete(String),
     ExportFailed(String),
-    ExportCSV(PathBuf),
-    PrepareExport,
+    ExportCSV(Result<(PathBuf, Arc<String>), Error>),
     FileDropped(PathBuf),
     ImportItemsOverwriteExisting,
     ImportItemsIntoExisting,
     CancelItemImport,
+    NewFile,
+    OpenFile,
+    FileOpened(Result<(PathBuf, Arc<String>), Error>),
+    SaveFile,
+    FileSaved(Result<PathBuf, Error>),
 }
 
 #[derive(Debug)]
@@ -132,6 +138,7 @@ pub struct MenuBuilder {
     error_message: Option<String>,
     toggle_theme: bool,
     import_item_path: PathBuf,
+    get_export_path: bool,
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -199,6 +206,7 @@ pub struct MenuBuilder {
             error_message: None,
             toggle_theme: true,
             import_item_path: PathBuf::new(),
+            get_export_path: false,
 
             // Items
             items: BTreeMap::new(),
@@ -287,9 +295,11 @@ impl MenuBuilder {
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
+        println!("Update Message received: {:?}", &message);
         match message {
             Message::Settings(msg) => {
-                //Message::Settings(msg);
+                println!("Settings message received: {:?}", &msg);
+
                 let action = settings::update(
                     &mut self.settings,
                     msg,
@@ -305,7 +315,6 @@ impl MenuBuilder {
                 };
 
                 operation_task.chain(action.task)
-                //Task::none()
             }
             Message::Items(id, msg) => {
                 let cloned_items = self.items.clone();
@@ -776,15 +785,47 @@ impl MenuBuilder {
                 Task::none()
             },
 
-            Message::ExportCSV(path) => {
+            Message::ExportCSV(result) => {
+                println!("ExportCSV triggered");
 
+                match result {
+                    Ok((path, err)) => {
+                        println!("Path: {:?}", path)
+                    }
+                    Err(e) => {
+
+                    }
+                }
+
+/*                 if let Some(path) = path {
+                    println!("Selected path: {:?}", &path.path());
+
+                    let items = self.items.iter().map(|(_id, item)| 
+                        item.clone()
+                    ).collect::<Vec<_>>();
+                    
+                    // Here you would actually write your data to the file
+                    match export_items::prepare_item_export(&items, &path.file_name()) {
+                        Ok(_) => { println!("Items exported!")}
+                        Err(_) => { println!("Failed to export items!")}
+                    };
+                    
+                } else {
+                    println!("No path selected");
+                } */
+                
                 Task::none() 
             }
-
-            Message::PrepareExport => {
-                
-                Task::none()
-            }
+            Message::NewFile => Task::none(),
+            Message::OpenFile => {
+                println!("Preparing Export!");
+                        
+                //return Task::perform(export_items::open_file(), Message::ExportCSV) ;
+                Task::perform(open_file(), Message::ExportCSV)
+            },
+            Message::FileOpened(result) => Task::none(),
+            Message::SaveFile => Task::none(),
+            Message::FileSaved(result) => Task::none(),
 
             Message::FileDropped(path) => {
 
@@ -846,6 +887,10 @@ impl MenuBuilder {
                 self.show_item_import_confirmation = false;
                 Task::none()
             },
+            _ => {
+                println!("Received unhandled messaged! ");
+                Task::none()
+            }
         }   
     }
 
@@ -1237,8 +1282,12 @@ impl MenuBuilder {
                         Task::none()
                     }
                     settings::Operation::ExportItemsToCSV => {
-                        println!("Team?");
-                        Task::done(Message::PrepareExport)
+                        println!("Settings Operation Export Items To CSV");
+                        //let task = Task::done(Message::OpenFile);
+                        //println!("OpenFile task created");
+                        //task
+                        self.update(Message::OpenFile)
+                        //Task::none()
                     }
                 }
             }
@@ -1324,10 +1373,6 @@ impl MenuBuilder {
                         self.screen = Screen::Items(items::Mode::View);
                         Task::none()
                     }
-                    items::Operation::ExportToCsv => {
-                        todo!();
-                        Task::none()
-                    }
                     items::Operation::CreateNew(mut item) => {
                         let next_id = self.items
                             .keys()
@@ -1342,8 +1387,10 @@ impl MenuBuilder {
                         Task::none()
                     },
                     items::Operation::Select(id) => {
+                        let test = self.items.get(&id).unwrap();
                         self.selected_item_id = Some(id);
                         self.screen = Screen::Items(items::Mode::View);
+                        items::export_items::item_to_export_string(test);
                         Task::none()
                     },
                     items::Operation::UpdateSearchQuery(query) => {
@@ -2931,4 +2978,57 @@ fn handle_event(event: event::Event, _: event::Status, _: iced::window::Id) -> O
         }, */
         _ => None,
     }
+}
+
+
+#[derive(Debug, Clone)]
+pub enum Error {
+    DialogClosed,
+    IoError(std::io::ErrorKind),
+}
+
+pub async fn open_file() -> Result<(PathBuf, Arc<String>), Error> {
+    let picked_file = rfd::AsyncFileDialog::new()
+        .set_title("Choose file name...")
+        .pick_file()
+        .await
+        .ok_or(Error::DialogClosed)?;
+
+    load_file(picked_file).await
+}
+
+pub async fn load_file(
+    path: impl Into<PathBuf>,
+) -> Result<(PathBuf, Arc<String>), Error> {
+    let path = path.into();
+
+    let contents = tokio::fs::read_to_string(&path)
+        .await
+        .map(Arc::new)
+        .map_err(|error| Error::IoError(error.kind()))?;
+
+    Ok((path, contents))
+}
+
+pub async fn save_file(
+    path: Option<PathBuf>,
+    contents: String,
+) -> Result<PathBuf, Error> {
+    let path = if let Some(path) = path {
+        path
+    } else {
+        rfd::AsyncFileDialog::new()
+            .save_file()
+            .await
+            .as_ref()
+            .map(rfd::FileHandle::path)
+            .map(Path::to_owned)
+            .ok_or(Error::DialogClosed)?
+    };
+
+    tokio::fs::write(&path, contents)
+        .await
+        .map_err(|error| Error::IoError(error.kind()))?;
+
+    Ok(path)
 }

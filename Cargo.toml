@@ -14,6 +14,7 @@ ron = "0.8"
 directories = "6.0.0"
 chrono = "0.4"
 rfd = { version = "*", default-features = false, features = ["tokio"] }
+tokio = { version = "1.45.0", features = ["fs"]}
 futures = "0.3"
 csv = "1.3.1"
 

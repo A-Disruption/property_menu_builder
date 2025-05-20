@@ -122,7 +122,7 @@ pub fn view<'a>(
                     text_input("Item Name", &item.name)
                         .on_input(Message::UpdateName)
                         .style(Modern::inline_text_input())
-                        .width(400)
+                        .width(420)
                         .padding(5)
                 ].spacing(10).padding(10),
                 column![

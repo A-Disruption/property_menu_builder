@@ -1,9 +1,12 @@
 pub mod edit;
 pub mod view;
 pub mod import_items;
-mod Import_Items;
+//mod Import_Items;
+pub mod export_items;
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::sync::Arc;
 use crate::data_types::{
     self, EntityId, ValidationError, ItemPrice
 };
@@ -31,6 +34,7 @@ use crate::{
 pub enum Message {
     Edit(edit::Message),
     View(view::Message),
+//    ExportItems(export_items::Message),
     CreateNew,
     Select(EntityId),
     SearchItems(String),
@@ -46,7 +50,6 @@ pub enum Operation {
     StartEdit(EntityId),
     Cancel,
     Back,
-    ExportToCsv,
     CreateNew(Item),
     Select(EntityId),
     UpdateSearchQuery(String),
@@ -869,6 +872,16 @@ pub fn update(
             view::Message::Back => Action::operation(Operation::Back),
             view::Message::ExportToCsv => Action::none() //Need to implement export and imports
         }
+/*         Message::ExportItems(msg) => match msg {
+            export_items::Message::NewFile => Action::operation(Operation::NewFile),
+            export_items::Message::OpenFile => {
+                println!("export message open file launched");
+                Action::operation(Operation::OpenFile)
+            },
+            export_items::Message::FileOpened(result) => Action::operation(Operation::FileOpened(result)),
+            export_items::Message::SaveFile => Action::operation(Operation::SaveFile),
+            export_items::Message::FileSaved(result) => Action::operation(Operation::FileSaved(result))
+        } */
         Message::CreateNew => {
             let new_item = Item::default();
             Action::operation(Operation::CreateNew(new_item))
