@@ -1,21 +1,18 @@
 // #![windows_subsystem = "windows"]
 use iced::advanced::graphics::core::window;
-use iced::{event, Alignment};
+use iced::event;
 use iced::keyboard::{self, Key, Modifiers};
 use iced::widget::{
     focus_next, focus_previous,
-    button, column, container, row, scrollable, text, vertical_space, opaque, stack
+    button, column, container, row, text, vertical_space, opaque, stack
 };
-use iced::{Element, Length, Size, Subscription, Task};
+use iced::{Element, Length, Size, Subscription, Task, Theme};
 use persistence::FileManager;
 use price_levels::PriceLevelType;
 use std::collections::BTreeMap;
 use rust_decimal::Decimal;
-use rfd::{AsyncFileDialog, FileHandle};
-use std::path::{PathBuf, Path};
+use std::path::PathBuf;
 use std::ops::Range;
-use std::sync::Arc;
-use tokio;
 use iced_modern_theme::Modern;
 
 mod action;
@@ -34,9 +31,10 @@ mod data_types;
 mod persistence;
 mod entity_component;
 mod icon;
+mod multiwindow;
 
 use crate::{
-    items::{import_items, export_items,}, //export_items::Error},
+    items::import_items,
     items::{Item, ViewContext},
     item_groups::ItemGroup,
     price_levels::PriceLevel,
@@ -98,18 +96,16 @@ pub enum Message {
     ConfirmDelete(data_types::DeletionInfo),
     CancelDelete,
     ToggleTheme(bool),
-    ExportComplete(String),
-    ExportFailed(String),
-    ExportCSV(Result<(PathBuf, Arc<String>), Error>),
+
+    //import handles
     FileDropped(PathBuf),
     ImportItemsOverwriteExisting,
     ImportItemsIntoExisting,
     CancelItemImport,
-    NewFile,
-    OpenFile,
-    FileOpened(Result<(PathBuf, Arc<String>), Error>),
-    SaveFile,
-    FileSaved(Result<PathBuf, Error>),
+
+    //window handles
+    WindowClosed,
+    WindowResized(iced::Size),
 }
 
 #[derive(Debug)]
@@ -128,6 +124,7 @@ pub enum Operation {
 }
 
 pub struct MenuBuilder {
+    windows: BTreeMap<window::Id, multiwindow::Window>,
     screen: Screen,
     settings: settings::AppSettings,
     theme: iced::Theme,
@@ -138,7 +135,6 @@ pub struct MenuBuilder {
     error_message: Option<String>,
     toggle_theme: bool,
     import_item_path: PathBuf,
-    get_export_path: bool,
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -195,7 +191,29 @@ pub struct MenuBuilder {
         file_manager.ensure_data_dir()
             .expect("Failed to create data directory");
 
+        let (main_window_id, open_main_window) = iced::window::open(
+            iced::window::Settings {
+                size: Size::new(1201.0, 700.0),
+                position: window::Position::Centered,
+                min_size: Some(Size::new( 1250_f32, 700_f32)),
+                exit_on_close_request: true,
+                icon: settings::load_icon(),
+                ..iced::window::Settings::default()
+            }
+        );
+
+        let main_window = multiwindow::Window {
+            id: main_window_id,
+            title: String::from("Menu Builder :D"),
+            focused: true,
+            size: Size::new(1201.0, 700.0),
+        };
+
+        let mut windows = BTreeMap::new();
+        windows.insert(main_window_id, main_window);
+
         Self {
+            windows: windows,
             screen: Screen::Items(items::Mode::View),
             settings: settings::AppSettings::default(),
             theme: iced_modern_theme::Modern::dark_theme(),
@@ -206,7 +224,6 @@ pub struct MenuBuilder {
             error_message: None,
             toggle_theme: true,
             import_item_path: PathBuf::new(),
-            get_export_path: false,
 
             // Items
             items: BTreeMap::new(),
@@ -283,10 +300,27 @@ impl MenuBuilder {
                     available_price_levels,
                 );
 
+                // If no items were loaded, create a default one
+                if menu_builder.items.is_empty() {
+                    let mut default_item = Item::default();
+                    default_item.name = "Default".to_string();
+                    menu_builder.items.insert(1, default_item);
+                    menu_builder.selected_item_id = Some(1);
+                }
+
+                menu_builder.settings.export_message = "".to_string();
+                menu_builder.settings.export_success = true;
                 menu_builder.error_message = None;
             }
             Err(e) => {
                 eprintln!("Failed to load state: {}", e);
+                menu_builder.error_message = Some(format!("Failed to load saved data: {}", e));
+
+                // Create a default item for new users
+                let mut default_item = Item::default();
+                default_item.name = "Default".to_string();
+                menu_builder.items.insert(1, default_item);
+                menu_builder.selected_item_id = Some(1);
                 menu_builder.error_message = Some(format!("Failed to load saved data: {}", e));
             }
         }
@@ -773,60 +807,6 @@ impl MenuBuilder {
                 self.toggle_theme = !self.toggle_theme;
                 Task::none()
             }
-            Message::ExportComplete(path) => {
-                println!("Export completed: {}", path);
-                self.error_message = Some(format!("Export successful: {}", path));
-                Task::none()
-            },
-            
-            Message::ExportFailed(error) => {
-                println!("Export failed: {}", error);
-                self.error_message = Some(format!("Export failed: {}", error));
-                Task::none()
-            },
-
-            Message::ExportCSV(result) => {
-                println!("ExportCSV triggered");
-
-                match result {
-                    Ok((path, err)) => {
-                        println!("Path: {:?}", path)
-                    }
-                    Err(e) => {
-
-                    }
-                }
-
-/*                 if let Some(path) = path {
-                    println!("Selected path: {:?}", &path.path());
-
-                    let items = self.items.iter().map(|(_id, item)| 
-                        item.clone()
-                    ).collect::<Vec<_>>();
-                    
-                    // Here you would actually write your data to the file
-                    match export_items::prepare_item_export(&items, &path.file_name()) {
-                        Ok(_) => { println!("Items exported!")}
-                        Err(_) => { println!("Failed to export items!")}
-                    };
-                    
-                } else {
-                    println!("No path selected");
-                } */
-                
-                Task::none() 
-            }
-            Message::NewFile => Task::none(),
-            Message::OpenFile => {
-                println!("Preparing Export!");
-                        
-                //return Task::perform(export_items::open_file(), Message::ExportCSV) ;
-                Task::perform(open_file(), Message::ExportCSV)
-            },
-            Message::FileOpened(result) => Task::none(),
-            Message::SaveFile => Task::none(),
-            Message::FileSaved(result) => Task::none(),
-
             Message::FileDropped(path) => {
 
                 println!("File Dropped: {:?}", &path);
@@ -885,6 +865,20 @@ impl MenuBuilder {
             },
             Message::CancelItemImport => {
                 self.show_item_import_confirmation = false;
+                Task::none()
+            },
+            Message::WindowClosed => {
+/*            Message::WindowClosed(id) => {
+                 state.windows.remove(&id);
+
+                if state.windows.is_empty() {
+                    iced::exit()
+                } else {
+                    Task::none()
+                } */
+               Task::none()
+            },
+            Message::WindowResized(size) => {
                 Task::none()
             },
             _ => {
@@ -1271,7 +1265,6 @@ impl MenuBuilder {
                         Task::none()
                     }
                     settings::Operation::ThemeChanged(theme) => {
-                        //self.theme = theme;
 
                         self.theme = match theme {
                             settings::ThemeChoice::Light => Modern::light_theme(),
@@ -1281,13 +1274,26 @@ impl MenuBuilder {
                         self.screen = Screen::Settings(self.settings.clone());
                         Task::none()
                     }
-                    settings::Operation::ExportItemsToCSV => {
-                        println!("Settings Operation Export Items To CSV");
-                        //let task = Task::done(Message::OpenFile);
-                        //println!("OpenFile task created");
-                        //task
-                        self.update(Message::OpenFile)
-                        //Task::none()
+                    settings::Operation::RequestItemsList(path) => {
+                        println!("Direct handling - bypassing task system");
+    
+                        self.update(
+                            Message::Settings(
+                                settings::Message::ProcessItems(
+                                    ( self.items.clone(), path )))
+                            )
+                    }
+                    settings::Operation::UpdateExportMessage(msg) => {
+                        println!("Updating Export Message to: {}", &msg);
+                        self.settings.export_message = msg;
+                        self.screen = Screen::Settings(self.settings.clone());
+                        Task::none()
+                    }
+                    settings::Operation::UpdateExportSuccess(success) => {
+                        println!("Updating Export Success value: {:?}", &success);
+                        self.settings.export_success = success;
+                        self.screen = Screen::Settings(self.settings.clone());
+                        Task::none()
                     }
                 }
             }
@@ -1380,9 +1386,10 @@ impl MenuBuilder {
                             .map_or(1, |max_id| max_id + 1);
                         item.id = next_id;
 
+                        self.items.insert(next_id, item.clone());
                         self.draft_item = item;
-                        self.draft_item_id = Some(-1);
-                        self.selected_item_id = Some(-1);
+                        self.draft_item_id = Some(next_id);
+                        self.selected_item_id = Some(next_id);
                         self.screen = Screen::Items(items::Mode::Edit);
                         Task::none()
                     },
@@ -2973,62 +2980,11 @@ fn handle_event(event: event::Event, _: event::Status, _: iced::window::Id) -> O
         event::Event::Window(window::Event::FileDropped(path)) => {
             Some(Message::FileDropped(path))
         }
+        event::Event::Window(window::Event::CloseRequested) => Some(Message::WindowClosed),
+        event::Event::Window(window::Event::Resized(size)) => Some(Message::WindowResized(size)),
 /*         event::Event::Window(window::Event::Resized(size)) => {
             Some(Message::AppResized(size))
         }, */
         _ => None,
     }
-}
-
-
-#[derive(Debug, Clone)]
-pub enum Error {
-    DialogClosed,
-    IoError(std::io::ErrorKind),
-}
-
-pub async fn open_file() -> Result<(PathBuf, Arc<String>), Error> {
-    let picked_file = rfd::AsyncFileDialog::new()
-        .set_title("Choose file name...")
-        .pick_file()
-        .await
-        .ok_or(Error::DialogClosed)?;
-
-    load_file(picked_file).await
-}
-
-pub async fn load_file(
-    path: impl Into<PathBuf>,
-) -> Result<(PathBuf, Arc<String>), Error> {
-    let path = path.into();
-
-    let contents = tokio::fs::read_to_string(&path)
-        .await
-        .map(Arc::new)
-        .map_err(|error| Error::IoError(error.kind()))?;
-
-    Ok((path, contents))
-}
-
-pub async fn save_file(
-    path: Option<PathBuf>,
-    contents: String,
-) -> Result<PathBuf, Error> {
-    let path = if let Some(path) = path {
-        path
-    } else {
-        rfd::AsyncFileDialog::new()
-            .save_file()
-            .await
-            .as_ref()
-            .map(rfd::FileHandle::path)
-            .map(Path::to_owned)
-            .ok_or(Error::DialogClosed)?
-    };
-
-    tokio::fs::write(&path, contents)
-        .await
-        .map_err(|error| Error::IoError(error.kind()))?;
-
-    Ok(path)
 }

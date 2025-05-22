@@ -550,6 +550,121 @@ pub fn view<'a>(
     .width(Length::Fill)
     .padding(10);
 
+// temp variables for pricing
+let assigned_price_level_ids = if let Some(item_prices) = &item.item_prices {
+    // Extract price_level_ids from item_prices
+    item_prices.iter().map(|price| price.price_level_id).collect::<Vec<_>>()
+} else {
+    item.price_levels.clone().unwrap_or_default()
+};
+
+let available_price_levels: Vec<PriceLevel> = price_levels.iter()
+    .filter(|(id, _)| !assigned_price_level_ids.contains(id))
+    .map(|(_, price_level)| price_level.clone())
+    .collect();
+
+let pricing = container(
+    column![
+        text("Price Levels").style(Modern::primary_text()),
+        iced::widget::horizontal_space().height(10),
+
+        row![ // Display Selected Price Levels
+        if let Some(item_prices) = &item.item_prices {
+            row(
+                item_prices
+                    .iter()
+                    .filter_map(|price| {
+                        // Get the price level from the id
+                        price_levels.get(&price.price_level_id).map(|level| (price, level))
+                    })
+                    .map(|(item_price, price_level)| {
+                        // Start with the actual price from item_prices
+                        let display_price = item_price.price.to_string();
+                        
+                        // Look up any updated price from state.prices
+                        let current_price = state.prices.as_ref()
+                            .and_then(|all_prices| {
+                                all_prices.iter()
+                                    .find(|(id, _)| *id == price_level.id)
+                                    .map(|(_, price_str)| price_str.as_str())
+                            })
+                            .unwrap_or(&display_price);
+
+                        row![
+                            text(&price_level.name).width(100),
+                            text_input("Price", current_price)
+                                .on_input(|price|
+                                    Message::UpdatePrice(price_level.id, price)
+                                )
+                                .style(Modern::inline_text_input())
+                                .width(125),
+                                horizontal_space().width(10),
+                            button(icon::trash().size(14))
+                                .on_press(Message::RemovePriceLevel(price_level.id))
+                                .style(Modern::danger_button()),
+                            horizontal_space().width(10),
+                        ].align_y(iced::Alignment::Center).into()
+                    })
+                    .collect::<Vec<_>>()
+            ).width(900).wrap()
+        } else if let Some(selected_prices) = &item.price_levels {
+            // Fall back to price_levels if item_prices is missing
+            row(
+                selected_prices
+                    .iter()
+                    .filter_map(|id| price_levels.get(id))
+                    .map(|price_level| {
+                        // ... existing code for price_levels ...
+                        // This is a fallback, ideally you want to migrate to using item_prices
+                        
+                        let current_price = state.prices.as_ref()
+                        .and_then(|all_prices| {
+                            all_prices.iter()
+                                .find(|(id, _)| *id == price_level.id)
+                                .map(|(_, price_str)| price_str.as_str())
+                        })
+                        .unwrap_or("");
+
+                        row![
+                            text(&price_level.name).width(100),
+                            text_input("Price", current_price)
+                                .on_input(|price|
+                                    Message::UpdatePrice(price_level.id, price)
+                                )
+                                .style(Modern::inline_text_input())
+                                .width(125),
+                                horizontal_space().width(10),
+                            button(icon::trash().size(14))
+                                .on_press(Message::RemovePriceLevel(price_level.id))
+                                .style(Modern::danger_button()),
+                            horizontal_space().width(10),
+                        ].align_y(iced::Alignment::Center).into()
+                    })
+                    .collect::<Vec<_>>()
+            ).width(900).wrap()
+        } else {
+            row![button(text("No Price Levels Assigned")).style(Modern::gray_button())].wrap()
+        }
+        ],
+        iced::widget::horizontal_space().height(5),
+        row![
+            pick_list(
+                available_price_levels,
+                None::<PriceLevel>,
+                |price_level: PriceLevel| Message::PriceLevelSelected(price_level.id)
+            )
+            .width(100)
+            .placeholder("Add Price Levels")
+            .style(Modern::pick_list())
+        ].spacing(5),
+    ],
+)
+.style(Modern::sheet_container())
+.width(Length::Fill)
+.padding(10);
+
+/*  //updating to use item_prices instead of price_levels
+
     // temp variables for pricing,
     let assigned_price_level_ids = item.price_levels.clone().unwrap_or_default();
     let available_price_levels: Vec<PriceLevel> = price_levels.iter().filter(|(id, _)| !assigned_price_level_ids.contains(id) ).map(|(_, price_level)| price_level.clone()).collect();
@@ -577,7 +692,7 @@ pub fn view<'a>(
                             .unwrap_or("");
 
                             row![
-                                text(&price_level.name).width(75),
+                                text(&price_level.name).width(100),
                                 text_input("Price", current_price)
                                     .on_input( |price|
                                         Message::UpdatePrice(price_level.id, price)
@@ -602,7 +717,7 @@ pub fn view<'a>(
                     None::<PriceLevel>,
                     |price_level: PriceLevel| Message::PriceLevelSelected(price_level.id)
                 )
-                .width(75)
+                .width(100)
                 .placeholder("Add Price Levels")
                 .style(Modern::pick_list())
             ].spacing(5),
@@ -611,6 +726,8 @@ pub fn view<'a>(
     .style(Modern::sheet_container())
     .width(Length::Fill)
     .padding(10);
+
+     */
 
 /*     // Validation Error
     if let Some(error) = validation_error {

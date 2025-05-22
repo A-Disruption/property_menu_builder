@@ -683,7 +683,7 @@ fn ensure_choice_groups_exist(
         if !choice_groups.contains_key(&id) {
             let choice_group = ChoiceGroup {
                 id,
-                name: format!("Item Group {}", id),
+                name: format!("Choice Group {}", id),
                 // Set other fields to defaults
                 ..ChoiceGroup::default()
             };

@@ -1,25 +1,6 @@
 use crate::items::{Item, ItemPrice};
 use rust_decimal::Decimal;
-
-pub fn prepare_item_export(items: &[Item], file_path: &str) -> std::io::Result<()> {
-    use std::fs::File;
-    use std::io::Write;
-    
-    let mut file = File::create(file_path)?;
-    
-    for (i, item) in items.iter().enumerate() {
-        // Write each item's export string
-        let export_string = item_to_export_string(item);
-        file.write_all(export_string.as_bytes())?;
-        
-        // Add newline if not the last item
-        if i < items.len() - 1 {
-            file.write_all(b"\n")?;
-        }
-    }
-    
-    Ok(())
-}
+use std::path::{Path, PathBuf};
 
 pub fn item_to_export_string(item: &Item) -> String {
 
@@ -258,7 +239,19 @@ pub fn item_to_export_string(item: &Item) -> String {
         }
         None => {
             // return "" if there are no prices attached to an item.
-            price_string = "\"\"".to_string();
+            price_string.push_str("{");
+            match default_price {
+                Some(price) => {
+                    let price_str = "1".to_string() + ",$" + price.to_string().as_str() + ",";
+                    price_string.push_str(price_str.as_str());
+                }
+                None => {
+                    let price_str = "1".to_string() + ",$" + "0.00" + ",";
+                    price_string.push_str(price_str.as_str());
+                }
+            }
+            price_string = price_string.trim_end_matches(',').to_string();
+            price_string.push_str("}");
         }
     };
 

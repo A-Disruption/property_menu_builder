@@ -1,12 +1,9 @@
 pub mod edit;
 pub mod view;
 pub mod import_items;
-//mod Import_Items;
 pub mod export_items;
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::sync::Arc;
 use crate::data_types::{
     self, EntityId, ValidationError, ItemPrice
 };
@@ -34,7 +31,6 @@ use crate::{
 pub enum Message {
     Edit(edit::Message),
     View(view::Message),
-//    ExportItems(export_items::Message),
     CreateNew,
     Select(EntityId),
     SearchItems(String),
@@ -318,7 +314,7 @@ impl Default for Item {
     fn default() -> Self {
         Self {
             id: -1,
-            name: String::new(),
+            name: "New Item".to_string(),
             button1: String::new(),
             button2: None,
             printer_text: String::new(),
@@ -579,10 +575,24 @@ pub fn update(
             }
             edit::Message::PriceLevelSelected(level_id) => {
                 println!("Price level id selected: {}", level_id);
+                
+                // Update both price_levels and item_prices
                 match &mut item.price_levels {
                     Some(levels) => levels.push(level_id),
                     None => item.price_levels = Some(vec![level_id]),
                 }
+                
+                // Also create a default ItemPrice
+                let default_price = ItemPrice {
+                    price_level_id: level_id,
+                    price: Decimal::ZERO,  // Or some default price
+                };
+                
+                match &mut item.item_prices {
+                    Some(prices) => prices.push(default_price),
+                    None => item.item_prices = Some(vec![default_price]),
+                }
+                
                 Action::none()
             }
             edit::Message::PrinterLogicalSelected(printer_id) => {
@@ -637,15 +647,34 @@ pub fn update(
                 Action::none()
             }
             edit::Message::RemovePriceLevel(level_id) => {
+                // Update price_levels
                 if let Some(ref mut levels) = item.price_levels {
                     levels.retain(|&id| id != level_id);
                     if levels.is_empty() {
                         item.price_levels = None;
                     }
                 }
+                
+                // Also remove from item_prices
+                if let Some(ref mut prices) = item.item_prices {
+                    prices.retain(|price| price.price_level_id != level_id);
+                    if prices.is_empty() {
+                        item.item_prices = None;
+                    }
+                }
+                
                 Action::none()
             }
-            edit::Message::UpdatePrice(price_level_id, item_price) => { // to update Price attached to a PriceLevel on an item
+            edit::Message::UpdatePrice(price_level_id, item_price) => {
+                // Updating item.item_prices directly for immediate effect
+                if let Some(ref mut prices) = item.item_prices {
+                    if let Some(price) = prices.iter_mut().find(|p| p.price_level_id == price_level_id) {
+                        if let Ok(decimal_price) = item_price.parse::<Decimal>() {
+                            price.price = decimal_price;
+                        }
+                    }
+                }
+                // Update edit_state.prices for UI
                 Action::operation(Operation::UpdatePrice(item.id, price_level_id, item_price))
             }
             edit::Message::UpdateStorePriceLevel(level_id) => {
@@ -872,16 +901,6 @@ pub fn update(
             view::Message::Back => Action::operation(Operation::Back),
             view::Message::ExportToCsv => Action::none() //Need to implement export and imports
         }
-/*         Message::ExportItems(msg) => match msg {
-            export_items::Message::NewFile => Action::operation(Operation::NewFile),
-            export_items::Message::OpenFile => {
-                println!("export message open file launched");
-                Action::operation(Operation::OpenFile)
-            },
-            export_items::Message::FileOpened(result) => Action::operation(Operation::FileOpened(result)),
-            export_items::Message::SaveFile => Action::operation(Operation::SaveFile),
-            export_items::Message::FileSaved(result) => Action::operation(Operation::FileSaved(result))
-        } */
         Message::CreateNew => {
             let new_item = Item::default();
             Action::operation(Operation::CreateNew(new_item))
