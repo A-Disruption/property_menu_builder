@@ -1,6 +1,6 @@
 // Generated automatically by iced_fontello at build time.
 // Do not edit manually. Source: ../fonts/menu-builder.toml
-// 82e861212cc72e79c6ae20f8da94bf6c26bf7d28633feb0f80ca45d2e901f85c
+// 97d7f9fc119a0404561e1cbd375c47e859b08feaad125794df990d040015c9fd
 use iced::widget::{text, Text};
 use iced::Font;
 
@@ -36,6 +36,10 @@ pub fn search<'a>() -> Text<'a> {
 
 pub fn settings<'a>() -> Text<'a> {
     icon("\u{2699}")
+}
+
+pub fn superpowers<'a>() -> Text<'a> {
+    icon("\u{F2DD}")
 }
 
 pub fn trash<'a>() -> Text<'a> {

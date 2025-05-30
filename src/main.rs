@@ -31,7 +31,6 @@ mod data_types;
 mod persistence;
 mod entity_component;
 mod icon;
-mod multiwindow;
 
 use crate::{
     items::import_items,
@@ -52,14 +51,12 @@ use data_types::{EntityId, ItemPrice};
 pub use action::Action;
 
 fn main() -> iced::Result {
-    iced::application(MenuBuilder::title, MenuBuilder::update, MenuBuilder::view)
-        .window(settings::settings())
-        .window_size(Size::new(1201.0, 700.0))
-        .theme(MenuBuilder::theme)
-        .antialiasing(true)
-        .centered()
-        .font(icon::FONT)
+    
+    iced::daemon(MenuBuilder::title, MenuBuilder::update, MenuBuilder::view)
         .subscription(MenuBuilder::subscription)
+        .theme(MenuBuilder::theme)
+        .font(icon::FONT)
+        .antialiasing(true)
         .run_with(MenuBuilder::new)
 }
 
@@ -80,6 +77,13 @@ pub enum Screen {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    Navigate(Screen),
+    HotKey(HotKey),
+    ConfirmDelete(data_types::DeletionInfo),
+    CancelDelete,
+    ToggleTheme(bool),
+
+    //Message handles
     Settings(settings::Message),
     PrinterLogicals(EntityId, printer_logicals::Message),
     Items(EntityId, items::Message),
@@ -91,11 +95,6 @@ pub enum Message {
     RevenueCategories(EntityId, revenue_categories::Message),
     ReportCategories(EntityId, report_categories::Message),
     ChoiceGroups(EntityId, choice_groups::Message),
-    Navigate(Screen),
-    HotKey(HotKey),
-    ConfirmDelete(data_types::DeletionInfo),
-    CancelDelete,
-    ToggleTheme(bool),
 
     //import handles
     FileDropped(PathBuf),
@@ -104,8 +103,11 @@ pub enum Message {
     CancelItemImport,
 
     //window handles
-    WindowClosed,
+    WindowClosed(iced::window::Id),
     WindowResized(iced::Size),
+    RequestOpenWindow(WindowEnum),
+    WindowOpened(iced::window::Id, WindowEnum),
+    None,
 }
 
 #[derive(Debug)]
@@ -124,13 +126,14 @@ pub enum Operation {
 }
 
 pub struct MenuBuilder {
-    windows: BTreeMap<window::Id, multiwindow::Window>,
+    windows: BTreeMap<window::Id, Window>,
     screen: Screen,
     settings: settings::AppSettings,
     theme: iced::Theme,
     file_manager: persistence::FileManager,
     deletion_info: data_types::DeletionInfo,
     show_modal: bool,
+    show_super_edit: bool,
     show_item_import_confirmation: bool,
     error_message: Option<String>,
     toggle_theme: bool,
@@ -191,35 +194,15 @@ pub struct MenuBuilder {
         file_manager.ensure_data_dir()
             .expect("Failed to create data directory");
 
-        let (main_window_id, open_main_window) = iced::window::open(
-            iced::window::Settings {
-                size: Size::new(1201.0, 700.0),
-                position: window::Position::Centered,
-                min_size: Some(Size::new( 1250_f32, 700_f32)),
-                exit_on_close_request: true,
-                icon: settings::load_icon(),
-                ..iced::window::Settings::default()
-            }
-        );
-
-        let main_window = multiwindow::Window {
-            id: main_window_id,
-            title: String::from("Menu Builder :D"),
-            focused: true,
-            size: Size::new(1201.0, 700.0),
-        };
-
-        let mut windows = BTreeMap::new();
-        windows.insert(main_window_id, main_window);
-
         Self {
-            windows: windows,
+            windows: BTreeMap::new(),
             screen: Screen::Items(items::Mode::View),
             settings: settings::AppSettings::default(),
             theme: iced_modern_theme::Modern::dark_theme(),
             file_manager: file_manager,
             show_item_import_confirmation: false,
             show_modal: false,
+            show_super_edit: false,
             deletion_info: data_types::DeletionInfo::new(),
             error_message: None,
             toggle_theme: true,
@@ -274,12 +257,12 @@ pub struct MenuBuilder {
 
 impl MenuBuilder {
 
-    fn theme(&self) -> iced::Theme {
+    fn theme(&self, _window_id: window::Id) -> Theme {
         self.theme.clone()
     }
 
-    fn title(&self) -> String {
-        String::from("Menu Builder :D")
+    fn title(&self, window_id: window::Id) -> String {
+        self.windows.get(&window_id).map(|window| window.title.clone()).unwrap_or_default()
     }
 
     fn new() -> (Self, Task<Message>) {
@@ -314,7 +297,6 @@ impl MenuBuilder {
             }
             Err(e) => {
                 eprintln!("Failed to load state: {}", e);
-                menu_builder.error_message = Some(format!("Failed to load saved data: {}", e));
 
                 // Create a default item for new users
                 let mut default_item = Item::default();
@@ -325,7 +307,8 @@ impl MenuBuilder {
             }
         }
 
-        (menu_builder, Task::none())
+        //(menu_builder, Task::done(Message::RequestOpenWindow(WindowEnum::MainWindow)).chain(Task::done(Message::RequestOpenWindow(WindowEnum::SuperEdit))))
+        (menu_builder, Task::done(Message::RequestOpenWindow(WindowEnum::MainWindow)))
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -867,28 +850,67 @@ impl MenuBuilder {
                 self.show_item_import_confirmation = false;
                 Task::none()
             },
-            Message::WindowClosed => {
-/*            Message::WindowClosed(id) => {
-                 state.windows.remove(&id);
+           Message::WindowClosed(id) => {
+                println!("Window close requested: {:?}", &id);
+                self.windows.remove(&id);
+                println!("Window BTreeMap: {:?}", &self.windows);
 
-                if state.windows.is_empty() {
+                if self.windows.is_empty() {
                     iced::exit()
                 } else {
                     Task::none()
-                } */
-               Task::none()
-            },
+                }
+           },
             Message::WindowResized(size) => {
                 Task::none()
             },
-            _ => {
-                println!("Received unhandled messaged! ");
+            Message::RequestOpenWindow(windowenum) => {
+                match windowenum {
+                    WindowEnum::MainWindow => { 
+                        let (_id, open) = iced::window::open(
+                            iced::window::Settings {
+                                size: Size::new(1201.0, 700.0),
+                                position: window::Position::Centered,
+                                min_size: Some(Size::new( 1250_f32, 700_f32)),
+                                exit_on_close_request: true,
+                                icon: settings::load_icon(),
+                                ..iced::window::Settings::default()
+                            }
+                        );
+                        return open.map(|id| Message::WindowOpened(id, WindowEnum::MainWindow)).chain(Task::done(Message::None))
+                    }
+                    WindowEnum::SuperEdit => {
+                        let (_id, open) = iced::window::open(window::Settings {
+                            icon: settings::load_icon(),
+                            ..window::Settings::default()
+                        });
+                        return open.map(|id| Message::WindowOpened(id, WindowEnum::SuperEdit)).chain(Task::done(Message::None))
+                    }
+                }
+            }
+            Message::WindowOpened(id, windowenum) => {
+                let title = match windowenum {
+                    WindowEnum::MainWindow => { String::from("Main Window") }
+                    WindowEnum::SuperEdit => { String::from("SuperEdit Window") }
+                };
+
+                let new_window = Window::new(id, title, windowenum);
+
+                self.windows.insert(id, new_window);
+
+                Task::none()
+            }
+            Message::None => {
+                println!("A Window Open subscription event has occured!");
                 Task::none()
             }
         }   
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&self, window_id: window::Id) -> Element<Message> {
+
+
+                    
         let sidebar = container(
             column![
                 button("Items")
@@ -1220,21 +1242,43 @@ impl MenuBuilder {
                 .padding(20),
         ];
         
-        
-        if self.show_modal { //Show Deletion confirmation popup
-            stack![
-                app_view,
-                opaque(delete_confirmation_popup)
-            ].into()
-        } else if self.show_item_import_confirmation { // Show Item Import Confirmation popup
-            stack![
-                app_view,
-                opaque(import_items_confirmation)
-            ].into()
-        }
-        else {
-            app_view.into()
-        }
+        println!("List of Windows: {:?}", self.windows.get(&window_id));
+        let window_view = match self.windows.get(&window_id) {
+            Some(window) => match window.windowtype {
+                WindowEnum::MainWindow => {
+                    println!("Launched Main Window!");
+                    if self.show_modal { //Show Deletion confirmation popup
+                        stack![
+                            app_view,
+                            opaque(delete_confirmation_popup)
+                        ].into()
+                    } else if self.show_item_import_confirmation { // Show Item Import Confirmation popup
+                        stack![
+                            app_view,
+                            opaque(import_items_confirmation)
+                        ].into()
+                    }
+                    else {
+                        app_view.into()
+                    }
+                }
+                WindowEnum::SuperEdit => {
+                    println!("Launched SuperEdit!");
+                    container(text("super_edit")).into()
+                }
+            }
+            None => { 
+                let content = column![
+                    text(format!("Something has gone terribly wrong. Window Id: {:?}", window_id)),
+                ];
+                container(
+                    content
+                ).into() 
+            }
+        };
+
+        window_view
+
      }
 
 
@@ -1460,6 +1504,10 @@ impl MenuBuilder {
                         }
 
                         Task::none()
+                    }
+                    items::Operation::LaunchMassItemEditWindow => {
+                        self.show_super_edit = !self.show_super_edit;
+                        self.update(Message::RequestOpenWindow(WindowEnum::SuperEdit))
                     }
                 }
             } 
@@ -2968,7 +3016,7 @@ pub enum HotKey {
     Tab(Modifiers),
 }
 
-fn handle_event(event: event::Event, _: event::Status, _: iced::window::Id) -> Option<Message> {
+fn handle_event(event: event::Event, _status: event::Status, id: iced::window::Id) -> Option<Message> {
     match event {
         event::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) => {
             match key {
@@ -2977,14 +3025,32 @@ fn handle_event(event: event::Event, _: event::Status, _: iced::window::Id) -> O
                 _ => None,
             }
         }
-        event::Event::Window(window::Event::FileDropped(path)) => {
-            Some(Message::FileDropped(path))
-        }
-        event::Event::Window(window::Event::CloseRequested) => Some(Message::WindowClosed),
+        event::Event::Window(window::Event::FileDropped(path)) => Some(Message::FileDropped(path)),
+        event::Event::Window(window::Event::Closed) => Some(Message::WindowClosed(id)),
         event::Event::Window(window::Event::Resized(size)) => Some(Message::WindowResized(size)),
-/*         event::Event::Window(window::Event::Resized(size)) => {
-            Some(Message::AppResized(size))
-        }, */
+        //event::Event::Window(window::Event::Opened { position: _, size: _ }) => Some(Message::WindowMessage),
         _ => None,
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq)]
+pub enum WindowEnum {
+    #[default]
+    MainWindow,
+    SuperEdit,
+}
+
+#[derive(Debug, Clone,)]
+pub struct Window {
+    pub title: String,
+    pub windowtype: WindowEnum,
+}
+
+impl Window {
+    pub fn new(id: window::Id, title: String, window_type: WindowEnum) -> Self {
+        Self {
+            title: title,
+            windowtype: window_type,
+        }
     }
 }

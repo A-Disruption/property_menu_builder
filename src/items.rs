@@ -2,6 +2,7 @@ pub mod edit;
 pub mod view;
 pub mod import_items;
 pub mod export_items;
+//pub mod superedit;
 
 use std::collections::BTreeMap;
 use crate::data_types::{
@@ -38,6 +39,7 @@ pub enum Message {
     CopyItem(EntityId),
     HideModal,
     ShowModal,
+    LaunchMassItemEditWindow,
 }
 
 #[derive(Debug, Clone)]
@@ -54,6 +56,7 @@ pub enum Operation {
     HideModal,
     ShowModal,
     UpdatePrice(EntityId, EntityId, String),
+    LaunchMassItemEditWindow,
 }
 
 #[derive(Debug, Clone)]
@@ -923,6 +926,9 @@ pub fn update(
         Message::ShowModal => {
             Action::operation(Operation::ShowModal)
         }
+        Message::LaunchMassItemEditWindow => {
+            Action::operation(Operation::LaunchMassItemEditWindow)
+        }
     }
 }
 
@@ -943,13 +949,26 @@ pub fn view<'a>(
     price_levels: &'a BTreeMap<EntityId, PriceLevel>,
 ) -> Element<'a, Message> {
 
-    let search_bar = iced::widget::text_input(
+/*     let search_bar = iced::widget::text_input(
         "Search Items...",
         &item_search
     )
     .width(iced::Length::Fixed(250.0))
     .style(Modern::search_input())
-    .on_input(Message::SearchItems);
+    .on_input(Message::SearchItems); */
+
+    let search_bar = row![
+        iced::widget::text_input(
+            "Search Items...",
+            &item_search
+        )
+        .width(iced::Length::Fixed(215.0))
+        .style(Modern::search_input())
+        .on_input(Message::SearchItems),
+        button(icon::superpowers().size(14).center())
+            .on_press(Message::LaunchMassItemEditWindow)
+            .style(Modern::primary_button()),
+    ];
 
     let filtered_items = items.values()
         .filter(|item| matches_search(

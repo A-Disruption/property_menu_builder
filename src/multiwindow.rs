@@ -1,5 +1,5 @@
 use futures::{stream::BoxStream, Stream, StreamExt};
-use iced::{advanced::graphics::futures::subscription, Point, Size, Subscription};
+use iced::{advanced::graphics::futures::{backend::default, subscription}, Point, Size, Subscription};
 use serde::{Deserialize, Serialize};
 use std::io;
 pub use iced::window::{Id,Settings};
@@ -21,32 +21,26 @@ pub enum Error {
     Io(#[from] io::Error),
 }
 
+#[derive(Default, Debug, Clone, PartialEq)]
+pub enum WindowEnum {
+    #[default]
+    MainWindow,
+    SuperEdit,
+}
+
 #[derive(Debug, Clone,)]
 pub struct Window {
-    pub id: Id,
     pub title: String,
-//    pub position: Option<Point>,
-    pub size: Size,
-    pub focused: bool,
+    pub windowtype: WindowEnum,
 }
 
 impl Window {
-    pub fn new(id: Id, title: String) -> Self {
+    pub fn new(id: Id, title: String, window_type: WindowEnum) -> Self {
         Self {
-            id,
             title: title,
-//            position: None,
-            size: Size::default(),
-            focused: false,
+            windowtype: window_type,
         }
     }
-
-    pub fn opened(&mut self, position: Option<Point>, size: Size) {
-//        self.position = position;
-        self.size = size;
-        self.focused = true;
-    }
-
 }
 
 #[derive(Debug, Clone, Copy)]
