@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-iced = { version = "0.13.1", features = ["advanced", "debug", "tokio"] }
+iced = { version = "0.14.0-dev", features = [
+    "tokio",
+    "lazy",
+    "advanced",
+    "debug",
+] }
 iced_modern_theme = { git = "https://github.com/KainTwinam/iced-modern-theme.git" }
 rust_decimal = "1.36"
 strsim = "0.11.1"
@@ -25,3 +30,6 @@ iced_fontello = "0.13"
 
 [target.'cfg(windows)'.dependencies]
 image = "0.25.5"
+
+[patch.crates-io]
+iced = { git = "https://github.com/iced-rs/iced", rev = "aa633f6832c93d81fc829bcd351b369f0aada282" }

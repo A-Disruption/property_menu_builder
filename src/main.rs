@@ -31,6 +31,7 @@ mod data_types;
 mod persistence;
 mod entity_component;
 mod icon;
+mod superedit;
 
 use crate::{
     items::import_items,
@@ -44,20 +45,21 @@ use crate::{
     report_categories::ReportCategory,
     choice_groups::ChoiceGroup,
     printer_logicals::PrinterLogical,
-    data_types::ValidationError,
+    data_types::{ValidationError, EntityResolver},
+    superedit::SuperEdit,
 };
 
 use data_types::{EntityId, ItemPrice};
 pub use action::Action;
 
 fn main() -> iced::Result {
-    
-    iced::daemon(MenuBuilder::title, MenuBuilder::update, MenuBuilder::view)
+    iced::daemon(MenuBuilder::new, MenuBuilder::update, MenuBuilder::view)
         .subscription(MenuBuilder::subscription)
         .theme(MenuBuilder::theme)
         .font(icon::FONT)
         .antialiasing(true)
-        .run_with(MenuBuilder::new)
+        .title(MenuBuilder::title)
+        .run()
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +97,7 @@ pub enum Message {
     RevenueCategories(EntityId, revenue_categories::Message),
     ReportCategories(EntityId, report_categories::Message),
     ChoiceGroups(EntityId, choice_groups::Message),
+    SuperEdit(superedit::Message),
 
     //import handles
     FileDropped(PathBuf),
@@ -108,6 +111,9 @@ pub enum Message {
     RequestOpenWindow(WindowEnum),
     WindowOpened(iced::window::Id, WindowEnum),
     None,
+
+    //open preview testing
+    OpenPreview,
 }
 
 #[derive(Debug)]
@@ -123,6 +129,7 @@ pub enum Operation {
     ReportCategories(EntityId, report_categories::Operation),
     ChoiceGroups(EntityId, choice_groups::Operation),
     PrinterLogicals(EntityId, printer_logicals::Operation),
+    SuperEdit(superedit::Operation),
 }
 
 pub struct MenuBuilder {
@@ -138,6 +145,7 @@ pub struct MenuBuilder {
     error_message: Option<String>,
     toggle_theme: bool,
     import_item_path: PathBuf,
+    superedit: SuperEdit,
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -207,6 +215,7 @@ pub struct MenuBuilder {
             error_message: None,
             toggle_theme: true,
             import_item_path: PathBuf::new(),
+            superedit: SuperEdit::new(),
 
             // Items
             items: BTreeMap::new(),
@@ -307,7 +316,6 @@ impl MenuBuilder {
             }
         }
 
-        //(menu_builder, Task::done(Message::RequestOpenWindow(WindowEnum::MainWindow)).chain(Task::done(Message::RequestOpenWindow(WindowEnum::SuperEdit))))
         (menu_builder, Task::done(Message::RequestOpenWindow(WindowEnum::MainWindow)))
     }
 
@@ -850,6 +858,19 @@ impl MenuBuilder {
                 self.show_item_import_confirmation = false;
                 Task::none()
             },
+            Message::SuperEdit(msg) => {
+                let action = superedit::SuperEdit::update(&mut self.superedit, msg, &self.price_levels)
+                    .map_operation(move |o| Operation::SuperEdit(o))
+                    .map(move |m| Message::SuperEdit(m));
+                
+                let operation_task = if let Some(operation) = action.operation {
+                    self.perform(operation)
+                } else {
+                    Task::none()
+                };
+                
+                operation_task.chain(action.task)
+            }
            Message::WindowClosed(id) => {
                 println!("Window close requested: {:?}", &id);
                 self.windows.remove(&id);
@@ -877,26 +898,35 @@ impl MenuBuilder {
                                 ..iced::window::Settings::default()
                             }
                         );
-                        return open.map(|id| Message::WindowOpened(id, WindowEnum::MainWindow)).chain(Task::done(Message::None))
+                        return open.map(|id| Message::WindowOpened(id, WindowEnum::MainWindow))
                     }
                     WindowEnum::SuperEdit => {
+                        if self.windows.values().any(|w| w.windowtype == WindowEnum::SuperEdit) {
+                            return Task::none()
+                        };
+                        
+
                         let (_id, open) = iced::window::open(window::Settings {
                             icon: settings::load_icon(),
                             ..window::Settings::default()
                         });
-                        return open.map(|id| Message::WindowOpened(id, WindowEnum::SuperEdit)).chain(Task::done(Message::None))
+                        return open.map(|id| Message::WindowOpened(id, WindowEnum::SuperEdit))
                     }
                 }
             }
             Message::WindowOpened(id, windowenum) => {
                 let title = match windowenum {
-                    WindowEnum::MainWindow => { String::from("Main Window") }
-                    WindowEnum::SuperEdit => { String::from("SuperEdit Window") }
+                    WindowEnum::MainWindow => { String::from("Property Menu Builder :D") }
+                    WindowEnum::SuperEdit => { String::from("Super Editor AKA Mass Edit AKA aight bro") }
                 };
 
                 let new_window = Window::new(id, title, windowenum);
 
                 self.windows.insert(id, new_window);
+
+                Task::none()
+            }
+            Message::OpenPreview => {
 
                 Task::none()
             }
@@ -1022,6 +1052,7 @@ impl MenuBuilder {
                         iced::widget::toggler(self.toggle_theme).on_toggle(Message::ToggleTheme),
                     ],
                     iced::widget::horizontal_space(),
+                    button("op").on_press(Message::OpenPreview),
                     button(icon::settings().size(14)) 
                         .on_press(Message::Navigate(Screen::Settings(self.settings.clone())))
                         //.width(Length::Fixed(40.0))
@@ -1264,7 +1295,18 @@ impl MenuBuilder {
                 }
                 WindowEnum::SuperEdit => {
                     println!("Launched SuperEdit!");
-                    container(text("super_edit")).into()
+                    self.superedit.view(
+                        &self.items,
+                        &self.item_groups,
+                        &self.tax_groups,
+                        &self.security_levels,
+                        &self.revenue_categories,
+                        &self.report_categories,
+                        &self.product_classes,
+                        &self.choice_groups,
+                        &self.printer_logicals,
+                        &self.price_levels
+                    ).map(move |msg| Message::SuperEdit(msg))
                 }
             }
             None => { 
@@ -2934,6 +2976,11 @@ impl MenuBuilder {
                     Task::none()
                 },
             },
+            Operation::SuperEdit(op) => match op {
+                superedit::Operation::UpdateItem(modified_item) => {
+                    Task::none()
+                }
+            }
         }
     }
 
@@ -3007,6 +3054,54 @@ impl MenuBuilder {
 
     fn subscription(&self) -> Subscription<Message> {
         event::listen_with(handle_event)
+    }
+}
+
+
+impl EntityResolver for MenuBuilder {
+    #[inline] // Compiler will inline these for maximum performance
+    fn get_item_group_name(&self, id: EntityId) -> Option<&String> {
+        self.item_groups.get(&id).map(|group| &group.name)
+    }
+
+    #[inline]
+    fn get_tax_group_name(&self, id: EntityId) -> Option<&String> {
+        self.tax_groups.get(&id).map(|group| &group.name)
+    }
+
+    #[inline]
+    fn get_security_level_name(&self, id: EntityId) -> Option<&String> {
+        self.security_levels.get(&id).map(|level| &level.name)
+    }
+
+    #[inline]
+    fn get_revenue_category_name(&self, id: EntityId) -> Option<&String> {
+        self.revenue_categories.get(&id).map(|category| &category.name)
+    }
+
+    #[inline]
+    fn get_report_category_name(&self, id: EntityId) -> Option<&String> {
+        self.report_categories.get(&id).map(|category| &category.name)
+    }
+
+    #[inline]
+    fn get_product_class_name(&self, id: EntityId) -> Option<&String> {
+        self.product_classes.get(&id).map(|class| &class.name)
+    }
+
+    #[inline]
+    fn get_choice_group_name(&self, id: EntityId) -> Option<&String> {
+        self.choice_groups.get(&id).map(|group| &group.name)
+    }
+
+    #[inline]
+    fn get_printer_logical_name(&self, id: EntityId) -> Option<&String> {
+        self.printer_logicals.get(&id).map(|printer| &printer.name)
+    }
+
+    #[inline]
+    fn get_price_level_name(&self, id: EntityId) -> Option<&String> {
+        self.price_levels.get(&id).map(|level| &level.name)
     }
 }
 

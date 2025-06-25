@@ -2,11 +2,10 @@ pub mod edit;
 pub mod view;
 pub mod import_items;
 pub mod export_items;
-//pub mod superedit;
 
 use std::collections::BTreeMap;
 use crate::data_types::{
-    self, EntityId, ValidationError, ItemPrice
+    EntityId, ValidationError, ItemPrice, EntityResolver
 };
 use crate::Action;
 use iced_modern_theme::Modern;
@@ -509,6 +508,23 @@ pub fn update(
             // Basic Info
             edit::Message::UpdateName(name) => {
                 item.name = name;
+                Action::none()
+            }
+            edit::Message::UpdateBasePrice(base_price) => {
+                let decimal_price = base_price.parse::<Decimal>();
+
+                item.default_price = if base_price.is_empty() {
+                    Some(Decimal::new(0, 2))
+                } else {
+                    match decimal_price {
+                        Ok(price) => Some(price),
+                        Err(_) => {
+                            state.validation_error = Some("Invalid cost amount format".to_string());
+                            return Action::none();
+                        }
+                    }
+                };
+
                 Action::none()
             }
             edit::Message::UpdateButton1(text) => {

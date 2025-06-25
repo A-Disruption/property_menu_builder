@@ -74,3 +74,37 @@ impl DeletionInfo {
         }
     }
 }
+
+pub trait EntityResolver {
+    // Core resolver methods - all return references to avoid allocation
+    fn get_item_group_name(&self, id: EntityId) -> Option<&String>;
+    fn get_tax_group_name(&self, id: EntityId) -> Option<&String>;
+    fn get_security_level_name(&self, id: EntityId) -> Option<&String>;
+    fn get_revenue_category_name(&self, id: EntityId) -> Option<&String>;
+    fn get_report_category_name(&self, id: EntityId) -> Option<&String>;
+    fn get_product_class_name(&self, id: EntityId) -> Option<&String>;
+    fn get_choice_group_name(&self, id: EntityId) -> Option<&String>;
+    fn get_printer_logical_name(&self, id: EntityId) -> Option<&String>;
+    fn get_price_level_name(&self, id: EntityId) -> Option<&String>;
+
+    // Optimized bulk operations for large datasets
+    fn resolve_item_group_names(&self, ids: &[EntityId]) -> Vec<Option<&String>> {
+        ids.iter().map(|&id| self.get_item_group_name(id)).collect()
+    }
+
+    // Validation methods (faster than building ViewContext)
+    fn validate_item_group_exists(&self, id: EntityId) -> bool {
+        self.get_item_group_name(id).is_some()
+    }
+
+    fn validate_tax_group_exists(&self, id: EntityId) -> bool {
+        self.get_tax_group_name(id).is_some()
+    }
+
+    // Helper for display with fallback (allocates only when needed)
+    fn resolve_item_group_display(&self, id: EntityId) -> String {
+        self.get_item_group_name(id)
+            .cloned()
+            .unwrap_or_else(|| format!("Unknown Group ({})", id))
+    }
+}

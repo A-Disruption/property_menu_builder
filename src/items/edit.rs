@@ -27,6 +27,7 @@ use super::{Item, Action, Operation, EditState};
 pub enum Message {
     // Basic Info
     UpdateName(String),
+    UpdateBasePrice(String),
     UpdateButton1(String),
     UpdateButton2(String),
     UpdatePrinterText(String),
@@ -131,7 +132,7 @@ pub fn view<'a>(
                         "Base Price",
                         &item.default_price.map_or(String::new(), |c| c.to_string())
                     )
-                    .on_input(Message::UpdateCostAmount)
+                    .on_input(Message::UpdateBasePrice)
                     .style(Modern::inline_text_input())
                     .width(200)
                     .padding(5)

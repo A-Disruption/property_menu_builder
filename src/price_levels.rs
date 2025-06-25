@@ -31,7 +31,7 @@ pub enum Operation {
     CancelEdit(EntityId),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 pub enum PriceLevelType {
     Enterprise,
     Store
@@ -108,7 +108,7 @@ impl PriceLevelEditState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 pub struct PriceLevel {
     pub id: EntityId,
     pub name: String,
