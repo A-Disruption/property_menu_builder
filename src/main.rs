@@ -1,3 +1,4 @@
+use chrono::offset;
 // #![windows_subsystem = "windows"]
 use iced::advanced::graphics::core::window;
 use iced::event;
@@ -7,6 +8,7 @@ use iced::widget::{
     button, column, container, row, text, vertical_space, opaque, stack
 };
 use iced::{Element, Length, Size, Subscription, Task, Theme};
+use iced_table::{ColumnVisibilityMessage, table::Column};
 use persistence::FileManager;
 use price_levels::PriceLevelType;
 use std::collections::BTreeMap;
@@ -35,7 +37,7 @@ mod superedit;
 
 use crate::{
     items::import_items,
-    items::{Item, ViewContext},
+    items::{Item, ViewContext, preview_changes::ItemsTableView},
     item_groups::ItemGroup,
     price_levels::PriceLevel,
     product_classes::ProductClass,
@@ -146,6 +148,7 @@ pub struct MenuBuilder {
     toggle_theme: bool,
     import_item_path: PathBuf,
     superedit: SuperEdit,
+    preview: Option<ItemsTableView>,
 
     // Items
     items: BTreeMap<EntityId, Item>,
@@ -216,6 +219,7 @@ pub struct MenuBuilder {
             toggle_theme: true,
             import_item_path: PathBuf::new(),
             superedit: SuperEdit::new(),
+            preview: None,
 
             // Items
             items: BTreeMap::new(),
@@ -342,28 +346,26 @@ impl MenuBuilder {
                 operation_task.chain(action.task)
             }
             Message::Items(id, msg) => {
-                let cloned_items = self.items.clone();
 
-                if id < 0 {  // New item case
-
-                    let context = ViewContext {
-                        available_items: cloned_items,
-                        available_choice_groups: self.choice_groups.clone(),
-                        available_item_groups: self.item_groups.clone(),
-                        available_price_levels: self.price_levels.clone(),
-                        available_printer_logicals: self.printer_logicals.clone(),
-                        available_product_classes: self.product_classes.clone(),
-                        available_report_categories: self.report_categories.clone(),
-                        available_revenue_categories: self.revenue_categories.clone(),
-                        available_security_levels: self.security_levels.clone(),
-                        available_tax_groups: self.tax_groups.clone(),
+                    let mut context = ViewContext {
+                        available_items: &mut self.items,
+                        available_choice_groups: &mut self.choice_groups,
+                        available_item_groups: &mut self.item_groups,
+                        available_price_levels: &mut self.price_levels,
+                        available_printer_logicals: &mut self.printer_logicals,
+                        available_product_classes: &mut self.product_classes,
+                        available_report_categories: &mut self.report_categories,
+                        available_revenue_categories: &mut self.revenue_categories,
+                        available_security_levels: &mut self.security_levels,
+                        available_tax_groups: &mut self.tax_groups,
+                        preview: &mut self.preview,
                     };
 
                     let action = items::update(
                         &mut self.draft_item,
                         msg,
                         &mut self.item_edit_state,
-                        &context
+                        &mut context
                     )
                     .map_operation(move |o| Operation::Items(id, o))
                     .map(move |m| Message::Items(id, m));
@@ -375,54 +377,6 @@ impl MenuBuilder {
                     };
     
                     operation_task.chain(action.task)
-                } else {
-                    let item = if let Some(draft_id) = self.draft_item_id {
-                        if draft_id == id {
-                            &mut self.draft_item
-                        } else {
-                            self.items.get_mut(&id).expect("Item should exist")
-                        }
-                    } else {
-                        self.items.get_mut(&id).expect("Item should exist")
-                    };
-
-                    let other_items: BTreeMap<EntityId, &Item> = cloned_items
-                        .iter()
-                        .filter(|(&item_id, _)| item_id != id)
-                        .map(|(&k, v)| (k, v))
-                        .collect();
-
-                let context = ViewContext {
-                    available_items: cloned_items,
-                    available_choice_groups: self.choice_groups.clone(),
-                    available_item_groups: self.item_groups.clone(),
-                    available_price_levels: self.price_levels.clone(),
-                    available_printer_logicals: self.printer_logicals.clone(),
-                    available_product_classes: self.product_classes.clone(),
-                    available_report_categories: self.report_categories.clone(),
-                    available_revenue_categories: self.revenue_categories.clone(),
-                    available_security_levels: self.security_levels.clone(),
-                    available_tax_groups: self.tax_groups.clone(),
-                };
-
-                let action = items::update(
-                    item, 
-                    msg, 
-                    &mut self.item_edit_state,
-                    &context
-                )
-                    .map_operation(move |o| Operation::Items(id, o))
-                    .map(move |m| Message::Items(id, m));
-
-                let operation_task = if let Some(operation) = action.operation {
-                    self.perform(operation)
-                } else {
-                    Task::none()
-                };
-
-                operation_task.chain(action.task)
-                }
-
 
             },
             Message::ItemGroups(id, msg) => {
@@ -859,7 +813,22 @@ impl MenuBuilder {
                 Task::none()
             },
             Message::SuperEdit(msg) => {
-                let action = superedit::SuperEdit::update(&mut self.superedit, msg, &self.price_levels)
+
+
+                let action = superedit::SuperEdit::update(
+                    &mut self.superedit, 
+                    msg,
+                    &mut self.items,
+                    &self.item_groups,
+                    &self.tax_groups,
+                    &self.security_levels,
+                    &self.revenue_categories,
+                    &self.report_categories,
+                    &self.product_classes,
+                    &self.choice_groups,
+                    &self.printer_logicals,
+                    &self.price_levels,
+                )
                     .map_operation(move |o| Operation::SuperEdit(o))
                     .map(move |m| Message::SuperEdit(m));
                 
@@ -904,6 +873,19 @@ impl MenuBuilder {
                         if self.windows.values().any(|w| w.windowtype == WindowEnum::SuperEdit) {
                             return Task::none()
                         };
+
+                        self.superedit.fill_table(
+                            &self.items, 
+                            &self.item_groups, 
+                            &self.tax_groups, 
+                            &self.security_levels, 
+                            &self.revenue_categories, 
+                            &self.report_categories, 
+                            &self.product_classes, 
+                            &self.choice_groups, 
+                            &self.printer_logicals, 
+                            &self.price_levels
+                        );
                         
 
                         let (_id, open) = iced::window::open(window::Settings {
@@ -927,7 +909,22 @@ impl MenuBuilder {
                 Task::none()
             }
             Message::OpenPreview => {
+                let table = ItemsTableView::new(
+                    &self.items,
+                    &self.item_groups,
+                    &self.tax_groups,
+                    &self.security_levels,
+                    &self.revenue_categories,
+                    &self.report_categories,
+                    &self.product_classes,
+                    &self.choice_groups,
+                    &self.printer_logicals,
+                    &self.price_levels,
+                );
 
+                self.preview = Some(table);
+
+                self.screen = Screen::Items(items::Mode::Preview);
                 Task::none()
             }
             Message::None => {
@@ -1108,6 +1105,7 @@ impl MenuBuilder {
                         &self.choice_groups,
                         &self.printer_logicals,
                         &self.price_levels,
+                        &self.preview
                     )
                     .map(move |msg| Message::Items(id, msg))
                 } else if let Some((&first_id, first_item)) = self.items.iter().next() {
@@ -1127,6 +1125,7 @@ impl MenuBuilder {
                         &self.choice_groups,
                         &self.printer_logicals,
                         &self.price_levels,
+                        &self.preview
                     )
                     .map(move |msg| Message::Items(first_id, msg))
                 } else {
@@ -1550,6 +1549,59 @@ impl MenuBuilder {
                     items::Operation::LaunchMassItemEditWindow => {
                         self.show_super_edit = !self.show_super_edit;
                         self.update(Message::RequestOpenWindow(WindowEnum::SuperEdit))
+                    }
+                    items::Operation::Resizing(index, offset) => {
+                        if let Some(preview) = &mut self.preview {
+                            if let Some(column) = preview.columns.get_mut(index) {
+                                    column.resize_offset = Some(offset);
+                                }
+                        }
+                        Task::none()
+                    }
+                    items::Operation::Resized => {
+                        if let Some(preview) = &mut self.preview {
+                            preview.columns.iter_mut().for_each(|column| {
+                                if let Some(offset) = column.resize_offset.take() {
+                                    column.width += offset;
+                                }
+                            });
+                        }
+                        Task::none()
+                    }
+                    items::Operation::ColumnVisibilityEnabled(enabled) => {
+                        if let Some(preview) = &mut self.preview {
+                            preview.column_visibility_enabled = enabled;
+                        }
+                        Task::none()
+                    }
+                    items::Operation::ColumnVisibility(visibility_msg) => {
+                        if let Some(preview) = &mut self.preview {
+                            match visibility_msg {
+                                ColumnVisibilityMessage::ToggleColumn(column_id) => {
+                                    if let Some(visible) = preview.column_visibility.get_mut(&column_id) {
+                                        *visible = !*visible;
+                                        
+                                        // Update the corresponding column
+                                        if let Some(column) = preview.columns.iter_mut().find(|c| c.id() == column_id) {
+                                            column.visible = *visible;
+                                        }
+                                    }
+                                }
+                                ColumnVisibilityMessage::HideContextMenu => {
+                                    // Context menu was closed, no action needed
+                                    // This could be used to do cleanup if needed
+                                }
+                            }
+                        }
+                        Task::none()
+                    }
+                    items::Operation::SyncHeader(offset) => {
+                        if let Some(preview) = &mut self.preview {
+                            return Task::batch(vec![
+                                iced::widget::scrollable::scroll_to(preview.header_id.clone(), offset),
+                            ])
+                        }
+                        Task::none()
                     }
                 }
             } 

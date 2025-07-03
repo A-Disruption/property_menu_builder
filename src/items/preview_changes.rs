@@ -1,10 +1,26 @@
-use items::Item;
-use std::collections::HashMap;
-use iced::{Element, Length};
-use iced::widget::{Column, column, row, scrollable, container};
-use crate::EntityResolver;
+use crate::{
+    items::{Item, ItemPrice},
+    data_types::EntityId,
+    tax_groups::TaxGroup,
+    security_levels::SecurityLevel,
+    revenue_categories::RevenueCategory,
+    report_categories::ReportCategory,
+    item_groups::ItemGroup,
+    product_classes::ProductClass,
+    choice_groups::ChoiceGroup,
+    printer_logicals::PrinterLogical,
+    price_levels::PriceLevel,
+    icon,
+};
+use std::collections::{HashMap, BTreeMap};
+use rust_decimal::Decimal;
+use iced::{Element, Length, Theme, Renderer, Color};
+use iced::widget::{column, row, scrollable, container, responsive, text, horizontal_space};
+use iced_table::{table, ColumnVisibilityMessage};
+use crate::superedit::HasName;
 
-enum Message {
+#[derive(Debug, Clone)]
+pub enum Message {
     SyncHeader(scrollable::AbsoluteOffset),
     Resizing(usize, f32),
     Resized,
@@ -12,67 +28,73 @@ enum Message {
     ColumnVisibility(ColumnVisibilityMessage),
 }
 
-struct Preview {
-    columns: Vec<Column>,
-    rows: Vec<Row>,
-    header: scrollable::Id,
-    body: scrollable::Id,
-    footer: scrollable::Id,
-    column_visibility_enabled: bool,
-    column_visibility: HashMap<String, bool>,
+// Enum to track cell changes
+#[derive(Debug, Clone, PartialEq)]
+pub enum CellChange {
+    None,
+    Modified,
+    Added,
+    Removed,
 }
 
-impl Preview {
+// Structure to hold both original and modified values
+#[derive(Debug, Clone)]
+pub struct CellValue {
+    pub original: String,
+    pub modified: Option<String>,
+    pub change_type: CellChange,
+}
 
-    fn new() -> Self { 
-        Preview::default() 
-    }
-
-    fn update_column_visibility(&mut self) {
-        // Update each column's visibility based on our state
-        for column in &mut self.columns {
-            if let Some(&visible) = self.column_visibility.get(column.id()) {
-                column.visible = visible;
-            }
+impl CellValue {
+    fn unchanged(value: String) -> Self {
+        Self {
+            original: value,
+            modified: None,
+            change_type: CellChange::None,
         }
     }
 
-    pub fn preview_items<R: EntityResolver>(items: &[Item], resolver: &R) -> Element<Message> {
+    fn modified(original: String, new_value: String) -> Self {
+        Self {
+            original,
+            modified: Some(new_value),
+            change_type: CellChange::Modified,
+        }
+    }
 
-        self.rows = items.map(|item|row.generate(item, resolver)).collect();
-
-        let table = responsive(|size| {
-            let mut table = table(
-                self.header.clone(),
-                self.body.clone(),
-                &self.columns,
-                &self.rows,
-                Message::SyncHeader,
-            );
-
-            if self.resize_columns_enabled {
-                table = table.on_column_resize(Message::Resizing, Message::Resized);
-            }
-            if self.column_visibility_enabled {
-                table = table.on_column_visibility(Message::ColumnVisibility);
-            }
-
-            table.into()
-        });
-
-        let visible_columns_count = self.columns.iter().filter(|c| c.visible).count();
-
-        let content = column![
-            text("Items Preview"),
-            table,
-        ].spacing(6); 
-
-        content.padding(20).center_x(Length::Fill).center_y(Length::Fill).into()
+    fn display(&self) -> String {
+        match &self.modified {
+            Some(new_val) => new_val.clone(),
+            None => self.original.clone(),
+        }
     }
 }
 
-impl Default for Preview {
-    fn default() -> Self {
+#[derive(Debug, Clone)]
+pub struct ItemsTableView {
+    pub columns: Vec<Column>,
+    pub rows: Vec<Row>,
+    pub header_id: scrollable::Id,
+    pub body_id: scrollable::Id,
+    pub column_visibility_enabled: bool,
+    pub column_visibility: HashMap<String, bool>,
+    pub show_diff: bool, // Flag to enable diff visualization
+}
+
+impl ItemsTableView {
+    pub fn new(
+        items: &BTreeMap<EntityId, Item>,
+        item_groups: &BTreeMap<EntityId, ItemGroup>,
+        tax_groups: &BTreeMap<EntityId, TaxGroup>,
+        security_levels: &BTreeMap<EntityId, SecurityLevel>,
+        revenue_categories: &BTreeMap<EntityId, RevenueCategory>,
+        report_categories: &BTreeMap<EntityId, ReportCategory>,
+        product_classes: &BTreeMap<EntityId, ProductClass>,
+        choice_groups: &BTreeMap<EntityId, ChoiceGroup>,
+        printer_logicals: &BTreeMap<EntityId, PrinterLogical>,
+        price_levels: &BTreeMap<EntityId, PriceLevel>,
+    ) -> Self {
+
         let mut column_visibility = HashMap::new();
         column_visibility.insert("Id".to_string(), true);
         column_visibility.insert("Name".to_string(), true);
@@ -111,63 +133,174 @@ impl Default for Preview {
         column_visibility.insert("Choice Groups".to_string(), true);
         column_visibility.insert("Printer Logicals".to_string(), true);
 
+        let columns = create_columns();
+        
+        let rows: Vec<Row> = items.iter().map(
+            |item| Row::generate(
+                item.1, 
+                item_groups,
+                tax_groups,
+                security_levels,
+                revenue_categories,
+                report_categories,
+                product_classes,
+                choice_groups,
+                printer_logicals,
+                price_levels,
+            )
+        ).collect();
+
         Self {
-            columns: vec![
-                Column::new(ColumnType::Id),
-                Column::new(ColumnType::Name),
-                Column::new(ColumnType::Button1),
-                Column::new(ColumnType::Button2),
-                Column::new(ColumnType::PrinterText),
-                Column::new(ColumnType::ItemGroup),
-                Column::new(ColumnType::ProductClass),
-                Column::new(ColumnType::RevenueCategory),
-                Column::new(ColumnType::TaxGroup),
-                Column::new(ColumnType::SecurityLevel),
-                Column::new(ColumnType::ReportCategory),
-                Column::new(ColumnType::CostAmount),
-                Column::new(ColumnType::AskPrice),
-                Column::new(ColumnType::AllowPriceOverride),
-                Column::new(ColumnType::PriceLevels),
-                Column::new(ColumnType::UseWeight),
-                Column::new(ColumnType::WeightAmount),
-                Column::new(ColumnType::SKU),
-                Column::new(ColumnType::BarGunCode),
-                Column::new(ColumnType::PrintOnCheck),
-                Column::new(ColumnType::Discountable),
-                Column::new(ColumnType::Voidable),
-                Column::new(ColumnType::NotActive),
-                Column::new(ColumnType::TaxIncluded),
-                Column::new(ColumnType::StockItem),
-                Column::new(ColumnType::CustomerReceiptText),
-                Column::new(ColumnType::KitchenVideoText),
-                Column::new(ColumnType::KDSCategory),
-                Column::new(ColumnType::KDSCooktime),
-                Column::new(ColumnType::KDSDepartment),
-                Column::new(ColumnType::StoreID),
-                Column::new(ColumnType::Covers),
-                Column::new(ColumnType::ImageID),
-                Column::new(ColumnType::LanguageISOCode),
-                Column::new(ColumnType::ChoiceGroups),
-                Column::new(ColumnType::PrinterLogicals),
-            ],
-            rows: (0..50).map(Row::generate).collect(),
-            header: scrollable::Id::unique(),
-            body: scrollable::Id::unique(),
-            footer: scrollable::Id::unique(),
+            columns,
+            rows,
+            header_id: scrollable::Id::unique(),
+            body_id: scrollable::Id::unique(),
             column_visibility_enabled: true,
             column_visibility,
+            show_diff: false,
         }
+    }
+
+    // New method to create a table with diff view
+    pub fn new_with_diff(
+        original_items: &BTreeMap<EntityId, Item>,
+        modified_items: &BTreeMap<EntityId, Item>,
+        item_groups: &BTreeMap<EntityId, ItemGroup>,
+        tax_groups: &BTreeMap<EntityId, TaxGroup>,
+        security_levels: &BTreeMap<EntityId, SecurityLevel>,
+        revenue_categories: &BTreeMap<EntityId, RevenueCategory>,
+        report_categories: &BTreeMap<EntityId, ReportCategory>,
+        product_classes: &BTreeMap<EntityId, ProductClass>,
+        choice_groups: &BTreeMap<EntityId, ChoiceGroup>,
+        printer_logicals: &BTreeMap<EntityId, PrinterLogical>,
+        price_levels: &BTreeMap<EntityId, PriceLevel>,
+    ) -> Self {
+        let mut table = Self::new(
+            original_items,
+            item_groups,
+            tax_groups,
+            security_levels,
+            revenue_categories,
+            report_categories,
+            product_classes,
+            choice_groups,
+            printer_logicals,
+            price_levels,
+        );
+        
+        table.show_diff = true;
+        
+        // Generate rows with diff information
+        table.rows = original_items.iter().map(|(id, original_item)| {
+            if let Some(modified_item) = modified_items.get(id) {
+                Row::generate_with_diff(
+                    original_item,
+                    modified_item,
+                    item_groups,
+                    tax_groups,
+                    security_levels,
+                    revenue_categories,
+                    report_categories,
+                    product_classes,
+                    choice_groups,
+                    printer_logicals,
+                    price_levels,
+                )
+            } else {
+                Row::generate(
+                    original_item,
+                    item_groups,
+                    tax_groups,
+                    security_levels,
+                    revenue_categories,
+                    report_categories,
+                    product_classes,
+                    choice_groups,
+                    printer_logicals,
+                    price_levels,
+                )
+            }
+        }).collect();
+        
+        table
+    }
+
+    pub fn render(&self) -> Element<Message> {
+        let table = responsive(|_size| {
+            let mut table = table(
+                self.header_id.clone(),
+                self.body_id.clone(),
+                &self.columns,
+                &self.rows,
+                Message::SyncHeader,
+            );
+
+            
+            table = table.on_column_resize(Message::Resizing, Message::Resized);
+
+            if self.column_visibility_enabled {
+                table = table.on_column_visibility(Message::ColumnVisibility);
+            }
+
+            table.into()
+        });
+
+
+        let content = column![
+            table,
+        ];
+
+        container(content).padding(20).center_x(Length::Fill).center_y(Length::Fill).into()
     }
 }
 
+fn create_columns() -> Vec<Column> {
+    vec![
+        Column::new(ColumnType::Id),
+        Column::new(ColumnType::Name),
+        Column::new(ColumnType::Button1),
+        Column::new(ColumnType::Button2),
+        Column::new(ColumnType::PrinterText),
+        Column::new(ColumnType::ItemGroup),
+        Column::new(ColumnType::ProductClass),
+        Column::new(ColumnType::RevenueCategory),
+        Column::new(ColumnType::TaxGroup),
+        Column::new(ColumnType::SecurityLevel),
+        Column::new(ColumnType::ReportCategory),
+        Column::new(ColumnType::CostAmount),
+        Column::new(ColumnType::AskPrice),
+        Column::new(ColumnType::AllowPriceOverride),
+        Column::new(ColumnType::PriceLevels),
+        Column::new(ColumnType::UseWeight),
+        Column::new(ColumnType::WeightAmount),
+        Column::new(ColumnType::SKU),
+        Column::new(ColumnType::BarGunCode),
+        Column::new(ColumnType::PrintOnCheck),
+        Column::new(ColumnType::Discountable),
+        Column::new(ColumnType::Voidable),
+        Column::new(ColumnType::NotActive),
+        Column::new(ColumnType::TaxIncluded),
+        Column::new(ColumnType::StockItem),
+        Column::new(ColumnType::CustomerReceiptText),
+        Column::new(ColumnType::KitchenVideoText),
+        Column::new(ColumnType::KDSCategory),
+        Column::new(ColumnType::KDSCooktime),
+        Column::new(ColumnType::KDSDepartment),
+        Column::new(ColumnType::StoreID),
+        Column::new(ColumnType::Covers),
+        Column::new(ColumnType::ImageID),
+        Column::new(ColumnType::LanguageISOCode),
+        Column::new(ColumnType::ChoiceGroups),
+        Column::new(ColumnType::PrinterLogicals),
+    ]
+}
 
-
-
-struct Column {
-    ColumnType: ColumnType,
-    width: f32,
-    resize_offset: Option<f32>,
-    visible: bool,
+#[derive(Debug, Clone)]
+pub struct Column {
+    pub column_type: ColumnType,
+    pub width: f32,
+    pub resize_offset: Option<f32>,
+    pub visible: bool,
 }
 
 impl Column {
@@ -187,7 +320,7 @@ impl Column {
             ColumnType::CostAmount =>  150.0,
             ColumnType::AskPrice =>  150.0,
             ColumnType::AllowPriceOverride =>  150.0,
-            ColumnType::PriceLevels =>  150.0,
+            ColumnType::PriceLevels =>  500.0, // Wider for price list
             ColumnType::UseWeight =>  150.0,
             ColumnType::WeightAmount =>  150.0,
             ColumnType::SKU =>  150.0,
@@ -207,11 +340,18 @@ impl Column {
             ColumnType::Covers =>  150.0,
             ColumnType::ImageID =>  150.0,
             ColumnType::LanguageISOCode =>  150.0,
-            ColumnType::ChoiceGroups =>  150.0,
-            ColumnType::PrinterLogicals =>  150.0,
+            ColumnType::ChoiceGroups =>  500.0, // Wider for list
+            ColumnType::PrinterLogicals =>  300.0, // Wider for list
         };
 
-        let visible = match kind { // Hidden by default
+        let visible = match columntype { // Hidden by default
+            ColumnType::SKU =>  false,
+            ColumnType::BarGunCode =>  false,
+            ColumnType::StockItem =>  false,
+            ColumnType::KitchenVideoText =>  false,
+            ColumnType::KDSCategory =>  false,
+            ColumnType::KDSCooktime =>  false,
+            ColumnType::KDSDepartment =>  false,
             ColumnType::NotActive => false, 
             ColumnType::StoreID => false,
             ColumnType::Covers => false,
@@ -221,7 +361,7 @@ impl Column {
         };
 
         Self {
-            columntype,
+            column_type: columntype,
             width,
             resize_offset: None,
             visible,
@@ -229,7 +369,7 @@ impl Column {
     }
 
     fn display_name(&self) -> &'static str {
-        match self.columntype {
+        match self.column_type {
             ColumnType::Id =>  "Id",
             ColumnType::Name =>  "Name",
             ColumnType::Button1 =>  "Button1",
@@ -270,8 +410,8 @@ impl Column {
     }
 }
 
-#[derive(Clone, Copy)]
-enum ColumnType {
+#[derive(Clone, Copy, Debug)]
+pub enum ColumnType {
     Id,
     Name,
     Button1,
@@ -310,90 +450,130 @@ enum ColumnType {
     PrinterLogicals,
 }
 
-struct Row {
-    id: String,
-    name: String,
-    button1: String,
-    button2: String,
-    printerText: String,
-    itemGroup: String,
-    productClass: String,
-    revenueCategory: String,
-    taxGroup: String,
-    securityLevel: String,
-    reportCategory: String,
-    costAmount: String,
-    askPrice: String,
-    allowPriceOverride: String,
-    priceLevels: String,
-    useWeight: String,
-    weightAmount: String,
-    sKU: String,
-    barGunCode: String,
-    printOnCheck: String,
-    discountable: String,
-    voidable: String,
-    notActive: String,
-    taxIncluded: String,
-    stockItem: String,
-    customerReceiptText: String,
-    kitchenVideoText: String,
-    kDSCategory: String,
-    kDSCooktime: String,
-    kDSDepartment: String,
-    storeID: String,
-    covers: String,
-    imageID: String,
-    languageISOCode: String,
-    choiceGroups: String,
-    printerLogicals: String,
+#[derive(Debug, Clone)]
+pub struct Row {
+    id: CellValue,
+    name: CellValue,
+    button1: CellValue,
+    button2: CellValue,
+    printerText: CellValue,
+    itemGroup: CellValue,
+    productClass: CellValue,
+    revenueCategory: CellValue,
+    taxGroup: CellValue,
+    securityLevel: CellValue,
+    reportCategory: CellValue,
+    costAmount: CellValue,
+    askPrice: CellValue,
+    allowPriceOverride: CellValue,
+    priceLevels: CellValue,
+    useWeight: CellValue,
+    weightAmount: CellValue,
+    sKU: CellValue,
+    barGunCode: CellValue,
+    printOnCheck: CellValue,
+    discountable: CellValue,
+    voidable: CellValue,
+    notActive: CellValue,
+    taxIncluded: CellValue,
+    stockItem: CellValue,
+    customerReceiptText: CellValue,
+    kitchenVideoText: CellValue,
+    kDSCategory: CellValue,
+    kDSCooktime: CellValue,
+    kDSDepartment: CellValue,
+    storeID: CellValue,
+    covers: CellValue,
+    imageID: CellValue,
+    languageISOCode: CellValue,
+    choiceGroups: CellValue,
+    printerLogicals: CellValue,
 }
 
 impl Row {
-    fn generate<R: EntityResolver>(item: Item, resolver: &R) -> Self {
-        let id = item.id.to_string();
-        let name = item.name.clone();
-        let button1 = item.button1.clone();
-        let button2 = Some(item.button2).expect("".to_string());
-        let printerText = item.printer_text.to_clone();
-        let itemGroup = resolver.get_item_group_name(item.item_group);
-        let productClass = resolver.get_product_class_name(item.product_class);
-        let revenueCategory = resolver.get_revenue_category_name(item.revenue_category);
-        let taxGroup = resolver.get_tax_group_name(item.tax_group);
-        let securityLevel = resolver.get_security_level_name(item.security_level);
-        let reportCategory = resolver.get_report_category_name(item.report_category);
-        let costAmount = item.cost_amount.clone();
-        let askPrice = item.ask_price.to_string();
-        let allowPriceOverride = item.allow_price_override.to_string();
-        let priceLevels = get_prices_string(item.default_price, item.item_prices);
-        let useWeight = item.use_weight.to_string();
-        let weightAmount = item.weight_amount.clone();
-        let sKU = item.SKU.clone();
-        let barGunCode = item.bar_gun_code.clone();
-        let printOnCheck = item.print_on_check.to_string();
-        let discountable = item.discountable.to_string();
-        let voidable = item.voidable.to_string();
-        let notActive = item.not_active.to_string();
-        let taxIncluded = item.tax_included.to_string();
-        let stockItem = item.stock_item.to_string();
-        let customerReceiptText = item.customer_receipt.clone();
-        let kitchenVideoText = item.kitchen_video.clone();
-        let kDSCategory = item.kds_category.clone();
-        let kDSCooktime = item.kds_cooktime.clone();
-        let kDSDepartment = item.kds_dept.clone();
-        let storeID = item.store_id.to_string();
-        let covers = item.covers.to_string();
-        let imageID = item.image_id.clone();
-        let languageISOCode = item.language_iso_code.clone();
-        let choiceGroups = get_choice_groups_string(item.choice_groups);
-        let printerLogicals = get_printer_logicals_string(item.printer_logicals);        
+    fn generate<'a>(
+        item: &'a Item, 
+        item_groups: &'a BTreeMap<EntityId, ItemGroup>,
+        tax_groups: &'a BTreeMap<EntityId, TaxGroup>,
+        security_levels: &'a BTreeMap<EntityId, SecurityLevel>,
+        revenue_categories: &'a BTreeMap<EntityId, RevenueCategory>,
+        report_categories: &'a BTreeMap<EntityId, ReportCategory>,
+        product_classes: &'a BTreeMap<EntityId, ProductClass>,
+        choice_groups: &'a BTreeMap<EntityId, ChoiceGroup>,
+        printer_logicals: &'a BTreeMap<EntityId, PrinterLogical>,
+        price_levels: &'a BTreeMap<EntityId, PriceLevel>,
+    ) -> Self {
+        let id = CellValue::unchanged(item.id.to_string());
+        let name = CellValue::unchanged(item.name.clone());
+        let button1 = CellValue::unchanged(item.button1.clone());
+        let button2 = CellValue::unchanged(item.button2.clone().unwrap_or("".to_string()));
+        let printerText = CellValue::unchanged(item.printer_text.clone());
+        let itemGroup = CellValue::unchanged(item.item_group
+            .and_then(|id| item_groups.get(&id))
+            .map(|ig| ig.name.as_str())
+            .unwrap_or("None").to_string());
+        let productClass = CellValue::unchanged(item.product_class
+            .and_then(|id| product_classes.get(&id))
+            .map(|product_class| product_class.name.as_str())
+            .unwrap_or("None").to_string());
+        let revenueCategory = CellValue::unchanged(item.revenue_category
+            .and_then(|id| revenue_categories.get(&id))
+            .map(|revenue_category| revenue_category.name.as_str())
+            .unwrap_or("None").to_string());
+        let taxGroup = CellValue::unchanged(item.tax_group
+            .and_then(|id| tax_groups.get(&id))
+            .map(|tax_group| tax_group.name.as_str())
+            .unwrap_or("None").to_string());
+        let securityLevel = CellValue::unchanged(item.security_level
+            .and_then(|id| security_levels.get(&id))
+            .map(|security_level| security_level.name.as_str())
+            .unwrap_or("None").to_string());
+        let reportCategory = CellValue::unchanged(item.report_category
+            .and_then(|id| report_categories.get(&id))
+            .map(|report_category| report_category.name.as_str())
+            .unwrap_or("None").to_string());
+        let costAmount = CellValue::unchanged(item.cost_amount.unwrap_or(Decimal::new(0,2)).to_string());
+        let askPrice = CellValue::unchanged(item.ask_price.to_string());
+        let allowPriceOverride = CellValue::unchanged(item.allow_price_override.to_string());
+        let priceLevels = CellValue::unchanged(get_prices_string_with_names(
+            item.default_price,
+            item.item_prices.as_ref(), 
+            price_levels
+        ));
+        let useWeight = CellValue::unchanged(item.use_weight.to_string());
+        let weightAmount = CellValue::unchanged(item.weight_amount.to_string());
+        let sKU = CellValue::unchanged(item.sku.clone().unwrap_or("".to_string()));
+        let barGunCode = CellValue::unchanged(item.bar_gun_code.clone().unwrap_or("".to_string()));
+        let printOnCheck = CellValue::unchanged(item.print_on_check.to_string());
+        let discountable = CellValue::unchanged(item.discountable.to_string());
+        let voidable = CellValue::unchanged(item.voidable.to_string());
+        let notActive = CellValue::unchanged(item.not_active.to_string());
+        let taxIncluded = CellValue::unchanged(item.tax_included.to_string());
+        let stockItem = CellValue::unchanged(item.stock_item.to_string());
+        let customerReceiptText = CellValue::unchanged(item.customer_receipt.clone());
+        let kitchenVideoText = CellValue::unchanged(item.kitchen_video.clone());
+        let kDSCategory = CellValue::unchanged(item.kds_category.clone());
+        let kDSCooktime = CellValue::unchanged(item.kds_cooktime.to_string());
+        let kDSDepartment = CellValue::unchanged(item.kds_dept.to_string());
+        let storeID = CellValue::unchanged(item.store_id.to_string());
+        let covers = CellValue::unchanged(item.covers.to_string());
+        let imageID = CellValue::unchanged(item.image_id.to_string());
+        let languageISOCode = CellValue::unchanged(item.language_iso_code.clone());
+        let choiceGroups = CellValue::unchanged(get_choice_groups_string_with_names(
+            item.choice_groups.as_ref(), 
+            choice_groups
+        ));
+        let printerLogicals = CellValue::unchanged(get_printer_logicals_string_with_names(
+            item.printer_logicals.as_ref(), 
+            printer_logicals
+        ));        
 
         Self {
             id,
             name,
             button1,
             button2,
-            printer_text,
+            printerText,
             itemGroup,
             productClass,
             revenueCategory,
@@ -428,99 +608,279 @@ impl Row {
         }
     }
 
-    fn get_prices_string(default_price: Option<Decimal>, prices: Option<Vec<ItemPrice>>) -> String {
-        let mut price_string = String::new();
-        
-        match prices {
-            Some(prices) => {
-                price_string.push_str("{");
-                match default_price {
-                    Some(price) => {
-                        let price_str = "1".to_string() + ",$" + price.to_string().as_str() + ",";
-                        price_string.push_str(price_str.as_str());
-                    }
-                    None => {
-                        let price_str = "1".to_string() + ",$" + "0.00" + ",";
-                        price_string.push_str(price_str.as_str());
-                    }
-                }
-
-                for price in prices {
-                    let price_str = (price.price_level_id + 1).to_string() + ",$" + price.price.to_string().as_str() + ",";
-                    price_string.push_str(price_str.as_str());
-                }
-                price_string = price_string.trim_end_matches(',').to_string();
-                price_string.push_str("}");
-            }
-            None => {
-                // return "" if there are no prices attached to an item.
-                price_string.push_str("{");
-                match default_price {
-                    Some(price) => {
-                        let price_str = "1".to_string() + ",$" + price.to_string().as_str() + ",";
-                        price_string.push_str(price_str.as_str());
-                    }
-                    None => {
-                        let price_str = "1".to_string() + ",$" + "0.00" + ",";
-                        price_string.push_str(price_str.as_str());
-                    }
-                }
-                price_string = price_string.trim_end_matches(',').to_string();
-                price_string.push_str("}");
+    fn generate_with_diff<'a>(
+        original: &'a Item,
+        modified: &'a Item,
+        item_groups: &'a BTreeMap<EntityId, ItemGroup>,
+        tax_groups: &'a BTreeMap<EntityId, TaxGroup>,
+        security_levels: &'a BTreeMap<EntityId, SecurityLevel>,
+        revenue_categories: &'a BTreeMap<EntityId, RevenueCategory>,
+        report_categories: &'a BTreeMap<EntityId, ReportCategory>,
+        product_classes: &'a BTreeMap<EntityId, ProductClass>,
+        choice_groups: &'a BTreeMap<EntityId, ChoiceGroup>,
+        printer_logicals: &'a BTreeMap<EntityId, PrinterLogical>,
+        price_levels: &'a BTreeMap<EntityId, PriceLevel>,
+    ) -> Self {
+        // Helper to create CellValue with diff
+        let diff_value = |orig: String, modif: String| -> CellValue {
+            if orig == modif {
+                CellValue::unchanged(orig)
+            } else {
+                CellValue::modified(orig, modif)
             }
         };
 
-        price_string
+        // Helper for optional entity lookups
+        let lookup_entity_name = |id: Option<EntityId>, map: &BTreeMap<EntityId, &dyn HasName>| -> String {
+            id.and_then(|id| map.get(&id))
+                .map(|entity| entity.name().to_string())
+                .unwrap_or_else(|| "None".to_string())
+        };
+
+        Self {
+            id: CellValue::unchanged(original.id.to_string()),
+            name: diff_value(original.name.clone(), modified.name.clone()),
+            button1: diff_value(original.button1.clone(), modified.button1.clone()),
+            button2: diff_value(
+                original.button2.clone().unwrap_or_default(),
+                modified.button2.clone().unwrap_or_default()
+            ),
+            printerText: diff_value(original.printer_text.clone(), modified.printer_text.clone()),
+            itemGroup: diff_value(
+                original.item_group
+                    .and_then(|id| item_groups.get(&id))
+                    .map(|ig| ig.name.clone())
+                    .unwrap_or_else(|| "None".to_string()),
+                modified.item_group
+                    .and_then(|id| item_groups.get(&id))
+                    .map(|ig| ig.name.clone())
+                    .unwrap_or_else(|| "None".to_string())
+            ),
+            productClass: diff_value(
+                original.product_class
+                    .and_then(|id| product_classes.get(&id))
+                    .map(|pc| pc.name.clone())
+                    .unwrap_or_else(|| "None".to_string()),
+                modified.product_class
+                    .and_then(|id| product_classes.get(&id))
+                    .map(|pc| pc.name.clone())
+                    .unwrap_or_else(|| "None".to_string())
+            ),
+            revenueCategory: diff_value(
+                original.revenue_category
+                    .and_then(|id| revenue_categories.get(&id))
+                    .map(|rc| rc.name.clone())
+                    .unwrap_or_else(|| "None".to_string()),
+                modified.revenue_category
+                    .and_then(|id| revenue_categories.get(&id))
+                    .map(|rc| rc.name.clone())
+                    .unwrap_or_else(|| "None".to_string())
+            ),
+            taxGroup: diff_value(
+                original.tax_group
+                    .and_then(|id| tax_groups.get(&id))
+                    .map(|tg| tg.name.clone())
+                    .unwrap_or_else(|| "None".to_string()),
+                modified.tax_group
+                    .and_then(|id| tax_groups.get(&id))
+                    .map(|tg| tg.name.clone())
+                    .unwrap_or_else(|| "None".to_string())
+            ),
+            securityLevel: diff_value(
+                original.security_level
+                    .and_then(|id| security_levels.get(&id))
+                    .map(|sl| sl.name.clone())
+                    .unwrap_or_else(|| "None".to_string()),
+                modified.security_level
+                    .and_then(|id| security_levels.get(&id))
+                    .map(|sl| sl.name.clone())
+                    .unwrap_or_else(|| "None".to_string())
+            ),
+            reportCategory: diff_value(
+                original.report_category
+                    .and_then(|id| report_categories.get(&id))
+                    .map(|rc| rc.name.clone())
+                    .unwrap_or_else(|| "None".to_string()),
+                modified.report_category
+                    .and_then(|id| report_categories.get(&id))
+                    .map(|rc| rc.name.clone())
+                    .unwrap_or_else(|| "None".to_string())
+            ),
+            costAmount: diff_value(
+                original.cost_amount.unwrap_or_else(|| Decimal::new(0, 2)).to_string(),
+                modified.cost_amount.unwrap_or_else(|| Decimal::new(0, 2)).to_string()
+            ),
+            askPrice: diff_value(
+                original.ask_price.to_string(),
+                modified.ask_price.to_string()
+            ),
+            allowPriceOverride: diff_value(
+                original.allow_price_override.to_string(),
+                modified.allow_price_override.to_string()
+            ),
+            priceLevels: diff_value(
+                get_prices_string_with_names(original.default_price, original.item_prices.as_ref(), price_levels),
+                get_prices_string_with_names(modified.default_price, modified.item_prices.as_ref(), price_levels)
+            ),
+            useWeight: diff_value(
+                original.use_weight.to_string(),
+                modified.use_weight.to_string()
+            ),
+            weightAmount: diff_value(
+                original.weight_amount.to_string(),
+                modified.weight_amount.to_string()
+            ),
+            sKU: diff_value(
+                original.sku.clone().unwrap_or_default(),
+                modified.sku.clone().unwrap_or_default()
+            ),
+            barGunCode: diff_value(
+                original.bar_gun_code.clone().unwrap_or_default(),
+                modified.bar_gun_code.clone().unwrap_or_default()
+            ),
+            printOnCheck: diff_value(
+                original.print_on_check.to_string(),
+                modified.print_on_check.to_string()
+            ),
+            discountable: diff_value(
+                original.discountable.to_string(),
+                modified.discountable.to_string()
+            ),
+            voidable: diff_value(
+                original.voidable.to_string(),
+                modified.voidable.to_string()
+            ),
+            notActive: diff_value(
+                original.not_active.to_string(),
+                modified.not_active.to_string()
+            ),
+            taxIncluded: diff_value(
+                original.tax_included.to_string(),
+                modified.tax_included.to_string()
+            ),
+            stockItem: diff_value(
+                original.stock_item.to_string(),
+                modified.stock_item.to_string()
+            ),
+            customerReceiptText: diff_value(
+                original.customer_receipt.clone(),
+                modified.customer_receipt.clone()
+            ),
+            kitchenVideoText: diff_value(
+                original.kitchen_video.clone(),
+                modified.kitchen_video.clone()
+            ),
+            kDSCategory: diff_value(
+                original.kds_category.clone(),
+                modified.kds_category.clone()
+            ),
+            kDSCooktime: diff_value(
+                original.kds_cooktime.to_string(),
+                modified.kds_cooktime.to_string()
+            ),
+            kDSDepartment: diff_value(
+                original.kds_dept.to_string(),
+                modified.kds_dept.to_string()
+            ),
+            storeID: diff_value(
+                original.store_id.to_string(),
+                modified.store_id.to_string()
+            ),
+            covers: diff_value(
+                original.covers.to_string(),
+                modified.covers.to_string()
+            ),
+            imageID: diff_value(
+                original.image_id.to_string(),
+                modified.image_id.to_string()
+            ),
+            languageISOCode: diff_value(
+                original.language_iso_code.clone(),
+                modified.language_iso_code.clone()
+            ),
+            choiceGroups: diff_value(
+                get_choice_groups_string_with_names(original.choice_groups.as_ref(), choice_groups),
+                get_choice_groups_string_with_names(modified.choice_groups.as_ref(), choice_groups)
+            ),
+            printerLogicals: diff_value(
+                get_printer_logicals_string_with_names(original.printer_logicals.as_ref(), printer_logicals),
+                get_printer_logicals_string_with_names(modified.printer_logicals.as_ref(), printer_logicals)
+            ),
+        }
     }
+}
 
-    fn get_choice_groups_string(choice_groups: Option<Vec<(i32, i32)>>) -> String {
-        let mut choice_group_string = String::new();
-
-        match choice_groups {
-            Some(groups) => {
-                choice_group_string.push_str("{");
-                for group in groups {
-                    let group_str = group.0.to_string() + "," + group.1.to_string().as_str() + ",";
-                    choice_group_string.push_str(group_str.as_str());
-                }
-                choice_group_string = choice_group_string.trim_end_matches(',').to_string();
-                choice_group_string.push_str("}");
-
-            }
-            None => { 
-                // return {} if there are no choice groups attached to an item
-                choice_group_string = "{}".to_string(); 
+fn get_prices_string_with_names(
+    default_price: Option<Decimal>,
+    item_prices: Option<&Vec<ItemPrice>>, 
+    price_levels: &BTreeMap<EntityId, PriceLevel>
+) -> String {
+    let mut price_strings = Vec::new();
+    
+    // Add default price (usually price level 1)
+    match default_price {
+        Some(price) => {
+            // Find price level 1's name, or use "Default" if not found
+            let level_name = price_levels.values()
+                .find(|pl| pl.id == 1) // Assuming price level 1 is the default
+                .map(|pl| pl.name.as_str())
+                .unwrap_or("Default");
+            price_strings.push(format!("{}: ${:.2}", level_name, price));
+        }
+        None => {
+            let level_name = price_levels.values()
+                .find(|pl| pl.id == 1)
+                .map(|pl| pl.name.as_str())
+                .unwrap_or("Default");
+            price_strings.push(format!("{}: $0.00", level_name));
+        }
+    }
+    
+    // Add additional price levels from item_prices
+    if let Some(prices) = item_prices {
+        for item_price in prices {
+            // Find the price level name by ID
+            if let Some(price_level) = price_levels.get(&item_price.price_level_id) {
+                price_strings.push(format!("{}: ${:.2}", price_level.name, item_price.price));
+            } else {
+                // Fallback if price level not found
+                price_strings.push(format!("Level {}: ${:.2}", item_price.price_level_id, item_price.price));
             }
         }
-
-        choice_group_string
     }
+    
+    format!("[{}]", price_strings.join(", "))
+}
 
-    fn get_printer_logicals_string(printer_logicals: Option<Vec<(i32, bool)>>) -> String {
-        let mut printer_logicals_string = String::new();
-
-        match printer_logicals {
-            Some(printers) => {
-                printer_logicals_string.push('{');
-                for printer in printers {
-                    printer_logicals_string.push_str(printer.0.to_string().as_str());
-                    printer_logicals_string.push(',');
-                    printer_logicals_string.push_str(if printer.1 {"1"} else {"0"});
-                    printer_logicals_string.push(',');
-                }
-                if printer_logicals_string.ends_with(',') {
-                    printer_logicals_string.pop(); // Remove comma from the last printer logical
-                }
-                printer_logicals_string.push('}');
-
-            }
-            None => { 
-                // return {} if there are no printer logicals attached to an item
-                printer_logicals_string.push_str("{}");
-            }
+fn get_choice_groups_string_with_names(
+    choice_group_data: Option<&Vec<(EntityId, i32)>>, 
+    choice_groups: &BTreeMap<EntityId, ChoiceGroup>
+) -> String {
+    match choice_group_data {
+        Some(data) if !data.is_empty() => {
+            let group_names: Vec<String> = data
+                .iter()
+                .filter_map(|(id, _)| choice_groups.get(id).map(|cg| cg.name.clone()))
+                .collect();
+            format!("[{}]", group_names.join(", "))
         }
+        _ => "[]".to_string()
+    }
+}
 
-        printer_logicals_string
+fn get_printer_logicals_string_with_names(
+    printer_logical_data: Option<&Vec<(EntityId, bool)>>, 
+    printer_logicals: &BTreeMap<EntityId, PrinterLogical>
+) -> String {
+    match printer_logical_data {
+        Some(data) if !data.is_empty() => {
+            let printer_names: Vec<String> = data
+                .iter()
+                .filter_map(|(id, _)| printer_logicals.get(id).map(|pl| pl.name.clone()))
+                .collect();
+            format!("[{}]", printer_names.join(", "))
+        }
+        _ => "[]".to_string()
     }
 }
 
@@ -532,51 +892,91 @@ impl<'a> table::Column<'a, Message, Theme, Renderer> for Column {
         container(text(content)).center_y(24).into()
     }
 
-    fn cell(&'a self, row: &'a Row) -> Element<'a, Message> {
-        let content: Element<_> = match self.columntype {
-            ColumnType::Id =>  text(row.id).into(),
-            ColumnType::Name =>  text(row.name).into(),
-            ColumnType::Button1 =>  text(row.button1).into(),
-            ColumnType::Button2 =>  text(row.button2).into(),
-            ColumnType::PrinterText =>  text(row.printer_text).into(),
-            ColumnType::ItemGroup =>  text(row.itemGroup).into(),
-            ColumnType::ProductClass =>  text(row.productClass).into(),
-            ColumnType::RevenueCategory =>  text(row.revenueCategory).into(),
-            ColumnType::TaxGroup =>  text(row.taxGroup).into(),
-            ColumnType::SecurityLevel =>  text(row.securityLevel).into(),
-            ColumnType::ReportCategory =>  text(row.reportCategory).into(),
-            ColumnType::CostAmount =>  text(row.costAmount).into(),
-            ColumnType::AskPrice =>  text(row.askPrice).into(),
-            ColumnType::AllowPriceOverride =>  text(row.allowPriceOverride).into(),
-            ColumnType::PriceLevels =>  text(row.priceLevels).into(),
-            ColumnType::UseWeight =>  text(row.useWeight).into(),
-            ColumnType::WeightAmount =>  text(row.weightAmount).into(),
-            ColumnType::SKU => text(row.sKU).into(),
-            ColumnType::BarGunCode =>  text(row.barGunCode).into(),
-            ColumnType::PrintOnCheck =>  text(row.printOnCheck).into(),
-            ColumnType::Discountable =>  text(row.discountable).into(),
-            ColumnType::Voidable =>  text(row.voidable).into(),
-            ColumnType::NotActive =>  text(row.notActive).into(),
-            ColumnType::TaxIncluded =>  text(row.taxIncluded).into(),
-            ColumnType::StockItem =>  text(row.stockItem).into(),
-            ColumnType::CustomerReceiptText =>  text(row.customerReceiptText).into(),
-            ColumnType::KitchenVideoText =>  text(row.kitchenVideoText).into(),
-            ColumnType::KDSCategory =>  text(row.kDSCategory).into(),
-            ColumnType::KDSCooktime =>  text(row.kDSCooktime).into(),
-            ColumnType::KDSDepartment =>  text(row.kDSDepartment).into(),
-            ColumnType::StoreID =>  text(row.storeID).into(),
-            ColumnType::Covers =>  text(row.covers).into(),
-            ColumnType::ImageID =>  text(row.imageID).into(),
-            ColumnType::LanguageISOCode =>  text(row.languageISOCode).into(),
-            ColumnType::ChoiceGroups => text(row.choiceGroups).into(),
-            ColumnType::PrinterLogicals =>  text(row.printerLogicals).into(),
+    fn cell(&'a self, _col_index: usize, _row_index: usize, row: &'a Row) -> Element<'a, Message> {
+        let cell_value = match self.column_type {
+            ColumnType::Id => &row.id,
+            ColumnType::Name => &row.name,
+            ColumnType::Button1 => &row.button1,
+            ColumnType::Button2 => &row.button2,
+            ColumnType::PrinterText => &row.printerText,
+            ColumnType::ItemGroup => &row.itemGroup,
+            ColumnType::ProductClass => &row.productClass,
+            ColumnType::RevenueCategory => &row.revenueCategory,
+            ColumnType::TaxGroup => &row.taxGroup,
+            ColumnType::SecurityLevel => &row.securityLevel,
+            ColumnType::ReportCategory => &row.reportCategory,
+            ColumnType::CostAmount => &row.costAmount,
+            ColumnType::AskPrice => &row.askPrice,
+            ColumnType::AllowPriceOverride => &row.allowPriceOverride,
+            ColumnType::PriceLevels => &row.priceLevels,
+            ColumnType::UseWeight => &row.useWeight,
+            ColumnType::WeightAmount => &row.weightAmount,
+            ColumnType::SKU => &row.sKU,
+            ColumnType::BarGunCode => &row.barGunCode,
+            ColumnType::PrintOnCheck => &row.printOnCheck,
+            ColumnType::Discountable => &row.discountable,
+            ColumnType::Voidable => &row.voidable,
+            ColumnType::NotActive => &row.notActive,
+            ColumnType::TaxIncluded => &row.taxIncluded,
+            ColumnType::StockItem => &row.stockItem,
+            ColumnType::CustomerReceiptText => &row.customerReceiptText,
+            ColumnType::KitchenVideoText => &row.kitchenVideoText,
+            ColumnType::KDSCategory => &row.kDSCategory,
+            ColumnType::KDSCooktime => &row.kDSCooktime,
+            ColumnType::KDSDepartment => &row.kDSDepartment,
+            ColumnType::StoreID => &row.storeID,
+            ColumnType::Covers => &row.covers,
+            ColumnType::ImageID => &row.imageID,
+            ColumnType::LanguageISOCode => &row.languageISOCode,
+            ColumnType::ChoiceGroups => &row.choiceGroups,
+            ColumnType::PrinterLogicals => &row.printerLogicals,
+        };
+
+        let content: Element<_> = match cell_value.change_type {
+            CellChange::Modified => {
+                // Show strikethrough original and new value in green
+                column![
+                    text(&cell_value.original)
+                        .size(12)
+                        .color(Color::from_rgb(0.5, 0.5, 0.5))
+                        .style(|theme| text::Style {
+                            color: Some(Color::from_rgb(0.5, 0.5, 0.5)),
+                        }),
+                    text(cell_value.display())
+                        .color(Color::from_rgb(0.0, 0.7, 0.0))
+                        .style(|theme| text::Style {
+                            color: Some(Color::from_rgb(0.0, 0.7, 0.0)),
+                        })
+                ]
+                .spacing(2)
+                .into()
+            },
+            CellChange::Added => {
+                text(cell_value.display())
+                    .color(Color::from_rgb(0.0, 0.7, 0.0))
+                    .style(|theme| text::Style {
+                        color: Some(Color::from_rgb(0.0, 0.7, 0.0)),
+                    })
+                    .into()
+            },
+            CellChange::Removed => {
+                text(cell_value.display())
+                    .color(Color::from_rgb(0.7, 0.0, 0.0))
+                    .style(|theme| text::Style {
+                        color: Some(Color::from_rgb(0.7, 0.0, 0.0)),
+                    })
+                    .into()
+            },
+            CellChange::None => {
+                text(cell_value.display()).into()
+            }
         };
 
         container(content).width(Length::Fill).center_y(32).into()
     }
 
     fn footer(&'a self, _col_index: usize, rows: &'a [Row]) -> Option<Element<'a, Message>> {
-        let content = horizontal_space().into();
+        let content = horizontal_space();
 
         Some(container(content).center_y(24).into())
     }
@@ -591,7 +991,7 @@ impl<'a> table::Column<'a, Message, Theme, Renderer> for Column {
 
     // Implement the new trait methods for column visibility
     fn id(&self) -> String {
-        Column::id(self).to_string()
+        self.display_name().to_string()
     }
 
     fn title(&self) -> String {

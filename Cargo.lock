@@ -2203,6 +2203,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "iced_table"
+version = "0.13.0"
+source = "git+https://github.com/KainTwinam/iced_table.git#3436440f22a88a6ce26996d4eafc87fafcbdcb94"
+dependencies = [
+ "iced",
+]
+
+[[package]]
 name = "iced_tiny_skia"
 version = "0.14.0-dev"
 source = "git+https://github.com/iced-rs/iced?rev=aa633f6832c93d81fc829bcd351b369f0aada282#aa633f6832c93d81fc829bcd351b369f0aada282"
@@ -3660,6 +3668,7 @@ dependencies = [
  "iced",
  "iced_fontello",
  "iced_modern_theme",
+ "iced_table",
  "image",
  "rangemap",
  "rfd",

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use rust_decimal::Decimal;
 use crate::Action;
 use crate::{
-    items::Item,
+    items::{Item, ViewContext},
     data_types::EntityId,
     tax_groups::TaxGroup,
     security_levels::SecurityLevel,
@@ -18,6 +18,8 @@ use crate::{
     price_levels::PriceLevel,
     icon,
 };
+use crate::items::preview_changes::{ItemsTableView, Message as PreviewMessage};
+use iced_table::{ColumnVisibilityMessage, table::Column};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -39,6 +41,9 @@ pub enum Message {
 
     //Save Changes to App State
     CommitChanges(Item),
+
+    //Table Preview
+    Preview(PreviewMessage),
 }
 
 #[derive(Debug, Clone)]
@@ -92,20 +97,6 @@ enum FilterOperator {
 }
 
 impl FilterOperator {
-    const ALL: [FilterOperator; 11] = [
-        FilterOperator::BeginsWith,
-        FilterOperator::Contains,
-        FilterOperator::EndsWith,
-        FilterOperator::Equals,
-        FilterOperator::NotEquals,
-        FilterOperator::IsEmpty,
-        FilterOperator::IsNotEmpty,
-        FilterOperator::GreaterThan,
-        FilterOperator::LessThan,
-        FilterOperator::GreaterOrEqual,
-        FilterOperator::LessOrEqual,
-    ];
-
     // Get available operators based on the field type
     fn available_for_field(field: &FilterCategory) -> Vec<FilterOperator> {
         match field {
@@ -207,9 +198,11 @@ pub enum Operation {
 }
 
 #[derive(Debug, Clone)]
-pub struct SuperEdit {
+pub struct SuperEdit{
     conditions: Vec<FilterCondition>,
     actions: Vec<FilterAction>,
+    filtered_items: Option<BTreeMap<EntityId, Item>>,
+    preview_table: Option<ItemsTableView>, 
 }
 
 impl SuperEdit {
@@ -233,12 +226,23 @@ impl SuperEdit {
         Self {
             conditions: vec![default_condition],
             actions: vec![default_action],
+            filtered_items: None,
+            preview_table: None,
         }
     }
 
     pub fn update(
         &mut self, 
         message: Message,
+        items: &mut BTreeMap<EntityId, Item>,
+        item_groups: &BTreeMap<EntityId, ItemGroup>,
+        tax_groups: &BTreeMap<EntityId, TaxGroup>,
+        security_levels: &BTreeMap<EntityId, SecurityLevel>,
+        revenue_categories: &BTreeMap<EntityId, RevenueCategory>,
+        report_categories: &BTreeMap<EntityId, ReportCategory>,
+        product_classes: &BTreeMap<EntityId, ProductClass>,
+        choice_groups: &BTreeMap<EntityId, ChoiceGroup>,
+        printer_logicals: &BTreeMap<EntityId, PrinterLogical>,
         price_levels: &BTreeMap<EntityId, PriceLevel>,
     ) -> Action<Operation, Message> {
         match message {
@@ -255,24 +259,43 @@ impl SuperEdit {
             Message::RemoveCondition(index) => {
                 if self.conditions.len() > 1 && index < self.conditions.len() {
                     self.conditions.remove(index);
+                    self.refresh_filtered_items(items, item_groups, tax_groups, security_levels,
+                        revenue_categories, report_categories, product_classes, choice_groups,
+                        printer_logicals, price_levels);
                 }
                 Action::none()
             }
             Message::UpdateConditionLogic(index, logic) => {
                 if let Some(condition) = self.conditions.get_mut(index) {
                     condition.logic = logic;
+                    self.refresh_filtered_items(items, item_groups, tax_groups, security_levels,
+                        revenue_categories, report_categories, product_classes, choice_groups,
+                        printer_logicals, price_levels);
                 }
                 Action::none()
             }
             Message::UpdateConditionField(index, field) => {
                 if let Some(condition) = self.conditions.get_mut(index) {
-                    condition.field = field;
+                    condition.field = field.clone();
+                    
+                    // Update operator if current one is not valid for new field
+                    let available_ops = FilterOperator::available_for_field(&field);
+                    if !available_ops.contains(&condition.operator) {
+                        condition.operator = available_ops[0].clone();
+                    }
+                    
+                    self.refresh_filtered_items(items, item_groups, tax_groups, security_levels,
+                        revenue_categories, report_categories, product_classes, choice_groups,
+                        printer_logicals, price_levels);
                 }
                 Action::none()
             }
             Message::UpdateConditionOperator(index, operator) => {
                 if let Some(condition) = self.conditions.get_mut(index) {
                     condition.operator = operator;
+                    self.refresh_filtered_items(items, item_groups, tax_groups, security_levels,
+                        revenue_categories, report_categories, product_classes, choice_groups,
+                        printer_logicals, price_levels);
                 }
                 Action::none()
             }
@@ -280,6 +303,11 @@ impl SuperEdit {
                 if let Some(condition) = self.conditions.get_mut(index) {
                     condition.value = value;
                 }
+
+                self.refresh_filtered_items(items, item_groups, tax_groups, security_levels,
+                    revenue_categories, report_categories, product_classes, choice_groups,
+                    printer_logicals, price_levels);
+
                 Action::none()
             }
 
@@ -340,9 +368,129 @@ impl SuperEdit {
                 Action::none()
             }
             Message::CommitChanges(item) => {
-                crate::Action::operation(Operation::UpdateItem(item))
+                Action::operation(Operation::UpdateItem(item))
+            }
+            Message::Preview(preview_msg) => {
+                match preview_msg {
+                    PreviewMessage::SyncHeader(offset) => {
+                        if let Some(preview) = &mut self.preview_table {
+                            let task = iced::widget::scrollable::scroll_to(preview.header_id.clone(), offset);
+                            return Action::task(task)
+                        }
+
+                        Action::none()
+                    }
+                    PreviewMessage::Resizing(index, offset) => {
+                        if let Some(preview) = &mut self.preview_table {
+                            if let Some(column) = preview.columns.get_mut(index) {
+                                    column.resize_offset = Some(offset);
+                                }
+                        }
+                        Action::none()
+                    }
+                    PreviewMessage::Resized => {
+                        if let Some(preview) = &mut self.preview_table {
+                            preview.columns.iter_mut().for_each(|column| {
+                                if let Some(offset) = column.resize_offset.take() {
+                                    column.width += offset;
+                                }
+                            });
+                        }
+                        Action::none()
+                    }
+                    PreviewMessage::ColumnVisibility(visibility_msg) => {
+                        if let Some(preview) = &mut self.preview_table {
+                            match visibility_msg {
+                                ColumnVisibilityMessage::ToggleColumn(column_id) => {
+                                    if let Some(visible) = preview.column_visibility.get_mut(&column_id) {
+                                        *visible = !*visible;
+                                        
+                                        // Update the corresponding column
+                                        if let Some(column) = preview.columns.iter_mut().find(|c| c.id() == column_id) {
+                                            column.visible = *visible;
+                                        }
+                                    }
+                                }
+                                ColumnVisibilityMessage::HideContextMenu => {
+                                    // Context menu was closed, no action needed
+                                }
+                            }
+                        }
+                        Action::none()
+                    }
+                    PreviewMessage::ColumnVisibilityEnabled(enabled) => {
+                        if let Some(preview) = &mut self.preview_table {
+                            preview.column_visibility_enabled = enabled;
+                        }
+                        Action::none()
+                    }
+                }
             }
         }
+    }
+
+    // Helper method to refresh filtered items
+    fn refresh_filtered_items(
+        &mut self,
+        items: &BTreeMap<EntityId, Item>,
+        item_groups: &BTreeMap<EntityId, ItemGroup>,
+        tax_groups: &BTreeMap<EntityId, TaxGroup>,
+        security_levels: &BTreeMap<EntityId, SecurityLevel>,
+        revenue_categories: &BTreeMap<EntityId, RevenueCategory>,
+        report_categories: &BTreeMap<EntityId, ReportCategory>,
+        product_classes: &BTreeMap<EntityId, ProductClass>,
+        choice_groups: &BTreeMap<EntityId, ChoiceGroup>,
+        printer_logicals: &BTreeMap<EntityId, PrinterLogical>,
+        price_levels: &BTreeMap<EntityId, PriceLevel>,
+    ) {
+        self.filtered_items = Some(items
+            .iter()
+            .filter(|(_, item)| self.applies_to_item(
+                item,
+                item_groups,
+                tax_groups,
+                security_levels,
+                revenue_categories,
+                report_categories,
+                product_classes,
+                choice_groups,
+                printer_logicals,
+                price_levels,
+            ))
+            .map(|(id, item)| (*id, item.clone()))
+            .collect());
+
+        let table = match &self.filtered_items {
+            Some(filtered_items) => {
+                ItemsTableView::new(
+                    &filtered_items,
+                    item_groups,
+                    tax_groups,
+                    security_levels,
+                    revenue_categories,
+                    report_categories,
+                    product_classes,
+                    choice_groups,
+                    printer_logicals,
+                    price_levels,
+                )
+            }
+            None => {
+                ItemsTableView::new(
+                    &items,
+                    item_groups,
+                    tax_groups,
+                    security_levels,
+                    revenue_categories,
+                    report_categories,
+                    product_classes,
+                    choice_groups,
+                    printer_logicals,
+                    price_levels,
+                )
+            } 
+        };
+        self.preview_table = Some(table);
     }
 
     pub fn view<'a>(
@@ -434,96 +582,25 @@ impl SuperEdit {
         .width(Length::Fill)
         .padding(15);
 
-        // Action buttons
-/*         let action_buttons = row![
-            button("Run rule")
-                .style(Modern::secondary_button())
-                .padding([8, 20]),
-            iced::widget::horizontal_space(),
-            button("Cancel")
-                .style(Modern::secondary_button())
-                .padding([8, 20]),
-            button("Save rule")
-                .style(Modern::primary_button())
-                .padding([8, 20]),
-        ]
-        .spacing(10)
-        .width(Length::Fill); */
-
-        // Filter items based on conditions
-        let filtered_items: Vec<&Item> = items
-            .values()
-            .filter(|item| self.applies_to_item(
-                item,
-                item_groups,
-                tax_groups,
-                security_levels,
-                revenue_categories,
-                report_categories,
-                product_classes,
-                choice_groups,
-                printer_logicals,
-                price_levels,
-            ))
-            .collect();
-
         // Items preview section
         let items_section = container(
             column![
                 row![
                     text("Matching Items").style(Modern::primary_text()).size(16),
-                    iced::widget::horizontal_space(),
-                    text(format!("{} items", filtered_items.len())).style(Modern::secondary_text()),
                 ],
-                // Header row
-                row![
-                    text("Name").width(Length::Fixed(200.0)),
-                    text("Item Group").width(Length::Fixed(150.0)),
-                    text("Price").width(Length::Fixed(100.0)),
-                    text("Status").width(Length::Fixed(100.0)),
-                ]
-                .padding(5),
                 
-                // Items list
-                scrollable(
-                    column(
-                        filtered_items
-                            .iter()
-                            //.take(50) // Limit to first 50 items for performance
-                            .map(|item| {
-                                let item_group_name = item.item_group
-                                    .and_then(|id| item_groups.get(&id))
-                                    .map(|ig| ig.name.as_str())
-                                    .unwrap_or("None");
-                                
-                                let price_display = item.price_levels
-                                    .as_ref()
-                                    .and_then(|levels| levels.first())
-                                    .and_then(|id| price_levels.get(id))
-                                    .map(|pl| format!("${:.2}", pl.price))
-                                    .unwrap_or("$0.00".to_string());
-
-                                row![
-                                    text(&item.name).width(Length::Fixed(200.0)),
-                                    text(item_group_name).width(Length::Fixed(150.0)),
-                                    text(price_display).width(Length::Fixed(100.0)),
-                                ]
-                                .padding(5)
-                                .spacing(10)
-                                .into()
-                            })
-                            .collect::<Vec<_>>()
-                    )
-                    .spacing(2)
-                )
-                .height(Length::Fill),
+                // Items list   
+                if let Some(table) = &self.preview_table {
+                    table.render().map(Message::Preview)
+                } else {
+                    text("Loading table...").into()
+                }
             ]
-            .spacing(10)
+            //.spacing(10)
         )
         .style(Modern::card_container())
         .width(Length::Fill)
         .padding(15);
-
 
         let content = column![
             header,
@@ -533,14 +610,14 @@ impl SuperEdit {
             then_section,
             iced::widget::vertical_space().height(20),
             items_section
-            //action_buttons,
         ]
         .spacing(0)
-        .width(Length::Fill)
-        .max_width(800);
+        .width(Length::Fill);
+////        .max_width(800);
 
         container(content)
             .center_x(Length::Fill)
+            .width(Length::Fill)
             .padding(20)
             .into()
     }
@@ -599,28 +676,9 @@ impl SuperEdit {
         } else {
             // Show disabled/empty input for operators that don't need values
             text_input("", "")
-                .style(Modern::inline_text_input()) // You might need to add this style
+                .style(Modern::inline_text_input())
                 .width(150)
         };
-
-/*         let temp = String::new();
-        let value_input = match condition.operator {
-            FilterOperator::IsEmpty | FilterOperator::IsNotEmpty => {
-                text_input(
-                    "",
-                    &temp
-                ).style(Modern::inline_text_input())
-                .width(150)
-            }
-            _ => {
-                text_input(
-                    "Value",
-                    &condition.value
-                ).style(Modern::inline_text_input())
-                .on_input(move |value| Message::UpdateConditionValue(index, value))
-                .width(150)
-            }
-        }; */
 
         let remove_button: Element<Message> = if index != 0 {
             button(text("×").size(16))
@@ -629,8 +687,7 @@ impl SuperEdit {
                 .width(30)
                 .height(30).into()
         } else {
-
-                horizontal_space().width(30).into()
+            horizontal_space().width(30).into()
         };
 
         row![
@@ -644,6 +701,7 @@ impl SuperEdit {
             iced::widget::horizontal_space().width(10),
             remove_button,
         ]
+        .width(Length::Fill)
         .align_y(iced::Alignment::Center)
         .into()
     }
@@ -670,8 +728,6 @@ impl SuperEdit {
 
         // Build the value section based on category and operation
         let value_section = match (&action.category, &action.operation) {
-
-
             // Price operations that need a price level selector
             (FilterCategory::Price, ActionOperation::AddToPrice | 
             ActionOperation::SubtractFromPrice | ActionOperation::SetPrice) => {
@@ -734,7 +790,272 @@ impl SuperEdit {
         .into()
     }
 
-    fn applies_to_item(
+    // Helper function to evaluate a single condition
+    fn evaluate_condition(
+        &self,
+        condition: &FilterCondition,
+        item: &Item,
+        item_groups: &BTreeMap<EntityId, ItemGroup>,
+        tax_groups: &BTreeMap<EntityId, TaxGroup>,
+        security_levels: &BTreeMap<EntityId, SecurityLevel>,
+        revenue_categories: &BTreeMap<EntityId, RevenueCategory>,
+        report_categories: &BTreeMap<EntityId, ReportCategory>,
+        product_classes: &BTreeMap<EntityId, ProductClass>,
+        choice_groups: &BTreeMap<EntityId, ChoiceGroup>,
+        printer_logicals: &BTreeMap<EntityId, PrinterLogical>,
+        price_levels: &BTreeMap<EntityId, PriceLevel>,
+    ) -> bool {
+        match condition.field {
+            FilterCategory::Name => {
+                self.evaluate_string_field(&item.name, &condition.operator, &condition.value)
+            }
+            FilterCategory::ItemGroup => {
+                self.evaluate_optional_entity_field(
+                    item.item_group,
+                    item_groups,
+                    &condition.operator,
+                    &condition.value
+                )
+            }
+            FilterCategory::TaxGroup => {
+                self.evaluate_optional_entity_field(
+                    item.tax_group,
+                    tax_groups,
+                    &condition.operator,
+                    &condition.value
+                )
+            }
+            FilterCategory::SecurityLevel => {
+                self.evaluate_optional_entity_field(
+                    item.security_level,
+                    security_levels,
+                    &condition.operator,
+                    &condition.value
+                )
+            }
+            FilterCategory::RevenueCategory => {
+                self.evaluate_optional_entity_field(
+                    item.revenue_category,
+                    revenue_categories,
+                    &condition.operator,
+                    &condition.value
+                )
+            }
+            FilterCategory::ReportCategory => {
+                self.evaluate_optional_entity_field(
+                    item.report_category,
+                    report_categories,
+                    &condition.operator,
+                    &condition.value
+                )
+            }
+            FilterCategory::ProductClass => {
+                self.evaluate_optional_entity_field(
+                    item.product_class,
+                    product_classes,
+                    &condition.operator,
+                    &condition.value
+                )
+            }
+            FilterCategory::ChoiceGroup => {
+                self.evaluate_multi_entity_field(
+                    item.choice_groups.as_ref(),
+                    choice_groups,
+                    &condition.operator,
+                    &condition.value
+                )
+            }
+            FilterCategory::PrinterLogical => {
+                self.evaluate_printer_logical_field(
+                    item.printer_logicals.as_ref(),
+                    printer_logicals,
+                    &condition.operator,
+                    &condition.value
+                )
+            }
+            FilterCategory::PriceLevel => {
+                self.evaluate_price_level_field(
+                    item.price_levels.as_ref(),
+                    price_levels,
+                    &condition.operator,
+                    &condition.value
+                )
+            }
+            FilterCategory::Price => {
+                self.evaluate_price_field(
+                    item.price_levels.as_ref(),
+                    price_levels,
+                    &condition.operator,
+                    &condition.value
+                )
+            }
+        }
+    }
+
+    // Helper methods for evaluating different field types
+    fn evaluate_string_field(&self, field_value: &str, operator: &FilterOperator, condition_value: &str) -> bool {
+        match operator {
+            FilterOperator::Contains => field_value.to_lowercase().contains(&condition_value.to_lowercase()),
+            FilterOperator::BeginsWith => field_value.to_lowercase().starts_with(&condition_value.to_lowercase()),
+            FilterOperator::EndsWith => field_value.to_lowercase().ends_with(&condition_value.to_lowercase()),
+            FilterOperator::Equals => field_value.to_lowercase() == condition_value.to_lowercase(),
+            FilterOperator::NotEquals => field_value.to_lowercase() != condition_value.to_lowercase(),
+            FilterOperator::IsEmpty => field_value.is_empty(),
+            FilterOperator::IsNotEmpty => !field_value.is_empty(),
+            _ => false,
+        }
+    }
+
+    fn evaluate_optional_entity_field<T: HasName>(
+        &self,
+        field_id: Option<EntityId>,
+        entities: &BTreeMap<EntityId, T>,
+        operator: &FilterOperator,
+        condition_value: &str
+    ) -> bool {
+        if let Some(id) = field_id {
+            if let Some(entity) = entities.get(&id) {
+                self.evaluate_string_field(entity.name(), operator, condition_value)
+            } else {
+                *operator == FilterOperator::IsEmpty
+            }
+        } else {
+            *operator == FilterOperator::IsEmpty
+        }
+    }
+
+    fn evaluate_multi_entity_field<T: HasName>(
+        &self,
+        field_ids: Option<&Vec<(EntityId, i32)>>,
+        entities: &BTreeMap<EntityId, T>,
+        operator: &FilterOperator,
+        condition_value: &str
+    ) -> bool {
+        if let Some(ids) = field_ids {
+            if ids.is_empty() {
+                *operator == FilterOperator::IsEmpty
+            } else {
+                match operator {
+                    FilterOperator::IsEmpty => false,
+                    FilterOperator::IsNotEmpty => true,
+                    _ => {
+                        ids.iter().any(|(id, _)| {
+                            if let Some(entity) = entities.get(id) {
+                                self.evaluate_string_field(entity.name(), operator, condition_value)
+                            } else {
+                                false
+                            }
+                        })
+                    }
+                }
+            }
+        } else {
+            *operator == FilterOperator::IsEmpty
+        }
+    }
+
+    fn evaluate_printer_logical_field(
+        &self,
+        field_ids: Option<&Vec<(EntityId, bool)>>,
+        entities: &BTreeMap<EntityId, PrinterLogical>,
+        operator: &FilterOperator,
+        condition_value: &str
+    ) -> bool {
+        if let Some(ids) = field_ids {
+            if ids.is_empty() {
+                *operator == FilterOperator::IsEmpty
+            } else {
+                match operator {
+                    FilterOperator::IsEmpty => false,
+                    FilterOperator::IsNotEmpty => true,
+                    _ => {
+                        ids.iter().any(|(id, _)| {
+                            if let Some(entity) = entities.get(id) {
+                                self.evaluate_string_field(&entity.name, operator, condition_value)
+                            } else {
+                                false
+                            }
+                        })
+                    }
+                }
+            }
+        } else {
+            *operator == FilterOperator::IsEmpty
+        }
+    }
+
+    fn evaluate_price_level_field(
+        &self,
+        field_ids: Option<&Vec<EntityId>>,
+        entities: &BTreeMap<EntityId, PriceLevel>,
+        operator: &FilterOperator,
+        condition_value: &str
+    ) -> bool {
+        if let Some(ids) = field_ids {
+            if ids.is_empty() {
+                *operator == FilterOperator::IsEmpty
+            } else {
+                match operator {
+                    FilterOperator::IsEmpty => false,
+                    FilterOperator::IsNotEmpty => true,
+                    _ => {
+                        ids.iter().any(|id| {
+                            if let Some(entity) = entities.get(id) {
+                                self.evaluate_string_field(&entity.name, operator, condition_value)
+                            } else {
+                                false
+                            }
+                        })
+                    }
+                }
+            }
+        } else {
+            *operator == FilterOperator::IsEmpty
+        }
+    }
+
+    fn evaluate_price_field(
+        &self,
+        price_level_ids: Option<&Vec<EntityId>>,
+        price_levels: &BTreeMap<EntityId, PriceLevel>,
+        operator: &FilterOperator,
+        condition_value: &str
+    ) -> bool {
+        if let Some(ids) = price_level_ids {
+            if let Some(first_id) = ids.first() {
+                if let Some(price_level) = price_levels.get(first_id) {
+                    if let Ok(condition_price) = condition_value.parse::<Decimal>() {
+                        let item_price = price_level.price;
+                        match operator {
+                            FilterOperator::GreaterThan => item_price > condition_price,
+                            FilterOperator::LessThan => item_price < condition_price,
+                            FilterOperator::GreaterOrEqual => item_price >= condition_price,
+                            FilterOperator::LessOrEqual => item_price <= condition_price,
+                            FilterOperator::Equals => (item_price - condition_price).abs() < Decimal::new(1, 2),
+                            FilterOperator::NotEquals => (item_price - condition_price).abs() >= Decimal::new(1, 2),
+                            FilterOperator::IsEmpty => false,
+                            FilterOperator::IsNotEmpty => true,
+                            _ => false,
+                        }
+                    } else {
+                        match operator {
+                            FilterOperator::IsEmpty => false,
+                            FilterOperator::IsNotEmpty => true,
+                            _ => false,
+                        }
+                    }
+                } else {
+                    *operator == FilterOperator::IsEmpty
+                }
+            } else {
+                *operator == FilterOperator::IsEmpty
+            }
+        } else {
+            *operator == FilterOperator::IsEmpty
+        }
+    }
+
+    pub fn applies_to_item(
         &self,
         item: &Item,
         item_groups: &BTreeMap<EntityId, ItemGroup>,
@@ -747,279 +1068,111 @@ impl SuperEdit {
         printer_logicals: &BTreeMap<EntityId, PrinterLogical>,
         price_levels: &BTreeMap<EntityId, PriceLevel>,
     ) -> bool {
-        for condition in &self.conditions {
-        let matches_condition = match condition.field {
-            FilterCategory::Name => {
-                match condition.operator {
-                    FilterOperator::Contains => item.name.to_lowercase().contains(&condition.value.to_lowercase()),
-                    FilterOperator::BeginsWith => item.name.to_lowercase().starts_with(&condition.value.to_lowercase()),
-                    FilterOperator::EndsWith => item.name.to_lowercase().ends_with(&condition.value.to_lowercase()),
-                    FilterOperator::Equals => item.name.to_lowercase() == condition.value.to_lowercase(),
-                    FilterOperator::NotEquals => item.name.to_lowercase() != condition.value.to_lowercase(),
-                    FilterOperator::IsEmpty => item.name.is_empty(),
-                    FilterOperator::IsNotEmpty => !item.name.is_empty(),
-                    _ => false,
-                }
-            }
-            FilterCategory::ItemGroup => {
-                if let Some(ig_id) = item.item_group {
-                    if let Some(ig) = item_groups.get(&ig_id) {
-                        match condition.operator {
-                            FilterOperator::Contains => ig.name.to_lowercase().contains(&condition.value.to_lowercase()),
-                            FilterOperator::BeginsWith => ig.name.to_lowercase().starts_with(&condition.value.to_lowercase()),
-                            FilterOperator::EndsWith => ig.name.to_lowercase().ends_with(&condition.value.to_lowercase()),
-                            FilterOperator::Equals => ig.name.to_lowercase() == condition.value.to_lowercase(),
-                            FilterOperator::NotEquals => ig.name.to_lowercase() != condition.value.to_lowercase(),
-                            FilterOperator::IsEmpty => false, // Has a value, so not empty
-                            FilterOperator::IsNotEmpty => true, // Has a value
-                            _ => false,
-                        }
-                    } else { 
-                        condition.operator == FilterOperator::IsEmpty 
-                    }
-                } else { 
-                    condition.operator == FilterOperator::IsEmpty 
-                }
-            }
-            FilterCategory::TaxGroup => {
-                if let Some(tg_id) = item.tax_group {
-                    if let Some(tg) = tax_groups.get(&tg_id) {
-                        match condition.operator {
-                            FilterOperator::Contains => tg.name.to_lowercase().contains(&condition.value.to_lowercase()),
-                            FilterOperator::BeginsWith => tg.name.to_lowercase().starts_with(&condition.value.to_lowercase()),
-                            FilterOperator::EndsWith => tg.name.to_lowercase().ends_with(&condition.value.to_lowercase()),
-                            FilterOperator::Equals => tg.name.to_lowercase() == condition.value.to_lowercase(),
-                            FilterOperator::NotEquals => tg.name.to_lowercase() != condition.value.to_lowercase(),
-                            FilterOperator::IsEmpty => false,
-                            FilterOperator::IsNotEmpty => true,
-                            _ => false,
-                        }
-                    } else { 
-                        condition.operator == FilterOperator::IsEmpty 
-                    }
-                } else { 
-                    condition.operator == FilterOperator::IsEmpty 
-                }
-            }
-            FilterCategory::SecurityLevel => {
-                if let Some(sl_id) = item.security_level {
-                    if let Some(sl) = security_levels.get(&sl_id) {
-                        match condition.operator {
-                            FilterOperator::Contains => sl.name.to_lowercase().contains(&condition.value.to_lowercase()),
-                            FilterOperator::BeginsWith => sl.name.to_lowercase().starts_with(&condition.value.to_lowercase()),
-                            FilterOperator::EndsWith => sl.name.to_lowercase().ends_with(&condition.value.to_lowercase()),
-                            FilterOperator::Equals => sl.name.to_lowercase() == condition.value.to_lowercase(),
-                            FilterOperator::NotEquals => sl.name.to_lowercase() != condition.value.to_lowercase(),
-                            FilterOperator::IsEmpty => false,
-                            FilterOperator::IsNotEmpty => true,
-                            _ => false,
-                        }
-                    } else { 
-                        condition.operator == FilterOperator::IsEmpty 
-                    }
-                } else { 
-                    condition.operator == FilterOperator::IsEmpty 
-                }
-            }
-            FilterCategory::RevenueCategory => {
-                if let Some(rc_id) = item.revenue_category {
-                    if let Some(rc) = revenue_categories.get(&rc_id) {
-                        match condition.operator {
-                            FilterOperator::Contains => rc.name.to_lowercase().contains(&condition.value.to_lowercase()),
-                            FilterOperator::BeginsWith => rc.name.to_lowercase().starts_with(&condition.value.to_lowercase()),
-                            FilterOperator::EndsWith => rc.name.to_lowercase().ends_with(&condition.value.to_lowercase()),
-                            FilterOperator::Equals => rc.name.to_lowercase() == condition.value.to_lowercase(),
-                            FilterOperator::NotEquals => rc.name.to_lowercase() != condition.value.to_lowercase(),
-                            FilterOperator::IsEmpty => false,
-                            FilterOperator::IsNotEmpty => true,
-                            _ => false,
-                        }
-                    } else { 
-                        condition.operator == FilterOperator::IsEmpty 
-                    }
-                } else { 
-                    condition.operator == FilterOperator::IsEmpty 
-                }
-            }
-            FilterCategory::ReportCategory => {
-                if let Some(rc_id) = item.report_category {
-                    if let Some(rc) = report_categories.get(&rc_id) {
-                        match condition.operator {
-                            FilterOperator::Contains => rc.name.to_lowercase().contains(&condition.value.to_lowercase()),
-                            FilterOperator::BeginsWith => rc.name.to_lowercase().starts_with(&condition.value.to_lowercase()),
-                            FilterOperator::EndsWith => rc.name.to_lowercase().ends_with(&condition.value.to_lowercase()),
-                            FilterOperator::Equals => rc.name.to_lowercase() == condition.value.to_lowercase(),
-                            FilterOperator::NotEquals => rc.name.to_lowercase() != condition.value.to_lowercase(),
-                            FilterOperator::IsEmpty => false,
-                            FilterOperator::IsNotEmpty => true,
-                            _ => false,
-                        }
-                    } else { 
-                        condition.operator == FilterOperator::IsEmpty 
-                    }
-                } else { 
-                    condition.operator == FilterOperator::IsEmpty 
-                }
-            }
-            FilterCategory::ProductClass => {
-                if let Some(pc_id) = item.product_class {
-                    if let Some(pc) = product_classes.get(&pc_id) {
-                        match condition.operator {
-                            FilterOperator::Contains => pc.name.to_lowercase().contains(&condition.value.to_lowercase()),
-                            FilterOperator::BeginsWith => pc.name.to_lowercase().starts_with(&condition.value.to_lowercase()),
-                            FilterOperator::EndsWith => pc.name.to_lowercase().ends_with(&condition.value.to_lowercase()),
-                            FilterOperator::Equals => pc.name.to_lowercase() == condition.value.to_lowercase(),
-                            FilterOperator::NotEquals => pc.name.to_lowercase() != condition.value.to_lowercase(),
-                            FilterOperator::IsEmpty => false,
-                            FilterOperator::IsNotEmpty => true,
-                            _ => false,
-                        }
-                    } else { 
-                        condition.operator == FilterOperator::IsEmpty 
-                    }
-                } else { 
-                    condition.operator == FilterOperator::IsEmpty 
-                }
-            }
-            FilterCategory::ChoiceGroup => {
-                if let Some(cg_ids) = &item.choice_groups {
-                    if cg_ids.is_empty() {
-                        condition.operator == FilterOperator::IsEmpty
-                    } else {
-                        match condition.operator {
-                            FilterOperator::IsEmpty => false,
-                            FilterOperator::IsNotEmpty => true,
-                            _ => {
-                                // Check if any choice group matches the condition
-                                cg_ids.iter().any(|cg_id| {
-                                    if let Some(cg) = choice_groups.get(&cg_id.0) {
-                                        match condition.operator {
-                                            FilterOperator::Contains => cg.name.to_lowercase().contains(&condition.value.to_lowercase()),
-                                            FilterOperator::BeginsWith => cg.name.to_lowercase().starts_with(&condition.value.to_lowercase()),
-                                            FilterOperator::EndsWith => cg.name.to_lowercase().ends_with(&condition.value.to_lowercase()),
-                                            FilterOperator::Equals => cg.name.to_lowercase() == condition.value.to_lowercase(),
-                                            FilterOperator::NotEquals => cg.name.to_lowercase() != condition.value.to_lowercase(),
-                                            _ => false,
-                                        }
-                                    } else {
-                                        false
-                                    }
-                                })
-                            }
-                        }
-                    }
-                } else {
-                    condition.operator == FilterOperator::IsEmpty
-                }
-            }
-            FilterCategory::PrinterLogical => {
-                if let Some(pl_ids) = &item.printer_logicals {
-                    if pl_ids.is_empty() {
-                        condition.operator == FilterOperator::IsEmpty
-                    } else {
-                        match condition.operator {
-                            FilterOperator::IsEmpty => false,
-                            FilterOperator::IsNotEmpty => true,
-                            _ => {
-                                // Check if any printer logical matches the condition
-                                pl_ids.iter().any(|(pl_id, _)| {
-                                    if let Some(pl) = printer_logicals.get(pl_id) {
-                                        match condition.operator {
-                                            FilterOperator::Contains => pl.name.to_lowercase().contains(&condition.value.to_lowercase()),
-                                            FilterOperator::BeginsWith => pl.name.to_lowercase().starts_with(&condition.value.to_lowercase()),
-                                            FilterOperator::EndsWith => pl.name.to_lowercase().ends_with(&condition.value.to_lowercase()),
-                                            FilterOperator::Equals => pl.name.to_lowercase() == condition.value.to_lowercase(),
-                                            FilterOperator::NotEquals => pl.name.to_lowercase() != condition.value.to_lowercase(),
-                                            _ => false,
-                                        }
-                                    } else {
-                                        false
-                                    }
-                                })
-                            }
-                        }
-                    }
-                } else {
-                    condition.operator == FilterOperator::IsEmpty
-                }
-            }
-            FilterCategory::PriceLevel => {
-                if let Some(pl_ids) = &item.price_levels {
-                    if pl_ids.is_empty() {
-                        condition.operator == FilterOperator::IsEmpty
-                    } else {
-                        match condition.operator {
-                            FilterOperator::IsEmpty => false,
-                            FilterOperator::IsNotEmpty => true,
-                            _ => {
-                                // Check if any price level matches the condition
-                                pl_ids.iter().any(|pl_id| {
-                                    if let Some(pl) = price_levels.get(pl_id) {
-                                        match condition.operator {
-                                            FilterOperator::Contains => pl.name.to_lowercase().contains(&condition.value.to_lowercase()),
-                                            FilterOperator::BeginsWith => pl.name.to_lowercase().starts_with(&condition.value.to_lowercase()),
-                                            FilterOperator::EndsWith => pl.name.to_lowercase().ends_with(&condition.value.to_lowercase()),
-                                            FilterOperator::Equals => pl.name.to_lowercase() == condition.value.to_lowercase(),
-                                            FilterOperator::NotEquals => pl.name.to_lowercase() != condition.value.to_lowercase(),
-                                            _ => false,
-                                        }
-                                    } else {
-                                        false
-                                    }
-                                })
-                            }
-                        }
-                    }
-                } else {
-                    condition.operator == FilterOperator::IsEmpty
-                }
-            }
-            FilterCategory::Price => {
-                if let Some(price_levels_vec) = &item.price_levels {
-                    if let Some(first_price_id) = price_levels_vec.first() {
-                        if let Some(price_level) = price_levels.get(first_price_id) {
-                            if let Ok(condition_value) = condition.value.parse::<Decimal>() {
-                                let price_value = price_level.price;
-                                match condition.operator {
-                                    FilterOperator::GreaterThan => price_value > condition_value,
-                                    FilterOperator::LessThan => price_value < condition_value,
-                                    FilterOperator::GreaterOrEqual => price_value >= condition_value,
-                                    FilterOperator::LessOrEqual => price_value <= condition_value,
-                                    FilterOperator::Equals => (price_value - condition_value).abs() < Decimal::new(1, 2),
-                                    FilterOperator::NotEquals => (price_value - condition_value).abs() >= Decimal::new(1, 2),
-                                    FilterOperator::IsEmpty => false, // Has a price
-                                    FilterOperator::IsNotEmpty => true, // Has a price
-                                    _ => false,
-                                }
-                            } else { 
-                                // If condition value can't be parsed as number
-                                match condition.operator {
-                                    FilterOperator::IsEmpty => false,
-                                    FilterOperator::IsNotEmpty => true,
-                                    _ => false,
-                                }
-                            }
-                        } else { 
-                            condition.operator == FilterOperator::IsEmpty 
-                        }
-                    } else { 
-                        condition.operator == FilterOperator::IsEmpty 
-                    }
-                } else { 
-                    condition.operator == FilterOperator::IsEmpty 
-                }
-            }
-        };
-
-        // Handle And/Or logic
-        // For simplicity, let's assume all conditions must be met (AND logic)
-        // TODO: Implement proper And/Or logic based on condition.logic
-        if !matches_condition {
-            return false;
+        if self.conditions.is_empty() {
+            return true;
         }
+
+        // Start with the first condition
+        let mut result = self.evaluate_condition(
+            &self.conditions[0],
+            item,
+            item_groups,
+            tax_groups,
+            security_levels,
+            revenue_categories,
+            report_categories,
+            product_classes,
+            choice_groups,
+            printer_logicals,
+            price_levels,
+        );
+
+        // Apply AND/OR logic for subsequent conditions
+        for (index, condition) in self.conditions.iter().enumerate().skip(1) {
+            let condition_result = self.evaluate_condition(
+                condition,
+                item,
+                item_groups,
+                tax_groups,
+                security_levels,
+                revenue_categories,
+                report_categories,
+                product_classes,
+                choice_groups,
+                printer_logicals,
+                price_levels,
+            );
+
+            match condition.logic {
+                ConditionLogic::And => result = result && condition_result,
+                ConditionLogic::Or => result = result || condition_result,
+            }
+        }
+
+        result
     }
-    true
+
+    pub fn fill_table(
+        &mut self,
+        items: &BTreeMap<EntityId, Item>,
+        item_groups: &BTreeMap<EntityId, ItemGroup>,
+        tax_groups: &BTreeMap<EntityId, TaxGroup>,
+        security_levels: &BTreeMap<EntityId, SecurityLevel>,
+        revenue_categories: &BTreeMap<EntityId, RevenueCategory>,
+        report_categories: &BTreeMap<EntityId, ReportCategory>,
+        product_classes: &BTreeMap<EntityId, ProductClass>,
+        choice_groups: &BTreeMap<EntityId, ChoiceGroup>,
+        printer_logicals: &BTreeMap<EntityId, PrinterLogical>,
+        price_levels: &BTreeMap<EntityId, PriceLevel>,
+    ) {
+        let table = ItemsTableView::new(
+            &items,
+            item_groups,
+            tax_groups,
+            security_levels,
+            revenue_categories,
+            report_categories,
+            product_classes,
+            choice_groups,
+            printer_logicals,
+            price_levels,
+        );
+        self.preview_table = Some(table);
     }
+}
+
+// Trait for entities that have a name field
+pub trait HasName {
+    fn name(&self) -> &str;
+}
+
+// Implement HasName for all your entity types
+impl HasName for ItemGroup {
+    fn name(&self) -> &str { &self.name }
+}
+
+impl HasName for TaxGroup {
+    fn name(&self) -> &str { &self.name }
+}
+
+impl HasName for SecurityLevel {
+    fn name(&self) -> &str { &self.name }
+}
+
+impl HasName for RevenueCategory {
+    fn name(&self) -> &str { &self.name }
+}
+
+impl HasName for ReportCategory {
+    fn name(&self) -> &str { &self.name }
+}
+
+impl HasName for ProductClass {
+    fn name(&self) -> &str { &self.name }
+}
+
+impl HasName for ChoiceGroup {
+    fn name(&self) -> &str { &self.name }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1074,5 +1227,3 @@ impl std::fmt::Display for FilterCategory {
         )
     }
 }
-
-

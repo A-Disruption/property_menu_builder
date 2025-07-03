@@ -11,6 +11,7 @@ iced = { version = "0.14.0-dev", features = [
     "debug",
 ] }
 iced_modern_theme = { git = "https://github.com/KainTwinam/iced-modern-theme.git" }
+iced_table = { git = "https://github.com/KainTwinam/iced_table.git"}
 rust_decimal = "1.36"
 strsim = "0.11.1"
 rangemap = "1.5"
