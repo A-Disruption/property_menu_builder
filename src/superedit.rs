@@ -6,7 +6,7 @@ use rust_decimal::Decimal;
 use crate::Action;
 use crate::{
     items::{Item, ViewContext},
-    data_types::EntityId,
+    data_types::{EntityId, ItemPrice},
     tax_groups::TaxGroup,
     security_levels::SecurityLevel,
     revenue_categories::RevenueCategory,
@@ -30,6 +30,7 @@ pub enum Message {
     UpdateConditionField(usize, FilterCategory),
     UpdateConditionOperator(usize, FilterOperator),
     UpdateConditionValue(usize, String),
+    UpdateConditionEntity(usize, EntityId), // For entity dropdowns
     
     // Action management
     AddAction,
@@ -38,12 +39,19 @@ pub enum Message {
     UpdateActionOperation(usize, ActionOperation),
     UpdateActionValue(usize, String),
     UpdateActionPriceLevel(usize, EntityId),
+    UpdateActionSwapFrom(usize, EntityId),
+
+    // Entity Selection
+    UpdateActionEntity(usize, EntityId),
+    AcceptChanges,
+    CancelPreview,
 
     //Save Changes to App State
     CommitChanges(Item),
 
     //Table Preview
     Preview(PreviewMessage),
+    PreviewChanges, 
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +59,8 @@ struct FilterAction {
     category: FilterCategory,
     operation: ActionOperation,
     value: String,
+    entity_id: Option<EntityId>, // For entity selections
+    swap_from_id: Option<EntityId>, // For swap from selections
     price_level: Option<EntityId>, // For price-related operations
 }
 
@@ -59,7 +69,8 @@ struct FilterCondition {
     logic: ConditionLogic,      // And/Or
     field: FilterCategory,      // Name, ItemGroup, etc.
     operator: FilterOperator,   // begins with, contains, etc.
-    value: String,             // user input value
+    value: String,             // user input value for text fields
+    entity_id: Option<EntityId>, // For entity dropdowns
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,21 +96,52 @@ impl std::fmt::Display for ConditionLogic {
 enum FilterOperator {
     BeginsWith,
     Contains,
+    DoesNotContain,
     EndsWith,
     Equals,
     NotEquals,
     IsEmpty,
     IsNotEmpty,
-    GreaterThan,    // For Price
-    LessThan,       // For Price
+    GreaterThan,    // For Price and ID
+    LessThan,       // For Price and ID
     GreaterOrEqual, // For Price
     LessOrEqual,    // For Price
+    Between,        // For ID
 }
 
 impl FilterOperator {
     // Get available operators based on the field type
     fn available_for_field(field: &FilterCategory) -> Vec<FilterOperator> {
         match field {
+            FilterCategory::Name => vec![
+                FilterOperator::Contains,
+                FilterOperator::BeginsWith,
+                FilterOperator::EndsWith,
+                FilterOperator::IsEmpty,
+                FilterOperator::IsNotEmpty,
+            ],
+            FilterCategory::ItemGroup | 
+            FilterCategory::ProductClass |
+            FilterCategory::TaxGroup |
+            FilterCategory::SecurityLevel |
+            FilterCategory::RevenueCategory |
+            FilterCategory::ReportCategory => vec![
+                FilterOperator::Contains,
+                FilterOperator::Equals,
+                FilterOperator::NotEquals,
+                FilterOperator::IsEmpty,
+                FilterOperator::IsNotEmpty,
+            ],
+            FilterCategory::PriceLevel |
+            FilterCategory::ChoiceGroup |
+            FilterCategory::PrinterLogical => vec![
+                FilterOperator::Contains,
+                FilterOperator::DoesNotContain,
+                FilterOperator::Equals,
+                FilterOperator::NotEquals,
+                FilterOperator::IsEmpty,
+                FilterOperator::IsNotEmpty,
+            ],
             FilterCategory::Price => vec![
                 FilterOperator::Equals,
                 FilterOperator::NotEquals,
@@ -110,14 +152,10 @@ impl FilterOperator {
                 FilterOperator::IsEmpty,
                 FilterOperator::IsNotEmpty,
             ],
-            _ => vec![
-                FilterOperator::BeginsWith,
-                FilterOperator::Contains,
-                FilterOperator::EndsWith,
-                FilterOperator::Equals,
-                FilterOperator::NotEquals,
-                FilterOperator::IsEmpty,
-                FilterOperator::IsNotEmpty,
+            FilterCategory::Id => vec![
+                FilterOperator::GreaterThan,
+                FilterOperator::LessThan,
+                FilterOperator::Between,
             ],
         }
     }
@@ -128,6 +166,7 @@ impl std::fmt::Display for FilterOperator {
         match self {
             FilterOperator::BeginsWith => write!(f, "begins with"),
             FilterOperator::Contains => write!(f, "contains"),
+            FilterOperator::DoesNotContain => write!(f, "does not contain"),
             FilterOperator::EndsWith => write!(f, "ends with"),
             FilterOperator::Equals => write!(f, "is"),
             FilterOperator::NotEquals => write!(f, "is not"),
@@ -137,6 +176,7 @@ impl std::fmt::Display for FilterOperator {
             FilterOperator::LessThan => write!(f, "less than"),
             FilterOperator::GreaterOrEqual => write!(f, "greater or equal"),
             FilterOperator::LessOrEqual => write!(f, "less or equal"),
+            FilterOperator::Between => write!(f, "between"),
         }
     }
 }
@@ -147,12 +187,12 @@ enum ActionOperation {
     AddToPrice,
     SubtractFromPrice,
     SetPrice,
-    
+
     // For multi-value fields (Printer Logical, Choice Group, Price Level)
     Add,
     Remove,
     
-    // For single-value fields (any category)
+    // For all entity fields
     SwapTo,
 }
 
@@ -165,13 +205,12 @@ impl ActionOperation {
                 ActionOperation::SubtractFromPrice,
                 ActionOperation::SetPrice,
             ],
-            FilterCategory::PrinterLogical | 
-            FilterCategory::ChoiceGroup | 
-            FilterCategory::PriceLevel => vec![
+            FilterCategory::PrinterLogical | FilterCategory::PriceLevel | FilterCategory::ChoiceGroup => vec![
                 ActionOperation::Add,
                 ActionOperation::Remove,
                 ActionOperation::SwapTo,
             ],
+            FilterCategory::Name | FilterCategory::Id => vec![], // These shouldn't appear in actions
             _ => vec![
                 ActionOperation::SwapTo,
             ],
@@ -185,9 +224,9 @@ impl std::fmt::Display for ActionOperation {
             ActionOperation::AddToPrice => write!(f, "Add to price"),
             ActionOperation::SubtractFromPrice => write!(f, "Subtract from price"),
             ActionOperation::SetPrice => write!(f, "Set price to"),
+            ActionOperation::SwapTo => write!(f, "Swap"),
             ActionOperation::Add => write!(f, "Add"),
             ActionOperation::Remove => write!(f, "Remove"),
-            ActionOperation::SwapTo => write!(f, "Swap"),
         }
     }
 }
@@ -202,11 +241,13 @@ pub struct SuperEdit{
     conditions: Vec<FilterCondition>,
     actions: Vec<FilterAction>,
     filtered_items: Option<BTreeMap<EntityId, Item>>,
-    preview_table: Option<ItemsTableView>, 
+    modified_items: Option<BTreeMap<EntityId, Item>>,
+    preview_table: Option<ItemsTableView>,
+    show_preview: bool,
+    changed_item_ids: Vec<EntityId>, // Track which items were actually changed
 }
 
 impl SuperEdit {
-
     pub fn new() -> Self {
         // Start with one default condition
         let default_condition = FilterCondition {
@@ -214,12 +255,15 @@ impl SuperEdit {
             field: FilterCategory::Name,
             operator: FilterOperator::IsNotEmpty,
             value: String::new(),
+            entity_id: None,
         };
 
         let default_action = FilterAction {
-            category: FilterCategory::Name,
+            category: FilterCategory::ItemGroup,
             operation: ActionOperation::SwapTo,
             value: String::new(),
+            entity_id: None,
+            swap_from_id: None,
             price_level: None,
         };
 
@@ -227,7 +271,10 @@ impl SuperEdit {
             conditions: vec![default_condition],
             actions: vec![default_action],
             filtered_items: None,
+            modified_items: None,
             preview_table: None,
+            show_preview: false,
+            changed_item_ids: Vec::new(),
         }
     }
 
@@ -252,6 +299,7 @@ impl SuperEdit {
                     field: FilterCategory::Name,
                     operator: FilterOperator::Contains,
                     value: String::new(),
+                    entity_id: None,
                 };
                 self.conditions.push(new_condition);
                 Action::none()
@@ -284,6 +332,16 @@ impl SuperEdit {
                         condition.operator = available_ops[0].clone();
                     }
                     
+                    // Clear entity_id for text fields, clear value for entity fields
+                    match field {
+                        FilterCategory::Name | FilterCategory::Price | FilterCategory::Id => {
+                            condition.entity_id = None;
+                        }
+                        _ => {
+                            condition.value = String::new();
+                        }
+                    }
+                    
                     self.refresh_filtered_items(items, item_groups, tax_groups, security_levels,
                         revenue_categories, report_categories, product_classes, choice_groups,
                         printer_logicals, price_levels);
@@ -310,13 +368,26 @@ impl SuperEdit {
 
                 Action::none()
             }
+            Message::UpdateConditionEntity(index, entity_id) => {
+                if let Some(condition) = self.conditions.get_mut(index) {
+                    condition.entity_id = Some(entity_id);
+                }
+
+                self.refresh_filtered_items(items, item_groups, tax_groups, security_levels,
+                    revenue_categories, report_categories, product_classes, choice_groups,
+                    printer_logicals, price_levels);
+
+                Action::none()
+            }
 
             // Action messages
             Message::AddAction => {
                 let new_action = FilterAction {
-                    category: FilterCategory::Name,
+                    category: FilterCategory::ItemGroup,
                     operation: ActionOperation::SwapTo,
                     value: String::new(),
+                    entity_id: None,
+                    swap_from_id: None,
                     price_level: None,
                 };
                 self.actions.push(new_action);
@@ -334,15 +405,18 @@ impl SuperEdit {
 
                     // Update available operations when category changes
                     let available_ops = ActionOperation::available_for_category(&category);
-                    if !available_ops.contains(&action.operation) {
+                    if !available_ops.is_empty() && !available_ops.contains(&action.operation) {
                         action.operation = available_ops[0].clone();
                     }
+                    
+                    // Reset fields based on category
+                    action.entity_id = None;
+                    action.swap_from_id = None;
+                    action.value = String::new();
+                    
                     // Set default price level for price operations
                     if category == FilterCategory::Price {
-                        action.price_level = price_levels
-                            .keys()
-                            .next()
-                            .copied();
+                        action.price_level = Some(0); // Default price level
                     } else {
                         action.price_level = None;
                     }
@@ -369,6 +443,76 @@ impl SuperEdit {
             }
             Message::CommitChanges(item) => {
                 Action::operation(Operation::UpdateItem(item))
+            }
+            Message::UpdateActionEntity(index, entity_id) => {
+                if let Some(action) = self.actions.get_mut(index) {
+                    action.entity_id = Some(entity_id);
+                }
+                Action::none()
+            }
+
+            Message::PreviewChanges => {
+                self.preview_changes(items, item_groups, tax_groups, security_levels,
+                    revenue_categories, report_categories, product_classes, choice_groups,
+                    printer_logicals, price_levels);
+                Action::none()
+            }
+            Message::UpdateActionSwapFrom(index, entity_id) => {
+                if let Some(action) = self.actions.get_mut(index) {
+                    action.swap_from_id = Some(entity_id);
+                }
+                Action::none()
+            }
+            Message::CancelPreview => {
+                self.show_preview = false;
+                self.modified_items = None;
+                self.changed_item_ids.clear();
+                
+                // Refresh the table with filtered view
+                self.refresh_filtered_items(items, item_groups, tax_groups, security_levels,
+                    revenue_categories, report_categories, product_classes, choice_groups,
+                    printer_logicals, price_levels);
+                Action::none()
+            }
+            Message::AcceptChanges => {
+                if let Some(modified_items) = &self.modified_items {
+                    // Update only the changed items
+                    for id in &self.changed_item_ids {
+                        if let Some(modified_item) = modified_items.get(id) {
+                            if let Some(original) = items.get_mut(id) {
+                                *original = modified_item.clone();
+                            }
+                        }
+                    }
+                    
+                    // Reset to initial state
+                    self.conditions = vec![FilterCondition {
+                        logic: ConditionLogic::And,
+                        field: FilterCategory::Name,
+                        operator: FilterOperator::IsNotEmpty,
+                        value: String::new(),
+                        entity_id: None,
+                    }];
+                    
+                    self.actions = vec![FilterAction {
+                        category: FilterCategory::ItemGroup,
+                        operation: ActionOperation::SwapTo,
+                        value: String::new(),
+                        entity_id: None,
+                        swap_from_id: None,
+                        price_level: None,
+                    }];
+                    
+                    self.show_preview = false;
+                    self.modified_items = None;
+                    self.changed_item_ids.clear();
+                    
+                    // Refresh the table with all items
+                    self.refresh_filtered_items(items, item_groups, tax_groups, security_levels,
+                        revenue_categories, report_categories, product_classes, choice_groups,
+                        printer_logicals, price_levels);
+                }
+                Action::none()
             }
             Message::Preview(preview_msg) => {
                 match preview_msg {
@@ -520,7 +664,9 @@ impl SuperEdit {
                         .iter()
                         .enumerate()
                         .map(|(index, condition)| {
-                            self.render_condition(index, condition)
+                            self.render_condition(index, condition, item_groups, tax_groups,
+                                security_levels, revenue_categories, report_categories,
+                                product_classes, choice_groups, printer_logicals, price_levels)
                         })
                         .collect::<Vec<_>>()
                 )
@@ -528,15 +674,10 @@ impl SuperEdit {
                 
                 // Add condition button
                 row![
-                    button(
-                        row![
-                            text("+ Add condition").style(Modern::link_text())
-                        ]
-                        .align_y(iced::Alignment::Center)
-                    )
-                    .on_press(Message::AddCondition)
-                    .style(Modern::plain_button())
-                    .padding([5, 15])
+                    button("+ Add condition")
+                        .on_press(Message::AddCondition)
+                        .style(Modern::primary_button())
+                        .padding([5, 15])
                 ]
                 .width(Length::Fill)
             ]
@@ -556,7 +697,9 @@ impl SuperEdit {
                         .iter()
                         .enumerate()
                         .map(|(index, action)| {
-                            self.render_action(index, action, price_levels) 
+                            self.render_action(index, action, item_groups, tax_groups,
+                                security_levels, revenue_categories, report_categories,
+                                product_classes, choice_groups, printer_logicals, price_levels) 
                         })
                         .collect::<Vec<_>>()
                 )
@@ -564,15 +707,32 @@ impl SuperEdit {
                 
                 // Add action button
                 row![
-                    button(
+                    button("+ Add action")
+                        .on_press(Message::AddAction)
+                        .style(Modern::primary_button())
+                        .padding([5, 15]),
+                    
+                    horizontal_space(),
+                    
+                    if self.show_preview {
                         row![
-                            text("+ Add action").style(Modern::link_text())
+                            button("Cancel Preview")
+                                .on_press(Message::CancelPreview)
+                                .style(Modern::secondary_button())
+                                .padding([8, 20]),
+                            button("Accept Changes")
+                                .on_press(Message::AcceptChanges)
+                                .style(Modern::primary_button())
+                                .padding([8, 20])
+                        ].spacing(10)
+                    } else {
+                        row![
+                            button("Preview Changes")
+                                .on_press(Message::PreviewChanges)
+                                .style(Modern::secondary_button())
+                                .padding([8, 20]),
                         ]
-                        .align_y(iced::Alignment::Center)
-                    )
-                    .on_press(Message::AddAction)
-                    .style(Modern::plain_button())
-                    .padding([5, 15])
+                    }
                 ]
                 .width(Length::Fill)
             ]
@@ -586,7 +746,8 @@ impl SuperEdit {
         let items_section = container(
             column![
                 row![
-                    text("Matching Items").style(Modern::primary_text()).size(16),
+                    text(if self.show_preview { "Changed Items" } else { "Matching Items" })
+                        .style(Modern::primary_text()).size(16),
                 ],
                 
                 // Items list   
@@ -613,7 +774,6 @@ impl SuperEdit {
         ]
         .spacing(0)
         .width(Length::Fill);
-////        .max_width(800);
 
         container(content)
             .center_x(Length::Fill)
@@ -622,16 +782,27 @@ impl SuperEdit {
             .into()
     }
 
-    fn render_condition<'a>(&'a self, index: usize, condition: &'a FilterCondition) -> Element<'a, Message> {
+    fn render_condition<'a>(
+        &'a self, 
+        index: usize, 
+        condition: &'a FilterCondition,
+        item_groups: &'a BTreeMap<EntityId, ItemGroup>,
+        tax_groups: &'a BTreeMap<EntityId, TaxGroup>,
+        security_levels: &'a BTreeMap<EntityId, SecurityLevel>,
+        revenue_categories: &'a BTreeMap<EntityId, RevenueCategory>,
+        report_categories: &'a BTreeMap<EntityId, ReportCategory>,
+        product_classes: &'a BTreeMap<EntityId, ProductClass>,
+        choice_groups: &'a BTreeMap<EntityId, ChoiceGroup>,
+        printer_logicals: &'a BTreeMap<EntityId, PrinterLogical>,
+        price_levels: &'a BTreeMap<EntityId, PriceLevel>,
+    ) -> Element<'a, Message> {
         let logic_picker = if index == 0 {
-            // First condition shows "If" with same width as pick_list
             container(
                 text("If").style(Modern::primary_text())
             )
             .width(60)
             .center_x(60)
         } else {
-            // Subsequent conditions show And/Or picker
             container(
                 pick_list(
                     &ConditionLogic::ALL[..],
@@ -643,18 +814,18 @@ impl SuperEdit {
         };
 
         let field_picker = pick_list(
-            &FilterCategory::ALL[..],
+            &FilterCategory::ALL_CONDITIONS[..],
             Some(&condition.field),
             move |field| Message::UpdateConditionField(index, field)
         ).style(Modern::pick_list())
-        .width(140);
+        .width(150);
 
         let operator_picker = pick_list(
             FilterOperator::available_for_field(&condition.field),
             Some(&condition.operator),
             move |operator| Message::UpdateConditionOperator(index, operator)
         ).style(Modern::pick_list())
-        .width(120);
+        .width(150);
 
         // Determine if value input should be shown based on operator
         let needs_value_input = !matches!(
@@ -663,21 +834,89 @@ impl SuperEdit {
         );
 
         let value_input = if needs_value_input {
-            text_input(
-                match condition.field {
-                    FilterCategory::Price => "Amount",
-                    _ => "Value",
-                },
-                &condition.value
-            )
-            .on_input(move |s| Message::UpdateConditionValue(index, s))
-            .style(Modern::inline_text_input())
-            .width(150)
+            match condition.field {
+                FilterCategory::Name | FilterCategory::Price => {
+                    text_input(
+                        match condition.field {
+                            FilterCategory::Price => "Amount",
+                            _ => "Value",
+                        },
+                        &condition.value
+                    )
+                    .on_input(move |s| Message::UpdateConditionValue(index, s))
+                    .style(Modern::inline_text_input())
+                    .width(150)
+                    .into()
+                }
+                FilterCategory::Id => {
+                    if condition.operator == FilterOperator::Between {
+                        // For between, we need two inputs
+                        let values: Vec<&str> = condition.value.split('-').collect();
+                        let from_value = values.get(0).unwrap_or(&"").to_string();
+                        let to_value = values.get(1).unwrap_or(&"").to_string();
+                        
+                        row![
+                            text_input("From", &from_value)
+                                .on_input(move |s| {
+                                    let values: Vec<&str> = condition.value.split('-').collect();
+                                    let to_value = values.get(1).unwrap_or(&"").to_string();
+                                    Message::UpdateConditionValue(index, format!("{}-{}", s, to_value))
+                                })
+                                .style(Modern::inline_text_input())
+                                .width(70),
+                            text(" to ").size(14),
+                            text_input("To", &to_value)
+                                .on_input(move |s| {
+                                    let values: Vec<&str> = condition.value.split('-').collect();
+                                    let from_value = values.get(0).unwrap_or(&"").to_string();
+                                    Message::UpdateConditionValue(index, format!("{}-{}", from_value, s))
+                                })
+                                .style(Modern::inline_text_input())
+                                .width(70),
+                        ].into()
+                    } else {
+                        text_input("ID", &condition.value)
+                            .on_input(move |s| Message::UpdateConditionValue(index, s))
+                            .style(Modern::inline_text_input())
+                            .width(150)
+                            .into()
+                    }
+                }
+                // Entity dropdowns for all entity-based filters
+                FilterCategory::ItemGroup => {
+                    create_condition_entity_dropdown(index, condition, item_groups)
+                }
+                FilterCategory::TaxGroup => {
+                    create_condition_entity_dropdown(index, condition, tax_groups)
+                }
+                FilterCategory::SecurityLevel => {
+                    create_condition_entity_dropdown(index, condition, security_levels)
+                }
+                FilterCategory::RevenueCategory => {
+                    create_condition_entity_dropdown(index, condition, revenue_categories)
+                }
+                FilterCategory::ReportCategory => {
+                    create_condition_entity_dropdown(index, condition, report_categories)
+                }
+                FilterCategory::ProductClass => {
+                    create_condition_entity_dropdown(index, condition, product_classes)
+                }
+                FilterCategory::ChoiceGroup => {
+                    create_condition_entity_dropdown(index, condition, choice_groups)
+                }
+                FilterCategory::PrinterLogical => {
+                    create_condition_entity_dropdown(index, condition, printer_logicals)
+                }
+                FilterCategory::PriceLevel => {
+                    create_condition_entity_dropdown(index, condition, price_levels)
+                }
+            }
         } else {
             // Show disabled/empty input for operators that don't need values
             text_input("", "")
                 .style(Modern::inline_text_input())
                 .width(150)
+                .into()
         };
 
         let remove_button: Element<Message> = if index != 0 {
@@ -710,14 +949,22 @@ impl SuperEdit {
         &'a self, 
         index: usize, 
         action: &'a FilterAction,
+        item_groups: &'a BTreeMap<EntityId, ItemGroup>,
+        tax_groups: &'a BTreeMap<EntityId, TaxGroup>,
+        security_levels: &'a BTreeMap<EntityId, SecurityLevel>,
+        revenue_categories: &'a BTreeMap<EntityId, RevenueCategory>,
+        report_categories: &'a BTreeMap<EntityId, ReportCategory>,
+        product_classes: &'a BTreeMap<EntityId, ProductClass>,
+        choice_groups: &'a BTreeMap<EntityId, ChoiceGroup>,
+        printer_logicals: &'a BTreeMap<EntityId, PrinterLogical>,
         price_levels: &'a BTreeMap<EntityId, PriceLevel>,
     ) -> Element<'a, Message> {
         let category_picker = pick_list(
-            &FilterCategory::ALL[..],
+            &FilterCategory::ALL_ACTIONS[..],
             Some(&action.category),
             move |category| Message::UpdateActionCategory(index, category)
         ).style(Modern::pick_list())
-        .width(140);
+        .width(150);
 
         let operation_picker = pick_list(
             ActionOperation::available_for_category(&action.category),
@@ -731,12 +978,16 @@ impl SuperEdit {
             // Price operations that need a price level selector
             (FilterCategory::Price, ActionOperation::AddToPrice | 
             ActionOperation::SubtractFromPrice | ActionOperation::SetPrice) => {
+                // Create price level options including "Default"
+                let mut price_level_options: Vec<(EntityId, String)> = vec![(0, "Default".to_string())];
+                price_level_options.extend(
+                    price_levels.iter().map(|(id, pl)| (*id, pl.name.clone()))
+                );
 
-                // Convert BTreeMap to Vec for pick_list
-                let price_level_options: Vec<PriceLevel> = price_levels.values().cloned().collect();
-
-                let selected_price_level = action.price_level
-                    .and_then(|id| price_levels.get(&id).cloned());
+                let selected = action.price_level.unwrap_or(0);
+                let selected_name = price_level_options.iter()
+                    .find(|(id, _)| *id == selected)
+                    .map(|(_, name)| name.clone());
 
                 row![
                     text_input("Amount", &action.value)
@@ -747,21 +998,65 @@ impl SuperEdit {
                     text("at").style(Modern::secondary_text()),
                     iced::widget::horizontal_space().width(5),
                     pick_list(
-                        price_level_options,
-                        selected_price_level,
-                        move |price_level| Message::UpdateActionPriceLevel(index, price_level.id)
+                        price_level_options.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>(),
+                        selected_name,
+                        move |name| {
+                            let id = price_level_options.iter()
+                                .find(|(_, n)| n == &name)
+                                .map(|(id, _)| *id)
+                                .unwrap_or(0);
+                            Message::UpdateActionPriceLevel(index, id)
+                        }
                     ).style(Modern::pick_list())
-                    .width(80)
-                ]
+                    .width(100)
+                ].into()
             }
-            // Regular value input for other operations
+
+            // Regular entity selections for Add/Remove operations on multi-value fields
+            (FilterCategory::PrinterLogical, ActionOperation::Add | ActionOperation::Remove) => {
+                create_entity_dropdown(index, action, printer_logicals)
+            }
+            (FilterCategory::ChoiceGroup, ActionOperation::Add | ActionOperation::Remove) => {
+                create_entity_dropdown(index, action, choice_groups)
+            }
+            (FilterCategory::PriceLevel, ActionOperation::Add | ActionOperation::Remove) => {
+                create_entity_dropdown(index, action, price_levels)
+            }
+            
+            // All entity swap operations now use swap dropdowns
+            (FilterCategory::ItemGroup, ActionOperation::SwapTo) => {
+                create_swap_dropdowns(index, action, item_groups, self.filtered_items.as_ref())
+            }
+            (FilterCategory::TaxGroup, ActionOperation::SwapTo) => {
+                create_swap_dropdowns(index, action, tax_groups, self.filtered_items.as_ref())
+            }
+            (FilterCategory::SecurityLevel, ActionOperation::SwapTo) => {
+                create_swap_dropdowns(index, action, security_levels, self.filtered_items.as_ref())
+            }
+            (FilterCategory::RevenueCategory, ActionOperation::SwapTo) => {
+                create_swap_dropdowns(index, action, revenue_categories, self.filtered_items.as_ref())
+            }
+            (FilterCategory::ReportCategory, ActionOperation::SwapTo) => {
+                create_swap_dropdowns(index, action, report_categories, self.filtered_items.as_ref())
+            }
+            (FilterCategory::ProductClass, ActionOperation::SwapTo) => {
+                create_swap_dropdowns(index, action, product_classes, self.filtered_items.as_ref())
+            }
+            (FilterCategory::ChoiceGroup, ActionOperation::SwapTo) => {
+                create_swap_dropdowns(index, action, choice_groups, self.filtered_items.as_ref())
+            }
+            (FilterCategory::PrinterLogical, ActionOperation::SwapTo) => {
+                create_swap_dropdowns(index, action, printer_logicals, self.filtered_items.as_ref())
+            }
+            (FilterCategory::PriceLevel, ActionOperation::SwapTo) => {
+                create_swap_dropdowns(index, action, price_levels, self.filtered_items.as_ref())
+            }
+            
+            // This shouldn't happen with current constraints
             _ => {
                 row![
-                    text_input("Value", &action.value)
-                        .on_input(move |value| Message::UpdateActionValue(index, value))
-                        .style(Modern::inline_text_input())
-                        .width(185)
-                ]
+                    text("Invalid combination").style(Modern::red_text())
+                ].into()
             }
         };
 
@@ -790,6 +1085,236 @@ impl SuperEdit {
         .into()
     }
 
+    pub fn preview_changes(
+        &mut self,
+        items: &BTreeMap<EntityId, Item>,
+        item_groups: &BTreeMap<EntityId, ItemGroup>,
+        tax_groups: &BTreeMap<EntityId, TaxGroup>,
+        security_levels: &BTreeMap<EntityId, SecurityLevel>,
+        revenue_categories: &BTreeMap<EntityId, RevenueCategory>,
+        report_categories: &BTreeMap<EntityId, ReportCategory>,
+        product_classes: &BTreeMap<EntityId, ProductClass>,
+        choice_groups: &BTreeMap<EntityId, ChoiceGroup>,
+        printer_logicals: &BTreeMap<EntityId, PrinterLogical>,
+        price_levels: &BTreeMap<EntityId, PriceLevel>,
+    ) {
+        let mut modified_items = items.clone();
+        self.changed_item_ids.clear();
+        
+        // Apply actions to filtered items and track changes
+        for (id, item) in &mut modified_items {
+            if self.applies_to_item(item, item_groups, tax_groups, security_levels,
+                revenue_categories, report_categories, product_classes, choice_groups,
+                printer_logicals, price_levels) {
+                
+                let original_item = items.get(id).unwrap().clone();
+                
+                // Apply each action
+                for action in &self.actions {
+                    self.apply_action_to_item(item, action);
+                }
+                
+                // Check if item actually changed
+                if item != &original_item {
+                    self.changed_item_ids.push(*id);
+                }
+            }
+        }
+        
+        self.modified_items = Some(modified_items.clone());
+        
+        // Create diff table showing only changed items
+        let items_to_show: BTreeMap<EntityId, Item> = self.changed_item_ids.iter()
+            .filter_map(|id| items.get(id).map(|item| (*id, item.clone())))
+            .collect();
+        
+        let modified_items_to_show: BTreeMap<EntityId, Item> = self.changed_item_ids.iter()
+            .filter_map(|id| modified_items.get(id).map(|item| (*id, item.clone())))
+            .collect();
+        
+        let table = ItemsTableView::new_with_diff(
+            &items_to_show,
+            &modified_items_to_show,
+            item_groups,
+            tax_groups,
+            security_levels,
+            revenue_categories,
+            report_categories,
+            product_classes,
+            choice_groups,
+            printer_logicals,
+            price_levels,
+        );
+        
+        self.preview_table = Some(table);
+        self.show_preview = true;
+    }
+
+    fn apply_action_to_item(&self, item: &mut Item, action: &FilterAction) {
+        match (&action.category, &action.operation) {
+            // Single entity fields (ItemGroup, TaxGroup, etc.)
+            (FilterCategory::ItemGroup, ActionOperation::SwapTo) => {
+                if let (Some(from_id), Some(to_id)) = (action.swap_from_id, action.entity_id) {
+                    if item.item_group == Some(from_id) {
+                        item.item_group = Some(to_id);
+                    }
+                }
+            }
+            (FilterCategory::TaxGroup, ActionOperation::SwapTo) => {
+                if let (Some(from_id), Some(to_id)) = (action.swap_from_id, action.entity_id) {
+                    if item.tax_group == Some(from_id) {
+                        item.tax_group = Some(to_id);
+                    }
+                }
+            }
+            (FilterCategory::SecurityLevel, ActionOperation::SwapTo) => {
+                if let (Some(from_id), Some(to_id)) = (action.swap_from_id, action.entity_id) {
+                    if item.security_level == Some(from_id) {
+                        item.security_level = Some(to_id);
+                    }
+                }
+            }
+            (FilterCategory::RevenueCategory, ActionOperation::SwapTo) => {
+                if let (Some(from_id), Some(to_id)) = (action.swap_from_id, action.entity_id) {
+                    if item.revenue_category == Some(from_id) {
+                        item.revenue_category = Some(to_id);
+                    }
+                }
+            }
+            (FilterCategory::ReportCategory, ActionOperation::SwapTo) => {
+                if let (Some(from_id), Some(to_id)) = (action.swap_from_id, action.entity_id) {
+                    if item.report_category == Some(from_id) {
+                        item.report_category = Some(to_id);
+                    }
+                }
+            }
+            (FilterCategory::ProductClass, ActionOperation::SwapTo) => {
+                if let (Some(from_id), Some(to_id)) = (action.swap_from_id, action.entity_id) {
+                    if item.product_class == Some(from_id) {
+                        item.product_class = Some(to_id);
+                    }
+                }
+            }
+            
+            // Multi-value entity fields
+            (FilterCategory::PrinterLogical, ActionOperation::SwapTo) => {
+                if let (Some(from_id), Some(to_id)) = (action.swap_from_id, action.entity_id) {
+                    if let Some(ref mut logicals) = item.printer_logicals {
+                        for (id, _) in logicals.iter_mut() {
+                            if *id == from_id {
+                                *id = to_id;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            (FilterCategory::ChoiceGroup, ActionOperation::SwapTo) => {
+                if let (Some(from_id), Some(to_id)) = (action.swap_from_id, action.entity_id) {
+                    if let Some(ref mut groups) = item.choice_groups {
+                        for (id, _) in groups.iter_mut() {
+                            if *id == from_id {
+                                *id = to_id;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            (FilterCategory::PriceLevel, ActionOperation::SwapTo) => {
+                if let (Some(from_id), Some(to_id)) = (action.swap_from_id, action.entity_id) {
+                    if let Some(ref mut levels) = item.price_levels {
+                        for id in levels.iter_mut() {
+                            if *id == from_id {
+                                *id = to_id;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Price operations
+            (FilterCategory::Price, ActionOperation::SetPrice) => {
+                if let Ok(new_price) = action.value.parse::<Decimal>() {
+                    if action.price_level == Some(0) || action.price_level.is_none() {
+                        // Update default price
+                        item.default_price = Some(new_price);
+                    } else if let Some(price_level_id) = action.price_level {
+                        // Update specific price level
+                        if let Some(ref mut prices) = item.item_prices {
+                            if let Some(price) = prices.iter_mut().find(|p| p.price_level_id == price_level_id) {
+                                price.price = new_price;
+                            } else {
+                                // Add new price entry if it doesn't exist
+                                prices.push(ItemPrice {
+                                    price_level_id,
+                                    price: new_price,
+                                });
+                            }
+                        } else {
+                            // Create new item_prices vector with this price
+                            item.item_prices = Some(vec![ItemPrice {
+                                price_level_id,
+                                price: new_price,
+                            }]);
+                        }
+                    }
+                }
+            }
+            (FilterCategory::Price, ActionOperation::AddToPrice) => {
+                if let Ok(add_amount) = action.value.parse::<Decimal>() {
+                    if action.price_level == Some(0) || action.price_level.is_none() {
+                        // Update default price
+                        if let Some(current_price) = item.default_price {
+                            item.default_price = Some(current_price + add_amount);
+                        } else {
+                            item.default_price = Some(add_amount);
+                        }
+                    } else if let Some(price_level_id) = action.price_level {
+                        // Update specific price level
+                        if let Some(ref mut prices) = item.item_prices {
+                            if let Some(price) = prices.iter_mut().find(|p| p.price_level_id == price_level_id) {
+                                price.price += add_amount;
+                            } else {
+                                // Add new price if it doesn't exist
+                                prices.push(ItemPrice {
+                                    price_level_id,
+                                    price: add_amount,
+                                });
+                            }
+                        } else {
+                            item.item_prices = Some(vec![ItemPrice {
+                                price_level_id,
+                                price: add_amount,
+                            }]);
+                        }
+                    }
+                }
+            }
+            (FilterCategory::Price, ActionOperation::SubtractFromPrice) => {
+                if let Ok(sub_amount) = action.value.parse::<Decimal>() {
+                    if action.price_level == Some(0) || action.price_level.is_none() {
+                        // Update default price
+                        if let Some(current_price) = item.default_price {
+                            item.default_price = Some(current_price - sub_amount);
+                        }
+                    } else if let Some(price_level_id) = action.price_level {
+                        // Update specific price level
+                        if let Some(ref mut prices) = item.item_prices {
+                            if let Some(price) = prices.iter_mut().find(|p| p.price_level_id == price_level_id) {
+                                price.price -= sub_amount;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Catch-all for invalid combinations
+            _ => {}
+        }
+    }
+
     // Helper function to evaluate a single condition
     fn evaluate_condition(
         &self,
@@ -809,82 +1334,132 @@ impl SuperEdit {
             FilterCategory::Name => {
                 self.evaluate_string_field(&item.name, &condition.operator, &condition.value)
             }
+            FilterCategory::Id => {
+                self.evaluate_id_field(item.id, &condition.operator, &condition.value)
+            }
             FilterCategory::ItemGroup => {
-                self.evaluate_optional_entity_field(
-                    item.item_group,
-                    item_groups,
-                    &condition.operator,
-                    &condition.value
-                )
+                if condition.entity_id.is_some() {
+                    self.evaluate_entity_by_id(item.item_group, condition.entity_id, &condition.operator)
+                } else {
+                    self.evaluate_optional_entity_field(
+                        item.item_group,
+                        item_groups,
+                        &condition.operator,
+                        &condition.value
+                    )
+                }
             }
             FilterCategory::TaxGroup => {
-                self.evaluate_optional_entity_field(
-                    item.tax_group,
-                    tax_groups,
-                    &condition.operator,
-                    &condition.value
-                )
+                if condition.entity_id.is_some() {
+                    self.evaluate_entity_by_id(item.tax_group, condition.entity_id, &condition.operator)
+                } else {
+                    self.evaluate_optional_entity_field(
+                        item.tax_group,
+                        tax_groups,
+                        &condition.operator,
+                        &condition.value
+                    )
+                }
             }
             FilterCategory::SecurityLevel => {
-                self.evaluate_optional_entity_field(
-                    item.security_level,
-                    security_levels,
-                    &condition.operator,
-                    &condition.value
-                )
+                if condition.entity_id.is_some() {
+                    self.evaluate_entity_by_id(item.security_level, condition.entity_id, &condition.operator)
+                } else {
+                    self.evaluate_optional_entity_field(
+                        item.security_level,
+                        security_levels,
+                        &condition.operator,
+                        &condition.value
+                    )
+                }
             }
             FilterCategory::RevenueCategory => {
-                self.evaluate_optional_entity_field(
-                    item.revenue_category,
-                    revenue_categories,
-                    &condition.operator,
-                    &condition.value
-                )
+                if condition.entity_id.is_some() {
+                    self.evaluate_entity_by_id(item.revenue_category, condition.entity_id, &condition.operator)
+                } else {
+                    self.evaluate_optional_entity_field(
+                        item.revenue_category,
+                        revenue_categories,
+                        &condition.operator,
+                        &condition.value
+                    )
+                }
             }
             FilterCategory::ReportCategory => {
-                self.evaluate_optional_entity_field(
-                    item.report_category,
-                    report_categories,
-                    &condition.operator,
-                    &condition.value
-                )
+                if condition.entity_id.is_some() {
+                    self.evaluate_entity_by_id(item.report_category, condition.entity_id, &condition.operator)
+                } else {
+                    self.evaluate_optional_entity_field(
+                        item.report_category,
+                        report_categories,
+                        &condition.operator,
+                        &condition.value
+                    )
+                }
             }
             FilterCategory::ProductClass => {
-                self.evaluate_optional_entity_field(
-                    item.product_class,
-                    product_classes,
-                    &condition.operator,
-                    &condition.value
-                )
+                if condition.entity_id.is_some() {
+                    self.evaluate_entity_by_id(item.product_class, condition.entity_id, &condition.operator)
+                } else {
+                    self.evaluate_optional_entity_field(
+                        item.product_class,
+                        product_classes,
+                        &condition.operator,
+                        &condition.value
+                    )
+                }
             }
             FilterCategory::ChoiceGroup => {
-                self.evaluate_multi_entity_field(
-                    item.choice_groups.as_ref(),
-                    choice_groups,
-                    &condition.operator,
-                    &condition.value
-                )
+                if condition.entity_id.is_some() {
+                    self.evaluate_multi_entity_by_id(
+                        item.choice_groups.as_ref().map(|v| v.iter().map(|(id, _)| *id).collect()),
+                        condition.entity_id,
+                        &condition.operator
+                    )
+                } else {
+                    self.evaluate_multi_entity_field(
+                        item.choice_groups.as_ref(),
+                        choice_groups,
+                        &condition.operator,
+                        &condition.value
+                    )
+                }
             }
             FilterCategory::PrinterLogical => {
-                self.evaluate_printer_logical_field(
-                    item.printer_logicals.as_ref(),
-                    printer_logicals,
-                    &condition.operator,
-                    &condition.value
-                )
+                if condition.entity_id.is_some() {
+                    self.evaluate_multi_entity_by_id(
+                        item.printer_logicals.as_ref().map(|v| v.iter().map(|(id, _)| *id).collect()),
+                        condition.entity_id,
+                        &condition.operator
+                    )
+                } else {
+                    self.evaluate_printer_logical_field(
+                        item.printer_logicals.as_ref(),
+                        printer_logicals,
+                        &condition.operator,
+                        &condition.value
+                    )
+                }
             }
             FilterCategory::PriceLevel => {
-                self.evaluate_price_level_field(
-                    item.price_levels.as_ref(),
-                    price_levels,
-                    &condition.operator,
-                    &condition.value
-                )
+                if condition.entity_id.is_some() {
+                    self.evaluate_multi_entity_by_id(
+                        item.price_levels.as_ref().map(|v| v.clone()),
+                        condition.entity_id,
+                        &condition.operator
+                    )
+                } else {
+                    self.evaluate_price_level_field(
+                        item.price_levels.as_ref(),
+                        price_levels,
+                        &condition.operator,
+                        &condition.value
+                    )
+                }
             }
             FilterCategory::Price => {
                 self.evaluate_price_field(
-                    item.price_levels.as_ref(),
-                    price_levels,
+                    &item,
                     &condition.operator,
                     &condition.value
                 )
@@ -903,6 +1478,76 @@ impl SuperEdit {
             FilterOperator::IsEmpty => field_value.is_empty(),
             FilterOperator::IsNotEmpty => !field_value.is_empty(),
             _ => false,
+        }
+    }
+
+    fn evaluate_id_field(&self, id: EntityId, operator: &FilterOperator, condition_value: &str) -> bool {
+        match operator {
+            FilterOperator::GreaterThan => {
+                if let Ok(value) = condition_value.parse::<EntityId>() {
+                    id > value
+                } else {
+                    false
+                }
+            }
+            FilterOperator::LessThan => {
+                if let Ok(value) = condition_value.parse::<EntityId>() {
+                    id < value
+                } else {
+                    false
+                }
+            }
+            FilterOperator::Between => {
+                let values: Vec<&str> = condition_value.split('-').collect();
+                if values.len() == 2 {
+                    if let (Ok(from), Ok(to)) = (values[0].parse::<EntityId>(), values[1].parse::<EntityId>()) {
+                        id >= from && id <= to
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+
+    fn evaluate_entity_by_id(
+        &self,
+        field_id: Option<EntityId>,
+        condition_entity_id: Option<EntityId>,
+        operator: &FilterOperator
+    ) -> bool {
+        match operator {
+            FilterOperator::Equals => field_id == condition_entity_id,
+            FilterOperator::NotEquals => field_id != condition_entity_id,
+            FilterOperator::IsEmpty => field_id.is_none(),
+            FilterOperator::IsNotEmpty => field_id.is_some(),
+            _ => false,
+        }
+    }
+
+    fn evaluate_multi_entity_by_id(
+        &self,
+        field_ids: Option<Vec<EntityId>>,
+        condition_entity_id: Option<EntityId>,
+        operator: &FilterOperator
+    ) -> bool {
+        if let Some(ids) = field_ids {
+            match operator {
+                FilterOperator::Contains | FilterOperator::Equals => {
+                    condition_entity_id.map_or(false, |id| ids.contains(&id))
+                }
+                FilterOperator::DoesNotContain | FilterOperator::NotEquals => {
+                    condition_entity_id.map_or(true, |id| !ids.contains(&id))
+                }
+                FilterOperator::IsEmpty => ids.is_empty(),
+                FilterOperator::IsNotEmpty => !ids.is_empty(),
+                _ => false,
+            }
+        } else {
+            *operator == FilterOperator::IsEmpty
         }
     }
 
@@ -938,6 +1583,15 @@ impl SuperEdit {
                 match operator {
                     FilterOperator::IsEmpty => false,
                     FilterOperator::IsNotEmpty => true,
+                    FilterOperator::DoesNotContain => {
+                        !ids.iter().any(|(id, _)| {
+                            if let Some(entity) = entities.get(id) {
+                                entity.name().to_lowercase().contains(&condition_value.to_lowercase())
+                            } else {
+                                false
+                            }
+                        })
+                    }
                     _ => {
                         ids.iter().any(|(id, _)| {
                             if let Some(entity) = entities.get(id) {
@@ -968,6 +1622,15 @@ impl SuperEdit {
                 match operator {
                     FilterOperator::IsEmpty => false,
                     FilterOperator::IsNotEmpty => true,
+                    FilterOperator::DoesNotContain => {
+                        !ids.iter().any(|(id, _)| {
+                            if let Some(entity) = entities.get(id) {
+                                entity.name.to_lowercase().contains(&condition_value.to_lowercase())
+                            } else {
+                                false
+                            }
+                        })
+                    }
                     _ => {
                         ids.iter().any(|(id, _)| {
                             if let Some(entity) = entities.get(id) {
@@ -998,6 +1661,15 @@ impl SuperEdit {
                 match operator {
                     FilterOperator::IsEmpty => false,
                     FilterOperator::IsNotEmpty => true,
+                    FilterOperator::DoesNotContain => {
+                        !ids.iter().any(|id| {
+                            if let Some(entity) = entities.get(id) {
+                                entity.name.to_lowercase().contains(&condition_value.to_lowercase())
+                            } else {
+                                false
+                            }
+                        })
+                    }
                     _ => {
                         ids.iter().any(|id| {
                             if let Some(entity) = entities.get(id) {
@@ -1016,43 +1688,56 @@ impl SuperEdit {
 
     fn evaluate_price_field(
         &self,
-        price_level_ids: Option<&Vec<EntityId>>,
-        price_levels: &BTreeMap<EntityId, PriceLevel>,
+        item: &Item,
         operator: &FilterOperator,
         condition_value: &str
     ) -> bool {
-        if let Some(ids) = price_level_ids {
-            if let Some(first_id) = ids.first() {
-                if let Some(price_level) = price_levels.get(first_id) {
-                    if let Ok(condition_price) = condition_value.parse::<Decimal>() {
-                        let item_price = price_level.price;
-                        match operator {
-                            FilterOperator::GreaterThan => item_price > condition_price,
-                            FilterOperator::LessThan => item_price < condition_price,
-                            FilterOperator::GreaterOrEqual => item_price >= condition_price,
-                            FilterOperator::LessOrEqual => item_price <= condition_price,
-                            FilterOperator::Equals => (item_price - condition_price).abs() < Decimal::new(1, 2),
-                            FilterOperator::NotEquals => (item_price - condition_price).abs() >= Decimal::new(1, 2),
-                            FilterOperator::IsEmpty => false,
-                            FilterOperator::IsNotEmpty => true,
-                            _ => false,
-                        }
-                    } else {
-                        match operator {
-                            FilterOperator::IsEmpty => false,
-                            FilterOperator::IsNotEmpty => true,
-                            _ => false,
-                        }
-                    }
-                } else {
-                    *operator == FilterOperator::IsEmpty
+        // First check default_price
+        if let Some(default_price) = item.default_price {
+            if let Ok(condition_price) = condition_value.parse::<Decimal>() {
+                let matches = match operator {
+                    FilterOperator::GreaterThan => default_price > condition_price,
+                    FilterOperator::LessThan => default_price < condition_price,
+                    FilterOperator::GreaterOrEqual => default_price >= condition_price,
+                    FilterOperator::LessOrEqual => default_price <= condition_price,
+                    FilterOperator::Equals => (default_price - condition_price).abs() < Decimal::new(1, 2),
+                    FilterOperator::NotEquals => (default_price - condition_price).abs() >= Decimal::new(1, 2),
+                    FilterOperator::IsEmpty => false,
+                    FilterOperator::IsNotEmpty => true,
+                    _ => false,
+                };
+                
+                if matches {
+                    return true;
                 }
-            } else {
-                *operator == FilterOperator::IsEmpty
             }
-        } else {
-            *operator == FilterOperator::IsEmpty
         }
+        
+        // Then check item_prices
+        if let Some(item_prices) = &item.item_prices {
+            for item_price in item_prices {
+                if let Ok(condition_price) = condition_value.parse::<Decimal>() {
+                    let matches = match operator {
+                        FilterOperator::GreaterThan => item_price.price > condition_price,
+                        FilterOperator::LessThan => item_price.price < condition_price,
+                        FilterOperator::GreaterOrEqual => item_price.price >= condition_price,
+                        FilterOperator::LessOrEqual => item_price.price <= condition_price,
+                        FilterOperator::Equals => (item_price.price - condition_price).abs() < Decimal::new(1, 2),
+                        FilterOperator::NotEquals => (item_price.price - condition_price).abs() >= Decimal::new(1, 2),
+                        FilterOperator::IsEmpty => false,
+                        FilterOperator::IsNotEmpty => true,
+                        _ => false,
+                    };
+                    
+                    if matches {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        // If no prices exist
+        *operator == FilterOperator::IsEmpty
     }
 
     pub fn applies_to_item(
@@ -1175,9 +1860,18 @@ impl HasName for ChoiceGroup {
     fn name(&self) -> &str { &self.name }
 }
 
+impl HasName for PrinterLogical {
+    fn name(&self) -> &str { &self.name }
+}
+
+impl HasName for PriceLevel  {
+    fn name (&self) -> &str { &self.name }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum FilterCategory {
     Name,
+    Id,
     ItemGroup,
     ProductClass,
     TaxGroup,
@@ -1191,8 +1885,24 @@ enum FilterCategory {
 }
 
 impl FilterCategory {
-    const ALL: [FilterCategory; 11] = [
+    // Categories available for conditions
+    const ALL_CONDITIONS: [FilterCategory; 12] = [
         FilterCategory::Name,
+        FilterCategory::Id,
+        FilterCategory::ItemGroup,
+        FilterCategory::ProductClass,
+        FilterCategory::TaxGroup,
+        FilterCategory::SecurityLevel,
+        FilterCategory::RevenueCategory,
+        FilterCategory::PriceLevel,
+        FilterCategory::ChoiceGroup,
+        FilterCategory::PrinterLogical,
+        FilterCategory::ReportCategory,
+        FilterCategory::Price,
+    ];
+    
+    // Categories available for actions (excludes Name and Id)
+    const ALL_ACTIONS: [FilterCategory; 10] = [
         FilterCategory::ItemGroup,
         FilterCategory::ProductClass,
         FilterCategory::TaxGroup,
@@ -1213,6 +1923,7 @@ impl std::fmt::Display for FilterCategory {
             "{}",
             match self {
                 FilterCategory::Name => "Name",
+                FilterCategory::Id => "ID",
                 FilterCategory::ItemGroup => "Item Group",
                 FilterCategory::ProductClass => "Product Class",
                 FilterCategory::TaxGroup => "Tax Group",
@@ -1226,4 +1937,186 @@ impl std::fmt::Display for FilterCategory {
             }
         )
     }
+}
+
+// Helper function to create entity dropdown for conditions
+fn create_condition_entity_dropdown<'a, T: HasName + Clone>(
+    index: usize,
+    condition: &FilterCondition,
+    entities: &'a BTreeMap<EntityId, T>
+) -> Element<'a, Message> {
+    let options: Vec<(EntityId, String)> = entities.iter()
+        .map(|(id, entity)| (*id, entity.name().to_string()))
+        .collect();
+    
+    let selected_name = condition.entity_id
+        .and_then(|id| entities.get(&id))
+        .map(|e| e.name().to_string());
+    
+    row![
+        pick_list(
+            options.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>(),
+            selected_name,
+            move |name| {
+                let id = options.iter()
+                    .find(|(_, n)| n == &name)
+                    .map(|(id, _)| *id)
+                    .unwrap_or(0);
+                Message::UpdateConditionEntity(index, id)
+            }
+        )
+        .style(Modern::pick_list())
+        .width(150)
+    ].into()
+}
+
+// Helper function to create swap from/to dropdowns
+fn create_swap_dropdowns<'a, T: HasName + Clone>(
+    index: usize,
+    action: &FilterAction,
+    all_entities: &'a BTreeMap<EntityId, T>,
+    filtered_items: Option<&BTreeMap<EntityId, Item>>,
+) -> Element<'a, Message> {
+    // Get entities that appear in filtered items
+    let mut used_entity_ids = std::collections::HashSet::new();
+    
+    if let Some(items) = filtered_items {
+        for item in items.values() {
+            match std::any::type_name::<T>() {
+                name if name.contains("ItemGroup") => {
+                    if let Some(id) = item.item_group {
+                        used_entity_ids.insert(id);
+                    }
+                }
+                name if name.contains("ProductClass") => {
+                    if let Some(id) = item.product_class {
+                        used_entity_ids.insert(id);
+                    }
+                }
+                name if name.contains("TaxGroup") => {
+                    if let Some(id) = item.tax_group {
+                        used_entity_ids.insert(id);
+                    }
+                }
+                name if name.contains("SecurityLevel") => {
+                    if let Some(id) = item.security_level {
+                        used_entity_ids.insert(id);
+                    }
+                }
+                name if name.contains("RevenueCategory") => {
+                    if let Some(id) = item.revenue_category {
+                        used_entity_ids.insert(id);
+                    }
+                }
+                name if name.contains("ReportCategory") => {
+                    if let Some(id) = item.report_category {
+                        used_entity_ids.insert(id);
+                    }
+                }
+                name if name.contains("PrinterLogical") => {
+                    if let Some(logicals) = &item.printer_logicals {
+                        for (id, _) in logicals {
+                            used_entity_ids.insert(*id);
+                        }
+                    }
+                }
+                name if name.contains("ChoiceGroup") => {
+                    if let Some(groups) = &item.choice_groups {
+                        for (id, _) in groups {
+                            used_entity_ids.insert(*id);
+                        }
+                    }
+                }
+                name if name.contains("PriceLevel") => {
+                    if let Some(levels) = &item.price_levels {
+                        for id in levels {
+                            used_entity_ids.insert(*id);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    
+    // Create options for swap from (only entities used in filtered items)
+    let swap_from_options: Vec<(EntityId, String)> = all_entities.iter()
+        .filter(|(id, _)| used_entity_ids.contains(id))
+        .map(|(id, entity)| (*id, entity.name().to_string()))
+        .collect();
+    
+    let swap_from_selected = action.swap_from_id
+        .and_then(|id| all_entities.get(&id))
+        .map(|e| e.name().to_string());
+    
+    // Create options for swap to (all available entities)
+    let swap_to_options: Vec<(EntityId, String)> = all_entities.iter()
+        .map(|(id, entity)| (*id, entity.name().to_string()))
+        .collect();
+    
+    let swap_to_selected = action.entity_id
+        .and_then(|id| all_entities.get(&id))
+        .map(|e| e.name().to_string());
+    
+    row![
+        pick_list(
+            swap_from_options.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>(),
+            swap_from_selected,
+            move |name| {
+                let id = swap_from_options.iter()
+                    .find(|(_, n)| n == &name)
+                    .map(|(id, _)| *id)
+                    .unwrap_or(0);
+                Message::UpdateActionSwapFrom(index, id)
+            }
+        )
+        .style(Modern::pick_list())
+        .width(150),
+        iced::widget::horizontal_space().width(5),
+        text("to").style(Modern::secondary_text()).center(),
+        iced::widget::horizontal_space().width(5),
+        pick_list(
+            swap_to_options.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>(),
+            swap_to_selected,
+            move |name| {
+                let id = swap_to_options.iter()
+                    .find(|(_, n)| n == &name)
+                    .map(|(id, _)| *id)
+                    .unwrap_or(0);
+                Message::UpdateActionEntity(index, id)
+            }
+        )
+        .style(Modern::pick_list())
+        .width(150)
+    ].into()
+}
+
+fn create_entity_dropdown<'a, T: HasName + Clone>(
+    index: usize,
+    action: &FilterAction,
+    entities: &'a BTreeMap<EntityId, T>
+) -> Element<'a, Message> {
+    let options: Vec<(EntityId, String)> = entities.iter()
+        .map(|(id, entity)| (*id, entity.name().to_string()))
+        .collect();
+    
+    let selected_name = action.entity_id
+        .and_then(|id| entities.get(&id))
+        .map(|e| e.name().to_string());
+    
+    row![
+        pick_list(
+            options.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>(),
+            selected_name,
+            move |name| {
+                let id = options.iter()
+                    .find(|(_, n)| n == &name)
+                    .map(|(id, _)| *id)
+                    .unwrap_or(0);
+                Message::UpdateActionEntity(index, id)
+            }
+        )
+        .style(Modern::pick_list())
+        .width(185)
+    ].into()
 }

@@ -14,6 +14,7 @@ use crate::{
 };
 use std::collections::{HashMap, BTreeMap};
 use rust_decimal::Decimal;
+use iced_modern_theme::Modern;
 use iced::{Element, Length, Theme, Renderer, Color};
 use iced::widget::{column, row, scrollable, container, responsive, text, horizontal_space};
 use iced_table::{table, ColumnVisibilityMessage};
@@ -884,6 +885,86 @@ fn get_printer_logicals_string_with_names(
     }
 }
 
+// Helper function to parse list strings like "[Kitchen, Bar, Expo]" into Vec<String>
+fn parse_list_string(s: &str) -> Vec<String> {
+    if s.starts_with('[') && s.ends_with(']') {
+        let inner = &s[1..s.len()-1];
+        if inner.is_empty() {
+            Vec::new()
+        } else {
+            inner.split(", ").map(|s| s.to_string()).collect()
+        }
+    } else {
+        vec![s.to_string()]
+    }
+}
+
+// Helper function to create a diff view for list-like fields
+fn create_list_diff_view<'a>(original: &str, modified: &str) -> Element<'a, Message> {
+    let orig_items = parse_list_string(original);
+    let mod_items = parse_list_string(modified);
+
+    let mut elements: Vec<Element<'a, Message>> = vec![
+        text("[").size(14).style(Modern::primary_text()).into()
+    ];
+    
+    let mut first = true;
+    
+    // Track which modified items have been used
+    let mut used_mod_indices = std::collections::HashSet::new();
+    
+    // First, go through original items
+    for orig_item in orig_items.iter() {
+        // Check if this item exists in modified
+        let found_in_modified = mod_items.iter()
+            .enumerate()
+            .find(|(idx, m)| m == &orig_item && !used_mod_indices.contains(idx));
+        
+        if !first {
+            elements.push(text(", ").size(14).into());
+        }
+        first = false;
+        
+        if let Some((idx, _)) = found_in_modified {
+            // Item still exists - show in normal color
+            elements.push(text(orig_item.clone()).size(14).into());
+            used_mod_indices.insert(idx);
+        } else {
+            // Item was removed - show in red with strikethrough
+            elements.push(
+                text(orig_item.clone())
+                    .size(14)
+                    .style(Modern::red_text())
+                    .into()
+            );
+        }
+    }
+    
+    // Then add any new items from modified that weren't in original
+    for (idx, mod_item) in mod_items.iter().enumerate() {
+        if !used_mod_indices.contains(&idx) {
+            if !first {
+                elements.push(text(", ").size(14).into());
+            }
+            first = false;
+            
+            // New item - show in green
+            elements.push(
+                text(mod_item.clone())
+                    .size(14)
+                    .style(Modern::green_text())
+                    .into()
+            );
+        }
+    }
+
+    elements.push(text("]").size(14).style(Modern::primary_text()).into());
+
+    let content = iced::widget::Row::from_vec(elements);
+    
+    container(content).into()
+}
+
 impl<'a> table::Column<'a, Message, Theme, Renderer> for Column {
     type Row = Row;
 
@@ -932,47 +1013,87 @@ impl<'a> table::Column<'a, Message, Theme, Renderer> for Column {
             ColumnType::PrinterLogicals => &row.printerLogicals,
         };
 
-        let content: Element<_> = match cell_value.change_type {
+        let content: Element<_> = match &cell_value.change_type {
             CellChange::Modified => {
-                // Show strikethrough original and new value in green
-                column![
-                    text(&cell_value.original)
-                        .size(12)
-                        .color(Color::from_rgb(0.5, 0.5, 0.5))
-                        .style(|theme| text::Style {
-                            color: Some(Color::from_rgb(0.5, 0.5, 0.5)),
+                let old_value = &cell_value.original;
+                let new_value = cell_value.modified.as_ref().unwrap_or(&cell_value.original);
+                
+                // Check if this is a list-like field (contains brackets)
+                let is_list_field = matches!(self.column_type, 
+                    ColumnType::PriceLevels | 
+                    ColumnType::ChoiceGroups | 
+                    ColumnType::PrinterLogicals
+                ) || (old_value.starts_with('[') && old_value.ends_with(']'));
+                
+                if is_list_field {
+                    // Use special list diff view
+                    create_list_diff_view(old_value, new_value)
+                } else {
+                    // For non-list fields, show inline diff
+                    row![
+                        text(old_value)
+                            .size(14)
+                            .style(|_| text::Style {
+                                color: Some(Color::from_rgb(0.5, 0.5, 0.5)),
+                            }),
+                        text(" → ").size(14).style(|_| text::Style {
+                            color: Some(Color::from_rgb(0.4, 0.4, 0.4)),
+                        }),
+                        text(new_value)
+                            .size(14)
+                            .style(|_| text::Style {
+                                color: Some(Color::from_rgb(0.0, 0.7, 0.0)),
+                            })
+                    ]
+                    .align_y(iced::Alignment::Center)
+                    .spacing(4)
+                    .into()
+                }
+            },
+            CellChange::Added => {
+                row![
+                    text("+")
+                        .size(14)
+                        .style(|_| text::Style {
+                            color: Some(Color::from_rgb(0.0, 0.7, 0.0)),
                         }),
                     text(cell_value.display())
-                        .color(Color::from_rgb(0.0, 0.7, 0.0))
-                        .style(|theme| text::Style {
+                        .size(14)
+                        .style(|_| text::Style {
                             color: Some(Color::from_rgb(0.0, 0.7, 0.0)),
                         })
                 ]
-                .spacing(2)
+                .spacing(4)
+                .align_y(iced::Alignment::Center)
                 .into()
             },
-            CellChange::Added => {
-                text(cell_value.display())
-                    .color(Color::from_rgb(0.0, 0.7, 0.0))
-                    .style(|theme| text::Style {
-                        color: Some(Color::from_rgb(0.0, 0.7, 0.0)),
-                    })
-                    .into()
-            },
             CellChange::Removed => {
-                text(cell_value.display())
-                    .color(Color::from_rgb(0.7, 0.0, 0.0))
-                    .style(|theme| text::Style {
-                        color: Some(Color::from_rgb(0.7, 0.0, 0.0)),
-                    })
-                    .into()
+                row![
+                    text("-")
+                        .size(14)
+                        .style(|_| text::Style {
+                            color: Some(Color::from_rgb(0.7, 0.0, 0.0)),
+                        }),
+                    text(cell_value.display())
+                        .size(14)
+                        .style(|_| text::Style {
+                            color: Some(Color::from_rgb(0.7, 0.0, 0.0)),
+                        })
+                ]
+                .spacing(4)
+                .align_y(iced::Alignment::Center)
+                .into()
             },
             CellChange::None => {
-                text(cell_value.display()).into()
+                text(cell_value.display()).size(14).into()
             }
         };
 
-        container(content).width(Length::Fill).center_y(32).into()
+        container(content)
+            .width(Length::Fill)
+            .center_y(32)
+            .padding([2, 4])
+            .into()
     }
 
     fn footer(&'a self, _col_index: usize, rows: &'a [Row]) -> Option<Element<'a, Message>> {
