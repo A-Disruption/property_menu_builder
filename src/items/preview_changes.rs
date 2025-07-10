@@ -932,7 +932,7 @@ fn create_list_diff_view<'a>(original: &str, modified: &str) -> Element<'a, Mess
         } else {
             // Item was removed - show in red with strikethrough
             elements.push(
-                text(orig_item.clone())
+                text("-".to_string() + &orig_item.clone())
                     .size(14)
                     .style(Modern::red_text())
                     .into()
@@ -950,7 +950,7 @@ fn create_list_diff_view<'a>(original: &str, modified: &str) -> Element<'a, Mess
             
             // New item - show in green
             elements.push(
-                text(mod_item.clone())
+                text("+".to_string() + &mod_item.clone())
                     .size(14)
                     .style(Modern::green_text())
                     .into()

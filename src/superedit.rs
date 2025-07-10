@@ -448,9 +448,11 @@ impl SuperEdit {
                 if let Some(action) = self.actions.get_mut(index) {
                     action.entity_id = Some(entity_id);
                 }
+                self.preview_changes(items, item_groups, tax_groups, security_levels,
+                    revenue_categories, report_categories, product_classes, choice_groups,
+                    printer_logicals, price_levels);
                 Action::none()
             }
-
             Message::PreviewChanges => {
                 self.preview_changes(items, item_groups, tax_groups, security_levels,
                     revenue_categories, report_categories, product_classes, choice_groups,
@@ -743,11 +745,14 @@ impl SuperEdit {
         .padding(15);
 
         // Items preview section
+        let filtered_item_count = self.filtered_items.as_ref().map_or(items.len(), |map| map.len());
         let items_section = container(
             column![
                 row![
-                    text(if self.show_preview { "Changed Items" } else { "Matching Items" })
+                    text(if self.show_preview { "Showing Potential Changes" } else { "Matching Items" })
                         .style(Modern::primary_text()).size(16),
+                    horizontal_space(),
+                    text(format!("Showing {} items", filtered_item_count)).style(Modern::primary_text()),
                 ],
                 
                 // Items list   
@@ -1107,17 +1112,12 @@ impl SuperEdit {
                 revenue_categories, report_categories, product_classes, choice_groups,
                 printer_logicals, price_levels) {
                 
-                let original_item = items.get(id).unwrap().clone();
-                
                 // Apply each action
                 for action in &self.actions {
                     self.apply_action_to_item(item, action);
                 }
                 
-                // Check if item actually changed
-                if item != &original_item {
-                    self.changed_item_ids.push(*id);
-                }
+                self.changed_item_ids.push(*id);
             }
         }
         
@@ -1131,6 +1131,9 @@ impl SuperEdit {
         let modified_items_to_show: BTreeMap<EntityId, Item> = self.changed_item_ids.iter()
             .filter_map(|id| modified_items.get(id).map(|item| (*id, item.clone())))
             .collect();
+
+        println!("Items to show: {:?}", items_to_show);
+        println!("Modified Items to show: {:?}", modified_items_to_show);
         
         let table = ItemsTableView::new_with_diff(
             &items_to_show,
@@ -1197,22 +1200,63 @@ impl SuperEdit {
             }
             
             // Multi-value entity fields
+            // PrinterLogical operations
+            (FilterCategory::PrinterLogical, ActionOperation::Add) => {
+                if let Some(entity_id) = action.entity_id {
+                    if let Some(ref mut logicals) = item.printer_logicals {
+                        if !logicals.iter().any(|(id, _)| *id == entity_id) {
+                            logicals.push((entity_id, false));
+                        }
+                    } else {
+                        item.printer_logicals = Some(vec![(entity_id, false)]);
+                    }
+                }
+            }
+            (FilterCategory::PrinterLogical, ActionOperation::Remove) => {
+                if let Some(entity_id) = action.entity_id {
+                    if let Some(ref mut logicals) = item.printer_logicals {
+                        logicals.retain(|&(id, _)| id != entity_id);
+                    }
+                }
+            }
             (FilterCategory::PrinterLogical, ActionOperation::SwapTo) => {
                 if let (Some(from_id), Some(to_id)) = (action.swap_from_id, action.entity_id) {
                     if let Some(ref mut logicals) = item.printer_logicals {
-                        for (id, _) in logicals.iter_mut() {
+                        // Find and replace the from_id with to_id
+                        for (id, inherit) in logicals.iter_mut() {
                             if *id == from_id {
                                 *id = to_id;
                                 break;
                             }
                         }
+                    }
+                }
+            }
+            
+            // ChoiceGroup operations
+            (FilterCategory::ChoiceGroup, ActionOperation::Add) => {
+                if let Some(entity_id) = action.entity_id {
+                    if let Some(ref mut groups) = item.choice_groups {
+                        if !groups.iter().any(|(id, _)| *id == entity_id) {
+                            groups.push((entity_id, 0)); // Default sort order 0
+                        }
+                    } else {
+                        item.choice_groups = Some(vec![(entity_id, 0)]);
+                    }
+                }
+            }
+            (FilterCategory::ChoiceGroup, ActionOperation::Remove) => {
+                if let Some(entity_id) = action.entity_id {
+                    if let Some(ref mut groups) = item.choice_groups {
+                        groups.retain(|&(id, _)| id != entity_id);
                     }
                 }
             }
             (FilterCategory::ChoiceGroup, ActionOperation::SwapTo) => {
                 if let (Some(from_id), Some(to_id)) = (action.swap_from_id, action.entity_id) {
                     if let Some(ref mut groups) = item.choice_groups {
-                        for (id, _) in groups.iter_mut() {
+                        // Find and replace the from_id with to_id, keeping sort order
+                        for (id, _sort) in groups.iter_mut() {
                             if *id == from_id {
                                 *id = to_id;
                                 break;
@@ -1221,9 +1265,30 @@ impl SuperEdit {
                     }
                 }
             }
+            
+            // PriceLevel operations
+            (FilterCategory::PriceLevel, ActionOperation::Add) => {
+                if let Some(entity_id) = action.entity_id {
+                    if let Some(ref mut levels) = item.price_levels {
+                        if !levels.contains(&entity_id) {
+                            levels.push(entity_id);
+                        }
+                    } else {
+                        item.price_levels = Some(vec![entity_id]);
+                    }
+                }
+            }
+            (FilterCategory::PriceLevel, ActionOperation::Remove) => {
+                if let Some(entity_id) = action.entity_id {
+                    if let Some(ref mut levels) = item.price_levels {
+                        levels.retain(|&id| id != entity_id);
+                    }
+                }
+            }
             (FilterCategory::PriceLevel, ActionOperation::SwapTo) => {
                 if let (Some(from_id), Some(to_id)) = (action.swap_from_id, action.entity_id) {
                     if let Some(ref mut levels) = item.price_levels {
+                        // Find and replace the from_id with to_id
                         for id in levels.iter_mut() {
                             if *id == from_id {
                                 *id = to_id;

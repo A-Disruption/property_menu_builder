@@ -113,9 +113,6 @@ pub enum Message {
     RequestOpenWindow(WindowEnum),
     WindowOpened(iced::window::Id, WindowEnum),
     None,
-
-    //open preview testing
-    OpenPreview,
 }
 
 #[derive(Debug)]
@@ -346,37 +343,37 @@ impl MenuBuilder {
                 operation_task.chain(action.task)
             }
             Message::Items(id, msg) => {
+                println!("What the ID?: {}", id);
 
-                    let mut context = ViewContext {
-                        available_items: &mut self.items,
-                        available_choice_groups: &mut self.choice_groups,
-                        available_item_groups: &mut self.item_groups,
-                        available_price_levels: &mut self.price_levels,
-                        available_printer_logicals: &mut self.printer_logicals,
-                        available_product_classes: &mut self.product_classes,
-                        available_report_categories: &mut self.report_categories,
-                        available_revenue_categories: &mut self.revenue_categories,
-                        available_security_levels: &mut self.security_levels,
-                        available_tax_groups: &mut self.tax_groups,
-                        preview: &mut self.preview,
-                    };
+                let mut context = ViewContext {
+                    available_items: &mut self.items,
+                    available_choice_groups: &mut self.choice_groups,
+                    available_item_groups: &mut self.item_groups,
+                    available_price_levels: &mut self.price_levels,
+                    available_printer_logicals: &mut self.printer_logicals,
+                    available_product_classes: &mut self.product_classes,
+                    available_report_categories: &mut self.report_categories,
+                    available_revenue_categories: &mut self.revenue_categories,
+                    available_security_levels: &mut self.security_levels,
+                    available_tax_groups: &mut self.tax_groups,
+                };  
 
-                    let action = items::update(
-                        &mut self.draft_item,
-                        msg,
-                        &mut self.item_edit_state,
-                        &mut context
-                    )
-                    .map_operation(move |o| Operation::Items(id, o))
-                    .map(move |m| Message::Items(id, m));
+                let action = items::update(
+                    &mut self.draft_item,
+                    msg,
+                    &mut self.item_edit_state,
+                    &mut context
+                )
+                .map_operation(move |o| Operation::Items(id, o))
+                .map(move |m| Message::Items(id, m));
 
-                    let operation_task = if let Some(operation) = action.operation {
-                        self.perform(operation)
-                    } else {
-                        Task::none()
-                    };
-    
-                    operation_task.chain(action.task)
+                let operation_task = if let Some(operation) = action.operation {
+                    self.perform(operation)
+                } else {
+                    Task::none()
+                };
+
+                operation_task.chain(action.task)
 
             },
             Message::ItemGroups(id, msg) => {
@@ -773,10 +770,12 @@ impl MenuBuilder {
 
                 //clear existing data, keep settings
                 let default = MenuBuilder::default();
+                let windows = self.windows.clone();
                 let settings = self.settings.clone();
                 let import_path = &self.import_item_path.clone();
                 *self = default;
                 self.settings = settings;
+                self.windows = windows;
 
                 //import items from the import file.
                 match import_items::collect_item_information(import_path) {
@@ -890,6 +889,7 @@ impl MenuBuilder {
 
                         let (_id, open) = iced::window::open(window::Settings {
                             icon: settings::load_icon(),
+                            min_size: Some(Size::new( 787_f32, 768_f32)),
                             ..window::Settings::default()
                         });
                         return open.map(|id| Message::WindowOpened(id, WindowEnum::SuperEdit))
@@ -906,25 +906,6 @@ impl MenuBuilder {
 
                 self.windows.insert(id, new_window);
 
-                Task::none()
-            }
-            Message::OpenPreview => {
-                let table = ItemsTableView::new(
-                    &self.items,
-                    &self.item_groups,
-                    &self.tax_groups,
-                    &self.security_levels,
-                    &self.revenue_categories,
-                    &self.report_categories,
-                    &self.product_classes,
-                    &self.choice_groups,
-                    &self.printer_logicals,
-                    &self.price_levels,
-                );
-
-                self.preview = Some(table);
-
-                self.screen = Screen::Items(items::Mode::Preview);
                 Task::none()
             }
             Message::None => {
@@ -1049,7 +1030,6 @@ impl MenuBuilder {
                         iced::widget::toggler(self.toggle_theme).on_toggle(Message::ToggleTheme),
                     ],
                     iced::widget::horizontal_space(),
-                    button("op").on_press(Message::OpenPreview),
                     button(icon::settings().size(14)) 
                         .on_press(Message::Navigate(Screen::Settings(self.settings.clone())))
                         //.width(Length::Fixed(40.0))
@@ -1105,7 +1085,6 @@ impl MenuBuilder {
                         &self.choice_groups,
                         &self.printer_logicals,
                         &self.price_levels,
-                        &self.preview
                     )
                     .map(move |msg| Message::Items(id, msg))
                 } else if let Some((&first_id, first_item)) = self.items.iter().next() {
@@ -1125,7 +1104,6 @@ impl MenuBuilder {
                         &self.choice_groups,
                         &self.printer_logicals,
                         &self.price_levels,
-                        &self.preview
                     )
                     .map(move |msg| Message::Items(first_id, msg))
                 } else {
@@ -1382,7 +1360,7 @@ impl MenuBuilder {
                     }
                 }
             }
-            Operation::Items(id, op) => {
+            Operation::Items(item_id, op) => {
                 match op {
                     items::Operation::Save(mut item) => {
                         println!("Saving Item ID: {}, with prices: {:?}", item.id, item.item_prices);
@@ -1430,12 +1408,13 @@ impl MenuBuilder {
 
                         Task::none()
                     }
-                    items::Operation::StartEdit(id) => {
+                    items::Operation::StartEdit => {
+                        println!("Item ID: {}", item_id);
                         // Start editing an existing Item
-                        self.draft_item_id = Some(id);
-                        self.draft_item = self.items[&id].clone();
+                        self.draft_item_id = Some(item_id);
+                        self.draft_item = self.items[&item_id].clone();
 
-                        let item = self.items.get_mut(&id).expect("Item should exist");
+                        let item = self.items.get_mut(&item_id).expect("Item should exist");
                         let available_choice_groups: Vec<ChoiceGroup> = self.choice_groups.values().cloned().collect();
                         let available_printer_logicals: Vec<PrinterLogical> = self.printer_logicals.values().cloned().collect();
                         let available_price_levels: Vec<PriceLevel> = self.price_levels.values().cloned().collect();
@@ -1549,59 +1528,6 @@ impl MenuBuilder {
                     items::Operation::LaunchMassItemEditWindow => {
                         self.show_super_edit = !self.show_super_edit;
                         self.update(Message::RequestOpenWindow(WindowEnum::SuperEdit))
-                    }
-                    items::Operation::Resizing(index, offset) => {
-                        if let Some(preview) = &mut self.preview {
-                            if let Some(column) = preview.columns.get_mut(index) {
-                                    column.resize_offset = Some(offset);
-                                }
-                        }
-                        Task::none()
-                    }
-                    items::Operation::Resized => {
-                        if let Some(preview) = &mut self.preview {
-                            preview.columns.iter_mut().for_each(|column| {
-                                if let Some(offset) = column.resize_offset.take() {
-                                    column.width += offset;
-                                }
-                            });
-                        }
-                        Task::none()
-                    }
-                    items::Operation::ColumnVisibilityEnabled(enabled) => {
-                        if let Some(preview) = &mut self.preview {
-                            preview.column_visibility_enabled = enabled;
-                        }
-                        Task::none()
-                    }
-                    items::Operation::ColumnVisibility(visibility_msg) => {
-                        if let Some(preview) = &mut self.preview {
-                            match visibility_msg {
-                                ColumnVisibilityMessage::ToggleColumn(column_id) => {
-                                    if let Some(visible) = preview.column_visibility.get_mut(&column_id) {
-                                        *visible = !*visible;
-                                        
-                                        // Update the corresponding column
-                                        if let Some(column) = preview.columns.iter_mut().find(|c| c.id() == column_id) {
-                                            column.visible = *visible;
-                                        }
-                                    }
-                                }
-                                ColumnVisibilityMessage::HideContextMenu => {
-                                    // Context menu was closed, no action needed
-                                    // This could be used to do cleanup if needed
-                                }
-                            }
-                        }
-                        Task::none()
-                    }
-                    items::Operation::SyncHeader(offset) => {
-                        if let Some(preview) = &mut self.preview {
-                            return Task::batch(vec![
-                                iced::widget::scrollable::scroll_to(preview.header_id.clone(), offset),
-                            ])
-                        }
-                        Task::none()
                     }
                 }
             } 

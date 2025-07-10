@@ -14,10 +14,7 @@ use iced::{Alignment, Element, Length, Task};
 use serde::{Serialize, Deserialize};
 use iced::widget::{button, combo_box, container, column, row, text, scrollable};
 use rust_decimal::Decimal;
-use iced_table::ColumnVisibilityMessage;
-use iced_table::table::Column;
 use crate::{
-    items::preview_changes::ItemsTableView,
     tax_groups::TaxGroup,
     security_levels::SecurityLevel,
     revenue_categories::RevenueCategory,
@@ -35,7 +32,6 @@ use crate::{
 pub enum Message {
     Edit(edit::Message),
     View(view::Message),
-    Preview(preview_changes::Message),
     CreateNew,
     Select(EntityId),
     SearchItems(String),
@@ -49,7 +45,7 @@ pub enum Message {
 #[derive(Debug, Clone)]
 pub enum Operation {
     Save(Item),
-    StartEdit(EntityId),
+    StartEdit,
     Cancel,
     Back,
     CreateNew(Item),
@@ -61,18 +57,12 @@ pub enum Operation {
     ShowModal,
     UpdatePrice(EntityId, EntityId, String),
     LaunchMassItemEditWindow,
-    Resizing(usize, f32),
-    Resized,
-    ColumnVisibilityEnabled(bool),
-    ColumnVisibility(ColumnVisibilityMessage),
-    SyncHeader(scrollable::AbsoluteOffset)
 }
 
 #[derive(Debug, Clone)]
 pub enum Mode {
     View,
     Edit,
-    Preview,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -927,26 +917,11 @@ pub fn update(
             edit::Message::Cancel => Action::operation(Operation::Cancel),
         }
         Message::View(msg) => match msg {
-            view::Message::Edit => Action::operation(Operation::StartEdit(item.id)),
+            view::Message::Edit => {
+                Action::operation(Operation::StartEdit)
+            },
             view::Message::Back => Action::operation(Operation::Back),
             view::Message::ExportToCsv => Action::none() //Need to implement export and imports
-        }
-        Message::Preview(msg) => match msg {
-            preview_changes::Message::SyncHeader(offset) => {
-                Action::operation(Operation::SyncHeader(offset))
-            },
-            preview_changes::Message::Resizing(index, offset) => {
-                Action::operation(Operation::Resizing(index, offset))
-            },
-            preview_changes::Message::Resized => {
-                Action::operation(Operation::Resized)
-            },
-            preview_changes::Message::ColumnVisibility(visibility_msg) => {
-                Action::operation(Operation::ColumnVisibility(visibility_msg))
-            },
-            preview_changes::Message::ColumnVisibilityEnabled(enabled) => {
-                Action::operation(Operation::ColumnVisibilityEnabled(enabled))
-            },
         }
         Message::CreateNew => {
             let new_item = Item::default();
@@ -991,7 +966,6 @@ pub fn view<'a>(
     choice_groups: &'a BTreeMap<EntityId, ChoiceGroup>,
     printer_logicals: &'a BTreeMap<EntityId, PrinterLogical>,
     price_levels: &'a BTreeMap<EntityId, PriceLevel>,
-    preview: &'a Option<ItemsTableView>,
 ) -> Element<'a, Message> {
 
     let search_bar = row![
@@ -999,10 +973,13 @@ pub fn view<'a>(
             "Search Items...",
             &item_search
         )
-        .width(iced::Length::Fixed(215.0))
+        .width(iced::Length::Fixed(206.0))
         .style(Modern::search_input())
         .on_input(Message::SearchItems),
-        button(icon::superpowers().size(14).center())
+
+        iced::widget::Space::with_width(10),
+
+        button(icon::superpowers().size(13).center())
             .on_press(Message::LaunchMassItemEditWindow)
             .style(Modern::primary_button()),
     ];
@@ -1086,16 +1063,6 @@ pub fn view<'a>(
                 price_levels,
             ).map(Message::Edit)
         }
-        Mode::Preview => {
-            match preview {
-                Some(table) => {
-                    table.render().map(Message::Preview)
-                }
-                None => {
-                    column![text("no worky")].into()
-                } 
-            }
-        }
     };
 
     let full_view = row![
@@ -1142,7 +1109,6 @@ pub struct ViewContext<'a> {
     pub available_choice_groups: &'a mut BTreeMap<EntityId, ChoiceGroup>,
     pub available_printer_logicals: &'a mut BTreeMap<EntityId, PrinterLogical>,
     pub available_price_levels: &'a mut BTreeMap<EntityId, PriceLevel>,
-    pub preview: &'a mut Option<ItemsTableView>,
 }
 
 fn matches_search(
@@ -1262,117 +1228,4 @@ pub fn list_item<'a>(list_text: &'a str, copy_button: iced::widget::Button<'a, M
     ].align_y(Alignment::Center);
     
     button_content.into()
-}
-
-
-#[derive(Debug)]
-pub struct AppResolver<'a> {
-    pub item_groups: &'a BTreeMap<EntityId, ItemGroup>,
-    pub tax_groups: &'a BTreeMap<EntityId, TaxGroup>,
-    pub security_levels: &'a BTreeMap<EntityId, SecurityLevel>,
-    pub revenue_categories: &'a BTreeMap<EntityId, RevenueCategory>,
-    pub report_categories: &'a BTreeMap<EntityId, ReportCategory>,
-    pub product_classes: &'a BTreeMap<EntityId, ProductClass>,
-    pub choice_groups: &'a BTreeMap<EntityId, ChoiceGroup>,
-    pub printer_logicals: &'a BTreeMap<EntityId, PrinterLogical>,
-    pub price_levels: &'a BTreeMap<EntityId, PriceLevel>,
-}
-
-impl<'a> EntityResolver for AppResolver<'a> {
-    #[inline]
-    fn get_item_group_name(&self, id: EntityId) -> Option<&String> {
-        self.item_groups.get(&id).map(|group| &group.name)
-    }
-
-    #[inline]
-    fn get_tax_group_name(&self, id: EntityId) -> Option<&String> {
-        self.tax_groups.get(&id).map(|group| &group.name)
-    }
-
-    #[inline]
-    fn get_security_level_name(&self, id: EntityId) -> Option<&String> {
-        self.security_levels.get(&id).map(|level| &level.name)
-    }
-
-    #[inline]
-    fn get_revenue_category_name(&self, id: EntityId) -> Option<&String> {
-        self.revenue_categories.get(&id).map(|category| &category.name)
-    }
-
-    #[inline]
-    fn get_report_category_name(&self, id: EntityId) -> Option<&String> {
-        self.report_categories.get(&id).map(|category| &category.name)
-    }
-
-    #[inline]
-    fn get_product_class_name(&self, id: EntityId) -> Option<&String> {
-        self.product_classes.get(&id).map(|class| &class.name)
-    }
-
-    #[inline]
-    fn get_choice_group_name(&self, id: EntityId) -> Option<&String> {
-        self.choice_groups.get(&id).map(|group| &group.name)
-    }
-
-    #[inline]
-    fn get_printer_logical_name(&self, id: EntityId) -> Option<&String> {
-        self.printer_logicals.get(&id).map(|printer| &printer.name)
-    }
-
-    #[inline]
-    fn get_price_level_name(&self, id: EntityId) -> Option<&String> {
-        self.price_levels.get(&id).map(|level| &level.name)
-    }
-}
-
-impl<'a> EntityResolver for ViewContext<'a> {
-/*     #[inline]
-    fn get_item_name(&self, id: EntityId) -> Option<&String> {
-        self.available_items.get(&id).map(|item| &item.name)
-    } */
-
-    #[inline]
-    fn get_item_group_name(&self, id: EntityId) -> Option<&String> {
-        self.available_item_groups.get(&id).map(|group| &group.name)
-    }
-
-    #[inline]
-    fn get_tax_group_name(&self, id: EntityId) -> Option<&String> {
-        self.available_tax_groups.get(&id).map(|group| &group.name)
-    }
-
-    #[inline]
-    fn get_security_level_name(&self, id: EntityId) -> Option<&String> {
-        self.available_security_levels.get(&id).map(|level| &level.name)
-    }
-
-    #[inline]
-    fn get_revenue_category_name(&self, id: EntityId) -> Option<&String> {
-        self.available_revenue_categories.get(&id).map(|category| &category.name)
-    }
-
-    #[inline]
-    fn get_report_category_name(&self, id: EntityId) -> Option<&String> {
-        self.available_report_categories.get(&id).map(|category| &category.name)
-    }
-
-    #[inline]
-    fn get_product_class_name(&self, id: EntityId) -> Option<&String> {
-        self.available_product_classes.get(&id).map(|class| &class.name)
-    }
-
-    #[inline]
-    fn get_choice_group_name(&self, id: EntityId) -> Option<&String> {
-        self.available_choice_groups.get(&id).map(|group| &group.name)
-    }
-
-    #[inline]
-    fn get_printer_logical_name(&self, id: EntityId) -> Option<&String> {
-        self.available_printer_logicals.get(&id).map(|printer| &printer.name)
-    }
-
-    #[inline]
-    fn get_price_level_name(&self, id: EntityId) -> Option<&String> {
-        self.available_price_levels.get(&id).map(|level| &level.name)
-    }
 }
